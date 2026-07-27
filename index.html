@@ -477,6 +477,106 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   </div>
 </section>
 
+
+<!-- Контакты и форма заявки -->
+<section style="max-width:960px;margin:0 auto 40px;padding:0 24px;" id="contact">
+  <h2 style="font-family:Manrope,sans-serif;font-size:28px;font-weight:800;margin-bottom:8px;">Связаться с нами</h2>
+  <p style="color:#6b6b62;font-size:15px;margin-bottom:28px;">Добавьте свою компанию в каталог или задайте вопрос</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+
+    <!-- Форма -->
+    <div style="background:#fff;border:1px solid #e8e6e0;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.07);">
+      <h3 style="font-size:17px;font-weight:600;margin-bottom:16px;">Заявка на добавление в каталог</h3>
+      <div id="form-success" style="display:none;background:#e8f5ee;border:1px solid #1a6b3c;border-radius:8px;padding:14px;color:#1a6b3c;font-weight:500;margin-bottom:16px;">
+        ✅ Заявка отправлена! Мы свяжемся с вами в течение 24 часов.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <input id="f-name" type="text" placeholder="Название компании *" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <input id="f-phone" type="text" placeholder="Телефон или Telegram *" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <input id="f-directions" type="text" placeholder="Направления (Китай, Корея...)" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <input id="f-site" type="text" placeholder="Сайт или Telegram канал" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <textarea id="f-desc" placeholder="Коротко о компании (опционально)" rows="3" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;resize:none;"></textarea>
+        <button onclick="submitForm()" style="background:#1a6b3c;color:#fff;border:none;border-radius:8px;padding:13px;font-size:15px;font-weight:500;cursor:pointer;font-family:Inter,sans-serif;">Отправить заявку</button>
+      </div>
+    </div>
+
+    <!-- Контакты -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div style="background:#fff;border:1px solid #e8e6e0;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.07);">
+        <h3 style="font-size:17px;font-weight:600;margin-bottom:16px;">Контакты</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;gap:10px;font-size:14px;">
+            <span style="font-size:20px;">💬</span>
+            <div>
+              <div style="font-weight:500;">Telegram</div>
+              <a href="https://t.me/My_Avto_Agregator" target="_blank" style="color:#1a6b3c;text-decoration:none;">@My_Avto_Agregator</a>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:14px;">
+            <span style="font-size:20px;">📞</span>
+            <div>
+              <div style="font-weight:500;">Телефон</div>
+              <a href="tel:89384096708" style="color:#1a6b3c;text-decoration:none;">8 (938) 409-67-08</a>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:14px;">
+            <span style="font-size:20px;">👤</span>
+            <div>
+              <div style="font-weight:500;">Менеджер</div>
+              <div style="color:#6b6b62;">Лесников Максим Николаевич</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:14px;">
+            <span style="font-size:20px;">🕐</span>
+            <div>
+              <div style="font-weight:500;">Режим работы</div>
+              <div style="color:#6b6b62;">Ежедневно 8:00 — 21:00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:linear-gradient(135deg,#e8f5ee,#f7f6f2);border:1px solid #1a6b3c30;border-radius:10px;padding:20px;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px;">📋 Условия размещения</div>
+        <div style="font-size:13px;color:#6b6b62;line-height:1.6;">
+          • Бесплатное базовое размещение<br>
+          • Платное продвижение в топ каталога<br>
+          • Верификация компании<br>
+          • Подключение к агрегатору заявок
+        </div>
+        <a href="https://t.me/My_Avto_Agregator" target="_blank" style="display:inline-block;margin-top:14px;background:#1a6b3c;color:#fff;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none;">Обсудить размещение</a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<script>
+function submitForm() {
+  const name = document.getElementById("f-name").value.trim();
+  const phone = document.getElementById("f-phone").value.trim();
+  if (!name || !phone) {
+    alert("Заполните название компании и телефон/Telegram");
+    return;
+  }
+  const directions = document.getElementById("f-directions").value.trim();
+  const site = document.getElementById("f-site").value.trim();
+  const desc = document.getElementById("f-desc").value.trim();
+  const msg = encodeURIComponent(
+    "Заявка на добавление в каталог MyAvtoAgregator.ru\n\n" +
+    "Компания: " + name + "\n" +
+    "Контакт: " + phone + "\n" +
+    (directions ? "Направления: " + directions + "\n" : "") +
+    (site ? "Сайт/канал: " + site + "\n" : "") +
+    (desc ? "О компании: " + desc : "")
+  );
+  window.open("https://t.me/My_Avto_Agregator?text=" + msg, "_blank");
+  document.getElementById("form-success").style.display = "block";
+  ["f-name","f-phone","f-directions","f-site","f-desc"].forEach(id => document.getElementById(id).value = "");
+}
+</script>
+
 <footer>
   <p class="footer-text">© 2026 My Avto Agregator — агрегатор компаний по импорту авто в СНГ</p>
   <div class="footer-links">

@@ -11,7 +11,7 @@ data = json.loads(json_str)
 rows = data['table']['rows']
 
 companies = []
-for row in rows[1:]:
+for row in rows[0:]:
     c = row['c']
     def val(i):
         if i < len(c) and c[i] and c[i].get('v') is not None:

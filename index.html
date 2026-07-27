@@ -333,7 +333,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 
 <!-- Stats -->
 <div class="stats-bar">
-  <div class="stat"><div class="stat-n">9</div><div class="stat-l">Компаний в каталоге</div></div>
+  <div class="stat"><div class="stat-n">10</div><div class="stat-l">Компаний в каталоге</div></div>
   <div class="stat"><div class="stat-n">500+</div><div class="stat-l">Реальных отзывов</div></div>
   <div class="stat"><div class="stat-n">8</div><div class="stat-l">Направлений импорта</div></div>
   <div class="stat"><div class="stat-n">9 стран</div><div class="stat-l">Покрытие СНГ</div></div>
@@ -531,6 +531,7 @@ document.querySelectorAll('.geo-item').forEach(g => {
 
 <script>
 const COMPANIES = [
+  {id:1.0,name:"MY Avto",rating:Date(2026,8,4),reviews:1240.0,years:8.0,delivered:"5000+",description:"Подбор, параллельный импорт, таможня, доставка и сертификация из Европы, Китая, Японии, Кореи, США, Канады, ОАЭ и Грузии",directions:["Европа", "Китай", "Япония", "Корея", "США", "Канада", "ОАЭ", "Грузия"],tags:["Подбор", "Параллельный импорт", "Таможня", "Доставка", "Сертификация"],telegram:"MY_Avto5",phone:"8 (938) 409-67-08",site:"",manager:"Лесников Максим Николаевич",region:"Краснодарский край, вся Россия",featured:true,avatar:"MA",color:"av-green"},
   {id:2.0,name:"My Avto Optimal",rating:Date(2026,7,4),reviews:980.0,years:5.0,delivered:"3200+",description:"Оптимальный импорт из Китая, Кореи и ОАЭ. Подбор, параллельный импорт, таможня, доставка и сертификация",directions:["Китай", "Корея", "ОАЭ"],tags:["Подбор", "Параллельный импорт", "Таможня", "Доставка"],telegram:"My_Avto_Optimal",phone:"8 (938) 409-67-08",site:"",manager:"Лесников Максим Николаевич",region:"Краснодарский край, вся Россия",featured:true,avatar:"MAO",color:"av-blue"},
   {id:3.0,name:"ТамСямAUTO",rating:Date(2026,6,4),reviews:320.0,years:5.0,delivered:"1500+",description:"Автомобили на заказ из Армении, Грузии, США, Китая. Сток выкупленных авто из Китая без покраса. Детейлинг. г. Москва",directions:["Армения", "Грузия", "США", "Китай", "Европа"],tags:["Комиссионная продажа", "Детейлинг", "Сток из Китая", "Москва"],telegram:"TamSyam26",phone:"8 (928) 819-80-07",site:"https://tamsyamauto.ru",manager:"Алексей",region:"Москва, вся Россия",featured:false,avatar:"ТС",color:"av-gold"},
   {id:4.0,name:"Primorye China Export",rating:Date(2026,5,4),reviews:180.0,years:3.0,delivered:"800+",description:"Сток выкупленных авто из Китая. Ухань, Суйфэньхэ, Чанчунь. Без покраса, подготовленные к продаже",directions:["Китай"],tags:["Сток авто", "Ухань", "Суйфэньхэ", "Без покраса"],telegram:"PrimoryeChinaExport",phone:"8 (995) 866-40-82",site:"",manager:"-",region:"Приморский край",featured:false,avatar:"PC",color:"av-gray"},

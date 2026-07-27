@@ -682,7 +682,7 @@ function renderCompanies(list) {
         </div>
         <div class="card-right">
           <div class="rating">${c.rating}</div>
-          <div class="stars">${'★'.repeat(Math.floor(c.rating))}${'☆'.repeat(5-Math.floor(c.rating))}</div>
+          <div class="stars">${'★'.repeat(Math.round(c.rating))}${'☆'.repeat(5-Math.round(c.rating))}</div>
           <div class="reviews">${c.reviews.toLocaleString('ru')} отзывов</div>
         </div>
       </div>

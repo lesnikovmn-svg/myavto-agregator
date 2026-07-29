@@ -1,6 +1,7 @@
 import urllib.request, json, re, subprocess
 
-SHEET_ID = '1u3WuYo6Iyb4RJMQVbanx4YGm29B2V-DQMuKzVrtdcLY'
+import os
+SHEET_ID = os.environ.get('SHEET_ID', '1u3WuYo6Iyb4RJMQVbanx4YGm29B2V-DQMuKzVrtdcLY')
 URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:json'
 
 print('Загружаю данные из Google Sheets...')

@@ -20,7 +20,7 @@ for row in rows[0:]:
     company = dict(id=val(0),name=val(1),rating=val(2),reviews=val(3),years=val(4),
         delivered=val(5),description=val(6),directions=val(7),tags=val(8),
         telegram=val(9),phone=val(10),site=val(11),manager=val(12),
-        region=val(13),featured=val(14),avatar=val(15),color=val(16))
+        region=val(13),featured=val(14),avatar=val(15),color=val(16),yandex=val(17))
     if company['name']:
         companies.append(company)
 
@@ -32,7 +32,7 @@ for c in companies:
     tags = json.dumps([t.strip() for t in c['tags'].split(',') if t.strip()], ensure_ascii=False)
     featured = 'true' if c['featured'].upper() == 'TRUE' else 'false'
     desc = c['description'].replace('"', '\\"')
-    js += f'  {{id:{c["id"]},name:"{c["name"]}",rating:{c["rating"]},reviews:{c["reviews"]},years:{c["years"]},delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",region:"{c["region"]}",featured:{featured},avatar:"{c["avatar"]}",color:"{c["color"]}"}},\n'
+    js += f'  {{id:{c["id"]},name:"{c["name"]}",rating:{c["rating"]},reviews:{c["reviews"]},years:{c["years"]},delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",region:"{c["region"]}",featured:{featured},avatar:"{c["avatar"]}",color:"{c["color"]}",yandex:"{c["yandex"]}"}},\n'
 js = js.rstrip(',\n') + '\n];'
 
 html = open('index.html').read()

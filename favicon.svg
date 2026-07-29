@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#1a1a18"/>
+  <circle cx="16" cy="14" r="8" fill="none" stroke="#00c853" stroke-width="1.5"/>
+  <ellipse cx="16" cy="14" rx="4" ry="8" fill="none" stroke="#00c853" stroke-width="1"/>
+  <line x1="8" y1="14" x2="24" y2="14" stroke="#00c853" stroke-width="1"/>
+  <rect x="11" y="11" width="10" height="6" rx="2" fill="#00c853" opacity="0.9"/>
+  <circle cx="13" cy="17" r="1.5" fill="#1a1a18"/>
+  <circle cx="19" cy="17" r="1.5" fill="#1a1a18"/>
+  <text x="16" y="27" font-family="Arial" font-size="5" font-weight="800" fill="#00c853" text-anchor="middle">MA</text>
+</svg>

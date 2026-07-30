@@ -37,7 +37,7 @@ for c in companies:
     crev = str(int(float(c['reviews']))) if c['reviews'] else '0'
     cyrs = str(int(float(c['years']))) if c['years'] else '1'
     clink = c['site'] if c['site'] else ('https://t.me/' + c['telegram'] if c['telegram'] else '#')
-    js += f'  {{id:{cid},name:"{c["name"]}",rating:{c["rating"]},reviews:{crev},years:{cyrs},delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",region:"{c["region"]}",featured:{featured},avatar:"{c["avatar"]}",color:"{c["color"]}",yandex:"{c["yandex"]}"}},\n'
+    js += f'  {{id:{cid},name:"{c["name"]}",rating:{c["rating"]},reviews:{crev},years:{cyrs},delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",region:"{c["region"]}",featured:{featured},avatar:"{c["avatar"]}",color:"{c["color"]}",yandex:"{c["yandex"]}",link:"{clink}"}},\n'
 js = js.rstrip(',\n') + '\n];'
 
 html = open('index.html').read()

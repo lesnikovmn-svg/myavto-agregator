@@ -713,7 +713,7 @@ function renderCompanies(list) {
       : `<button class="btn-primary">Связаться</button>`;
     const phone = c.phone ? `<div class="meta-item">📞 <strong>${c.phone}</strong></div>` : '';
     return `
-    <article class="company-card ${isTop?'top':''}" onclick="if(c.link&&c.link!=='#')window.open(c.link,'_blank')" style="cursor:${c.link&&c.link!=='#'?'pointer':'default'}">
+    <article class="company-card ${isTop?'top':''}" data-link="${clink}" style="cursor:${clink!=='#'?'pointer':'default'}">
       <div class="card-header">
         <div class="card-avatar ${c.color}">${c.avatar}</div>
         <div class="card-info">
@@ -765,7 +765,19 @@ function applyFilters() {
 }
 
 document.getElementById('mainSearch')?.addEventListener('input', applyFilters);
-window.addEventListener('DOMContentLoaded', ()=>renderCompanies(COMPANIES));
+window.addEventListener('DOMContentLoaded', ()=>{
+  renderCompanies(COMPANIES);
+  document.getElementById('companies-list').addEventListener('click', function(e){
+    var card = e.target.closest('.company-card');
+    if(card){
+      var btn = e.target.closest('a,button');
+      if(!btn){
+        var link = card.dataset.link;
+        if(link && link !== '#') window.open(link, '_blank');
+      }
+    }
+  });
+});
 </script>
 
 </body>

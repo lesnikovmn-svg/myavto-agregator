@@ -115,13 +115,13 @@ footer{padding:48px 40px;border-top:1px solid rgba(201,168,76,0.1);display:flex;
 .dir-modal.open{display:flex;}
 .dir-modal-inner{background:#1a1a1a;border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:40px;width:100%;max-width:640px;position:relative;max-height:90vh;overflow-y:auto;}
 .dir-modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:#888;font-size:22px;cursor:pointer;}
-.dir-modal-flag{font-size:44px;margin-bottom:12px;display:block;}
-.dir-modal-title{font-family:Unbounded,sans-serif;font-size:26px;font-weight:900;margin-bottom:14px;}
+.dir-modal-flag{font-size:44px;margin-bottom:12px;display:block;filter:drop-shadow(0 0 10px rgba(255,255,255,0.5));}
+.dir-modal-title{font-family:Unbounded,sans-serif;font-size:26px;font-weight:900;margin-bottom:14px;text-shadow:0 0 30px rgba(201,168,76,0.6),0 2px 4px rgba(0,0,0,0.8);}
 .dir-modal-title span{color:#c9a84c;}
-.dir-modal-desc{font-size:14px;color:#a0a0a0;line-height:1.7;margin-bottom:20px;}
+.dir-modal-desc{font-size:14px;color:#ffffff;line-height:1.7;margin-bottom:20px;text-shadow:0 1px 3px rgba(0,0,0,0.9);}
 .dir-modal-hit{background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:8px;padding:18px;margin-bottom:20px;}
 .dir-modal-hit-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:6px;}
-.dir-modal-hit-name{font-size:17px;font-weight:700;margin-bottom:4px;}
+.dir-modal-hit-name{font-size:17px;font-weight:700;margin-bottom:4px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9);}
 .dir-modal-hit-price{font-size:20px;font-weight:700;color:#c9a84c;}
 .dir-modal-hit-desc{font-size:12px;color:#888;margin-top:5px;}
 .dir-modal-pros{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;}
@@ -355,7 +355,7 @@ var DIRS = {
       {yes: true, text: 'BMW, Audi с рынка КР'},
     ]
   },
-  china: {photo: '/cars/china.png',
+  china: {photoBg: 'center right', photo: '/cars/china.png',
     flag: '🇨🇳', title: 'Китай — <span>максимальный выбор</span>',
     desc: 'Китай — главный хаб параллельного импорта в 2026 году: около 67% всех новых машин везут именно отсюда. Здесь можно найти всё: китайские бренды нового поколения (BYD, Geely, Li Auto, Zeekr), европейские авто по ценам ниже российских дилеров (BMW, Audi, VW, Mazda), электромобили и гибриды. Лидер импорта в Q1 2026 — Volkswagen (рост в 8 раз год к году). Важный нюанс — правило 180 дней: авто нельзя продавать первые полгода при ввозе физлицом. Мы помогаем решить этот вопрос законным способом.',
     hitName: 'Volkswagen Tiguan 2.0 TSI',
@@ -422,7 +422,7 @@ function openDir(key) {
   if(d.photo){
     document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundImage = 'linear-gradient(to bottom, rgba(18,18,30,0.5) 0%, rgba(18,18,30,0.5) 100%), url('+d.photo+')';
     document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundSize = 'cover';
-    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundPosition = 'center top';
+    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundPosition = d.photoBg || 'center top';
   }
   document.getElementById('dmImg').innerHTML = '';
   document.getElementById('dmFlag').textContent = d.flag;

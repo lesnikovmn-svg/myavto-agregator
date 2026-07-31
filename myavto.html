@@ -167,11 +167,11 @@ footer{padding:48px 40px;border-top:1px solid rgba(201,168,76,0.1);display:flex;
 <section class="directions" id="directions">
   <div class="section-label">Направления импорта</div>
   <div class="dirs-grid">
-    <div class="dir-card"><span class="dir-flag">🇰🇷</span><div class="dir-name">Корея</div><div class="dir-desc">Левый руль, богатые комплектации. Hyundai и Kia — мировой уровень. BMW, Mercedes дешевле японских. Без ограничений по объёму.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Hyundai Tucson 2.5 — ~2 800 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Левый руль · ✅ 3-4 нед. · ✅ Богатые комплект.</div><div class="dir-price">от 180 000 ₽ доставка</div></div>
-    <div class="dir-card"><span class="dir-flag">🇨🇳</span><div class="dir-name">Китай</div><div class="dir-desc">67% параллельного импорта. BYD, Geely и европейские VW, BMW, Audi дешевле дилеров. Электромобили и гибриды.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Volkswagen Tiguan — ~3 200 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Максимум выбора · ✅ Новые авто · ⚠️ 180 дней</div><div class="dir-price">от 150 000 ₽ доставка</div></div>
-    <div class="dir-card"><span class="dir-flag">🇯🇵</span><div class="dir-name">Япония</div><div class="dir-desc">60% импорта б/у авто. Честная история по аукционному листу. Надёжность проверена. Кей-кары от 500 000 ₽ под ключ.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Toyota RAV4 Hybrid — ~3 500 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Честная история · ✅ Надёжность · ⚠️ Правый руль</div><div class="dir-price">от 200 000 ₽ доставка</div></div>
-    <div class="dir-card"><span class="dir-flag">🇪🇺</span><div class="dir-name">Европа</div><div class="dir-desc">Редкие комплектации и премиум-сегмент. BMW, Mercedes, Porsche с европейской историей. Германия, Польша, Чехия.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 BMW X5 40i xDrive — ~7 500 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Европейская история · ✅ Редкие комплект. · ⚠️ Дороже</div><div class="dir-price">от 300 000 ₽ доставка</div></div>
-    <div class="dir-card"><span class="dir-flag">🇬🇪</span><div class="dir-name">Грузия</div><div class="dir-desc">Самый быстрый маршрут 1-2 недели. Хаб для авто из США и Европы. Cadillac, Ford, Dodge по выгодным ценам.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Cadillac Escalade — ~9 000 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Быстро 1-2 нед. · ✅ Авто из США · ✅ Большой выбор</div><div class="dir-price">от 250 000 ₽ доставка</div></div>
+    <div class="dir-card" onclick="openDir('korea')" title="Подробнее о Корее"><span class="dir-flag">🇰🇷</span><div class="dir-name">Корея</div><div class="dir-desc">Левый руль, богатые комплектации. Hyundai и Kia — мировой уровень. BMW, Mercedes дешевле японских. Без ограничений по объёму.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Hyundai Tucson 2.5 — ~2 800 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Левый руль · ✅ 3-4 нед. · ✅ Богатые комплект.</div><div class="dir-price">от 180 000 ₽ доставка</div></div>
+    <div class="dir-card" onclick="openDir('china')" title="Подробнее о Китае"><span class="dir-flag">🇨🇳</span><div class="dir-name">Китай</div><div class="dir-desc">67% параллельного импорта. BYD, Geely и европейские VW, BMW, Audi дешевле дилеров. Электромобили и гибриды.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Volkswagen Tiguan — ~3 200 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Максимум выбора · ✅ Новые авто · ⚠️ 180 дней</div><div class="dir-price">от 150 000 ₽ доставка</div></div>
+    <div class="dir-card" onclick="openDir('japan')" title="Подробнее о Японии"><span class="dir-flag">🇯🇵</span><div class="dir-name">Япония</div><div class="dir-desc">60% импорта б/у авто. Честная история по аукционному листу. Надёжность проверена. Кей-кары от 500 000 ₽ под ключ.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Toyota RAV4 Hybrid — ~3 500 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Честная история · ✅ Надёжность · ⚠️ Правый руль</div><div class="dir-price">от 200 000 ₽ доставка</div></div>
+    <div class="dir-card" onclick="openDir('europe')" title="Подробнее о Европе"><span class="dir-flag">🇪🇺</span><div class="dir-name">Европа</div><div class="dir-desc">Редкие комплектации и премиум-сегмент. BMW, Mercedes, Porsche с европейской историей. Германия, Польша, Чехия.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 BMW X5 40i xDrive — ~7 500 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Европейская история · ✅ Редкие комплект. · ⚠️ Дороже</div><div class="dir-price">от 300 000 ₽ доставка</div></div>
+    <div class="dir-card" onclick="openDir('georgia')" title="Подробнее о Грузии"><span class="dir-flag">🇬🇪</span><div class="dir-name">Грузия</div><div class="dir-desc">Самый быстрый маршрут 1-2 недели. Хаб для авто из США и Европы. Cadillac, Ford, Dodge по выгодным ценам.</div><div style="margin-top:8px;font-size:11px;color:#1a6b3c;font-weight:700;">🏆 Cadillac Escalade — ~9 000 000 ₽</div><div style="font-size:10px;color:#6b6b62;">✅ Быстро 1-2 нед. · ✅ Авто из США · ✅ Большой выбор</div><div class="dir-price">от 250 000 ₽ доставка</div></div>
   </div>
 </section>
 
@@ -300,5 +300,125 @@ function submitForm(){
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
 </script>
+
+<!-- Модальное окно направлений -->
+<div class="dir-modal" id="dirModal" onclick="if(event.target===this)closeDir()">
+  <div class="dir-modal-inner">
+    <button class="dir-modal-close" onclick="closeDir()">×</button>
+    <span class="dir-modal-flag" id="dmFlag"></span>
+    <div class="dir-modal-title" id="dmTitle"></div>
+    <div class="dir-modal-desc" id="dmDesc"></div>
+    <div class="dir-modal-hit">
+      <div class="dir-modal-hit-label">🏆 Хит продаж 2026</div>
+      <div class="dir-modal-hit-name" id="dmHitName"></div>
+      <div class="dir-modal-hit-price" id="dmHitPrice"></div>
+      <div class="dir-modal-hit-desc" id="dmHitDesc"></div>
+    </div>
+    <div class="dir-modal-pros" id="dmPros"></div>
+    <a href="#" class="btn-gold" onclick="closeDir();openModal();return false;" style="width:100%;text-align:center;justify-content:center;">Рассчитать стоимость →</a>
+  </div>
+</div>
+
+<script>
+var DIRS = {
+  korea: {
+    flag: '🇰🇷', title: 'Корея — <span>выгодный выбор</span>',
+    desc: 'Корейский рынок — один из лучших для покупки авто в 2026 году. Hyundai и Kia вышли на мировой уровень качества и уверенно конкурируют с японцами и европейцами. Главное преимущество — левый руль, привычный для российских дорог. На корейском рынке также огромный выбор европейских брендов: BMW, Mercedes, Audi по ценам ниже, чем в Японии или Европе. Нет ограничений по объёму двигателя, что делает Корею привлекательной для покупки мощных автомобилей. Срок доставки 3-4 недели — один из самых быстрых.',
+    hitName: 'Hyundai Tucson 2.5 Smartstream',
+    hitPrice: '~2 800 000 ₽ под ключ',
+    hitDesc: '2022 г.в., 200 л.с., левый руль, полный привод. Богатая комплектация: панорама, кожа, вентиляция сидений. Один из самых популярных запросов в 2026 году.',
+    pros: [
+      {yes: true, text: 'Левый руль — привычно'},
+      {yes: true, text: 'Доставка 3-4 недели'},
+      {yes: true, text: 'Богатые комплектации'},
+      {yes: true, text: 'Нет ограничений по V'},
+      {yes: false, text: 'Дороже Китая'},
+      {yes: true, text: 'BMW, Audi с рынка КР'},
+    ]
+  },
+  china: {
+    flag: '🇨🇳', title: 'Китай — <span>максимальный выбор</span>',
+    desc: 'Китай — главный хаб параллельного импорта в 2026 году: около 67% всех новых машин везут именно отсюда. Здесь можно найти всё: китайские бренды нового поколения (BYD, Geely, Li Auto, Zeekr), европейские авто по ценам ниже российских дилеров (BMW, Audi, VW, Mazda), электромобили и гибриды. Лидер импорта в Q1 2026 — Volkswagen (рост в 8 раз год к году). Важный нюанс — правило 180 дней: авто нельзя продавать первые полгода при ввозе физлицом. Мы помогаем решить этот вопрос законным способом.',
+    hitName: 'Volkswagen Tiguan 2.0 TSI',
+    hitPrice: '~3 200 000 ₽ под ключ',
+    hitDesc: '2023 г.в., 186 л.с., левый руль. Один из лидеров импорта из КНР в 2026 году. Полная версия с опциями которых нет у российских дилеров.',
+    pros: [
+      {yes: true, text: 'Максимальный выбор'},
+      {yes: true, text: 'Новые авто'},
+      {yes: true, text: 'Электромобили и гибриды'},
+      {yes: true, text: 'Европейские бренды'},
+      {yes: false, text: 'Правило 180 дней'},
+      {yes: false, text: 'Мало истории на пробеге'},
+    ]
+  },
+  japan: {
+    flag: '🇯🇵', title: 'Япония — <span>проверенное качество</span>',
+    desc: 'Япония даёт около 60% всего импорта подержанных автомобилей. Главное преимущество — честная и подробная история автомобиля в аукционном листе (USS, TAA, JU), которую невозможно подделать. Японцы педантично обслуживают машины, поэтому б/у авто из Японии — это реальный пробег и реальное состояние. Уникальная фишка — кей-кары: компактные надёжные машины от 500 000 ₽ под ключ. Основной минус — правый руль у большинства моделей. Левый руль есть у экспортных версий Toyota, Lexus, Honda.',
+    hitName: 'Toyota RAV4 2.5 Hybrid',
+    hitPrice: '~3 500 000 ₽ под ключ',
+    hitDesc: '2021 г.в., 149 л.с., гибрид, полный привод. Честная история по аукционному листу. Экономия топлива 5-6 л/100км. Один из самых надёжных кроссоверов в мире.',
+    pros: [
+      {yes: true, text: 'Честная история авто'},
+      {yes: true, text: 'Высокая надёжность'},
+      {yes: true, text: 'Кей-кары от 500 000 ₽'},
+      {yes: true, text: 'Гибриды Toyota, Lexus'},
+      {yes: false, text: 'Правый руль у большинства'},
+      {yes: false, text: 'Ограничения на гибриды >1.9л'},
+    ]
+  },
+  europe: {
+    flag: '🇪🇺', title: 'Европа — <span>премиум и редкие модели</span>',
+    desc: 'Европейский рынок — выбор тех, кто ищет редкие комплектации, премиум-сегмент или специфические модели которых нет в Азии. BMW, Mercedes, Porsche, Volvo с подтверждённой европейской историей обслуживания по официальным дилерам. Основные рынки: Германия, Польша, Чехия. Левый руль, полная документация EU. Логистика сложнее и дороже азиатских маршрутов, но для премиум-сегмента это оправдано.',
+    hitName: 'BMW X5 40i xDrive',
+    hitPrice: '~7 500 000 ₽ под ключ',
+    hitDesc: '2022 г.в., 340 л.с., xDrive, пакет M-Sport. Европейская сервисная история, редкая для России комплектация. Полный пакет документов EU.',
+    pros: [
+      {yes: true, text: 'Европейская история'},
+      {yes: true, text: 'Редкие комплектации'},
+      {yes: true, text: 'Левый руль'},
+      {yes: true, text: 'Полная документация'},
+      {yes: false, text: 'Дороже доставка'},
+      {yes: false, text: 'Дольше срок 3-5 нед.'},
+    ]
+  },
+  georgia: {
+    flag: '🇬🇪', title: 'Грузия — <span>быстро и из США</span>',
+    desc: 'Грузия — самый быстрый маршрут доставки: 1-2 недели. Тбилиси стал крупным транзитным хабом для автомобилей из США и Европы. Здесь большой выбор американских машин: Cadillac, Ford, Dodge, Chevrolet с американскими комплектациями и объёмами двигателей, которые выгоднее везти именно через Грузию. Также через Грузию идут авто из Европы когда нужна быстрая доставка.',
+    hitName: 'Cadillac Escalade 6.2 V8',
+    hitPrice: '~9 000 000 ₽ под ключ',
+    hitDesc: '2022 г.в., 420 л.с., полный привод, Long версия. Американская комплектация с массажем, 36-дюймовые экраны. Через Грузию — быстрее всего.',
+    pros: [
+      {yes: true, text: 'Быстро 1-2 недели'},
+      {yes: true, text: 'Авто из США'},
+      {yes: true, text: 'Большой выбор'},
+      {yes: true, text: 'Американские комплект.'},
+      {yes: false, text: 'Дороже растаможка'},
+      {yes: false, text: 'Ограниченный сток'},
+    ]
+  }
+};
+
+function openDir(key) {
+  var d = DIRS[key];
+  document.getElementById('dmFlag').textContent = d.flag;
+  document.getElementById('dmTitle').innerHTML = d.title;
+  document.getElementById('dmDesc').textContent = d.desc;
+  document.getElementById('dmHitName').textContent = d.hitName;
+  document.getElementById('dmHitPrice').textContent = d.hitPrice;
+  document.getElementById('dmHitDesc').textContent = d.hitDesc;
+  var pros = d.pros.map(function(p){
+    return '<div class="dir-modal-pro ' + (p.yes?'yes':'no') + '">' + (p.yes?'✅':'❌') + ' ' + p.text + '</div>';
+  }).join('');
+  document.getElementById('dmPros').innerHTML = pros;
+  document.getElementById('dirModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeDir() {
+  document.getElementById('dirModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDir(); });
+</script>
+
 </body>
 </html>

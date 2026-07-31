@@ -305,6 +305,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()
 <div class="dir-modal" id="dirModal" onclick="if(event.target===this)closeDir()">
   <div class="dir-modal-inner">
     <button class="dir-modal-close" onclick="closeDir()">×</button>
+    <div id="dmImg"></div>
     <span class="dir-modal-flag" id="dmFlag"></span>
     <div class="dir-modal-title" id="dmTitle"></div>
     <div class="dir-modal-desc" id="dmDesc"></div>
@@ -321,7 +322,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()
 
 <script>
 var DIRS = {
-  korea: {
+  korea: {photo: 'https://images.unsplash.com/photo-1632245889029-e406faaa34cd?w=600&q=80',
     flag: '🇰🇷', title: 'Корея — <span>выгодный выбор</span>',
     desc: 'Корейский рынок — один из лучших для покупки авто в 2026 году. Hyundai и Kia вышли на мировой уровень качества и уверенно конкурируют с японцами и европейцами. Главное преимущество — левый руль, привычный для российских дорог. На корейском рынке также огромный выбор европейских брендов: BMW, Mercedes, Audi по ценам ниже, чем в Японии или Европе. Нет ограничений по объёму двигателя, что делает Корею привлекательной для покупки мощных автомобилей. Срок доставки 3-4 недели — один из самых быстрых.',
     hitName: 'Hyundai Tucson 2.5 Smartstream',
@@ -336,7 +337,7 @@ var DIRS = {
       {yes: true, text: 'BMW, Audi с рынка КР'},
     ]
   },
-  china: {
+  china: {photo: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=600&q=80',
     flag: '🇨🇳', title: 'Китай — <span>максимальный выбор</span>',
     desc: 'Китай — главный хаб параллельного импорта в 2026 году: около 67% всех новых машин везут именно отсюда. Здесь можно найти всё: китайские бренды нового поколения (BYD, Geely, Li Auto, Zeekr), европейские авто по ценам ниже российских дилеров (BMW, Audi, VW, Mazda), электромобили и гибриды. Лидер импорта в Q1 2026 — Volkswagen (рост в 8 раз год к году). Важный нюанс — правило 180 дней: авто нельзя продавать первые полгода при ввозе физлицом. Мы помогаем решить этот вопрос законным способом.',
     hitName: 'Volkswagen Tiguan 2.0 TSI',
@@ -351,7 +352,7 @@ var DIRS = {
       {yes: false, text: 'Мало истории на пробеге'},
     ]
   },
-  japan: {
+  japan: {photo: 'https://images.unsplash.com/photo-1619767886558-efdc259b6e09?w=600&q=80',
     flag: '🇯🇵', title: 'Япония — <span>проверенное качество</span>',
     desc: 'Япония даёт около 60% всего импорта подержанных автомобилей. Главное преимущество — честная и подробная история автомобиля в аукционном листе (USS, TAA, JU), которую невозможно подделать. Японцы педантично обслуживают машины, поэтому б/у авто из Японии — это реальный пробег и реальное состояние. Уникальная фишка — кей-кары: компактные надёжные машины от 500 000 ₽ под ключ. Основной минус — правый руль у большинства моделей. Левый руль есть у экспортных версий Toyota, Lexus, Honda.',
     hitName: 'Toyota RAV4 2.5 Hybrid',
@@ -366,7 +367,7 @@ var DIRS = {
       {yes: false, text: 'Ограничения на гибриды >1.9л'},
     ]
   },
-  europe: {
+  europe: {photo: 'https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=600&q=80',
     flag: '🇪🇺', title: 'Европа — <span>премиум и редкие модели</span>',
     desc: 'Европейский рынок — выбор тех, кто ищет редкие комплектации, премиум-сегмент или специфические модели которых нет в Азии. BMW, Mercedes, Porsche, Volvo с подтверждённой европейской историей обслуживания по официальным дилерам. Основные рынки: Германия, Польша, Чехия. Левый руль, полная документация EU. Логистика сложнее и дороже азиатских маршрутов, но для премиум-сегмента это оправдано.',
     hitName: 'BMW X5 40i xDrive',
@@ -381,7 +382,7 @@ var DIRS = {
       {yes: false, text: 'Дольше срок 3-5 нед.'},
     ]
   },
-  georgia: {
+  georgia: {photo: 'https://images.unsplash.com/photo-1575090932043-ba5e8b8a2b5e?w=600&q=80',
     flag: '🇬🇪', title: 'Грузия — <span>быстро и из США</span>',
     desc: 'Грузия — самый быстрый маршрут доставки: 1-2 недели. Тбилиси стал крупным транзитным хабом для автомобилей из США и Европы. Здесь большой выбор американских машин: Cadillac, Ford, Dodge, Chevrolet с американскими комплектациями и объёмами двигателей, которые выгоднее везти именно через Грузию. Также через Грузию идут авто из Европы когда нужна быстрая доставка.',
     hitName: 'Cadillac Escalade 6.2 V8',
@@ -400,6 +401,8 @@ var DIRS = {
 
 function openDir(key) {
   var d = DIRS[key];
+  var imgHtml = d.photo ? '<img src="'+d.photo+'" style="width:100%;height:200px;object-fit:cover;border-radius:8px;margin-bottom:20px;" alt="">' : '';
+  document.getElementById('dmImg').innerHTML = imgHtml;
   document.getElementById('dmFlag').textContent = d.flag;
   document.getElementById('dmTitle').innerHTML = d.title;
   document.getElementById('dmDesc').textContent = d.desc;

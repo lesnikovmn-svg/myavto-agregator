@@ -347,6 +347,36 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()
 var DIR_ORDER = ['korea','china','japan','europe','georgia'];
 var currentDir = 0;
 
+function openDir(key) {
+  currentDir = DIR_ORDER.indexOf(key);
+  renderDir(key);
+}
+
+function renderDir(key) {
+  var d = DIRS[key];
+  if(d.photo){
+    var inner = document.querySelector('.dir-modal-inner');
+    inner.style.backgroundImage = 'linear-gradient(rgba(18,18,30,0.5),rgba(18,18,30,0.5)),url('+d.photo+')';
+    inner.style.backgroundSize = 'cover';
+    inner.style.backgroundPosition = d.photoBg || 'center top';
+  }
+  document.getElementById('dmImg').innerHTML = '';
+  document.getElementById('dmFlag').textContent = d.flag;
+  document.getElementById('dmTitle').innerHTML = d.title;
+  document.getElementById('dmDesc').textContent = d.desc;
+  document.getElementById('dmHitName').textContent = d.hitName;
+  document.getElementById('dmHitPrice').textContent = d.hitPrice;
+  document.getElementById('dmHitDesc').textContent = d.hitDesc;
+  var pros = d.pros.map(function(p){
+    return '<div class="dir-modal-pro '+(p.yes?'yes':'no')+'">'+(p.yes?'✅':'❌')+' '+p.text+'</div>';
+  }).join('');
+  document.getElementById('dmPros').innerHTML = pros;
+  document.getElementById('dmCounter').textContent = (currentDir+1)+' / '+DIR_ORDER.length;
+  document.getElementById('dirModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+var currentDir = 0;
+
 
 
 function dirPrev() {

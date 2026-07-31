@@ -113,7 +113,7 @@ footer{padding:48px 40px;border-top:1px solid rgba(201,168,76,0.1);display:flex;
 
 .dir-modal{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.92);backdrop-filter:blur(16px);display:none;align-items:center;justify-content:center;padding:20px;}
 .dir-modal.open{display:flex;}
-.dir-modal-inner{background:#1a1a1a;border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:40px;width:100%;max-width:640px;position:relative;max-height:90vh;overflow-y:auto;}
+.dir-modal-inner{background:#1a1a1a;border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:40px;width:100%;max-width:640px;position:relative;max-height:90vh;overflow-y:auto;transition:background-image 0.3s ease;}
 .dir-modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:#888;font-size:22px;cursor:pointer;}
 .dir-modal-flag{font-size:44px;margin-bottom:12px;display:block;filter:drop-shadow(0 0 10px rgba(255,255,255,0.5));}
 .dir-modal-title{font-family:Unbounded,sans-serif;font-size:26px;font-weight:900;margin-bottom:14px;text-shadow:0 0 30px rgba(201,168,76,0.6),0 2px 4px rgba(0,0,0,0.8);}
@@ -493,11 +493,15 @@ document.getElementById('dirModal').addEventListener('touchend', function(e){
   }
 }, {passive: true});
 
-// Свайп тачпада (wheel)
+// Свайп тачпада (wheel) с throttle
+var wheelLock = false;
 document.getElementById('dirModal').addEventListener('wheel', function(e){
-  if(Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 30){
+  if(Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 40){
     e.preventDefault();
+    if(wheelLock) return;
+    wheelLock = true;
     if(e.deltaX > 0) dirNext(); else dirPrev();
+    setTimeout(function(){ wheelLock = false; }, 600);
   }
 }, {passive: false});
 </script>

@@ -110,6 +110,24 @@ footer{padding:48px 40px;border-top:1px solid rgba(201,168,76,0.1);display:flex;
 .form-submit{width:100%;background:var(--gold);color:var(--black);border:none;border-radius:4px;padding:16px;font-size:15px;font-weight:600;font-family:Inter,sans-serif;cursor:pointer;margin-top:8px;}
 .form-success{display:none;background:rgba(26,107,60,0.2);border:1px solid rgba(26,107,60,0.4);border-radius:4px;padding:16px;text-align:center;color:#4caf50;font-weight:600;margin-top:16px;}
 @media(max-width:768px){nav{padding:16px 20px;}.nav-links{display:none;}.hero{padding:0 20px 60px;}.hero-stats{display:none;}.dirs-grid{grid-template-columns:1fr 1fr;}.services-grid{grid-template-columns:1fr;}.calc-inner{grid-template-columns:1fr;gap:40px;}.process-steps{grid-template-columns:1fr;}.process-steps::before{display:none;}.reviews-grid{grid-template-columns:1fr;}.calc-row{grid-template-columns:1fr;}.directions,.services,.calculator,.process,.reviews,.cta-section,.brands{padding:60px 20px;}footer{padding:32px 20px;flex-direction:column;}}
+
+.dir-modal{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.92);backdrop-filter:blur(16px);display:none;align-items:center;justify-content:center;padding:20px;}
+.dir-modal.open{display:flex;}
+.dir-modal-inner{background:#1a1a1a;border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:40px;width:100%;max-width:640px;position:relative;max-height:90vh;overflow-y:auto;}
+.dir-modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:#888;font-size:22px;cursor:pointer;}
+.dir-modal-flag{font-size:44px;margin-bottom:12px;display:block;}
+.dir-modal-title{font-family:Unbounded,sans-serif;font-size:26px;font-weight:900;margin-bottom:14px;}
+.dir-modal-title span{color:#c9a84c;}
+.dir-modal-desc{font-size:14px;color:#a0a0a0;line-height:1.7;margin-bottom:20px;}
+.dir-modal-hit{background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:8px;padding:18px;margin-bottom:20px;}
+.dir-modal-hit-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:6px;}
+.dir-modal-hit-name{font-size:17px;font-weight:700;margin-bottom:4px;}
+.dir-modal-hit-price{font-size:20px;font-weight:700;color:#c9a84c;}
+.dir-modal-hit-desc{font-size:12px;color:#888;margin-top:5px;}
+.dir-modal-pros{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;}
+.dir-modal-pro{border-radius:6px;padding:9px 12px;font-size:12px;}
+.dir-modal-pro.yes{background:rgba(26,107,60,0.15);border-left:3px solid #1a6b3c;color:#90c090;}
+.dir-modal-pro.no{background:rgba(139,51,51,0.15);border-left:3px solid #8b3333;color:#c09090;}
 </style>
 </head>
 <body>

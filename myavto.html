@@ -477,6 +477,29 @@ document.addEventListener('keydown', function(e){
   if(e.key==='ArrowLeft') dirPrev();
   if(e.key==='ArrowRight') dirNext();
 });
+
+// Свайп тачпад и мобильный
+var touchStartX = 0;
+var touchStartY = 0;
+document.getElementById('dirModal').addEventListener('touchstart', function(e){
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, {passive: true});
+document.getElementById('dirModal').addEventListener('touchend', function(e){
+  var dx = e.changedTouches[0].clientX - touchStartX;
+  var dy = e.changedTouches[0].clientY - touchStartY;
+  if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50){
+    if(dx < 0) dirNext(); else dirPrev();
+  }
+}, {passive: true});
+
+// Свайп тачпада (wheel)
+document.getElementById('dirModal').addEventListener('wheel', function(e){
+  if(Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 30){
+    e.preventDefault();
+    if(e.deltaX > 0) dirNext(); else dirPrev();
+  }
+}, {passive: false});
 </script>
 
 </body>

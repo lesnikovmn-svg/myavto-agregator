@@ -323,6 +323,11 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()
 <div class="dir-modal" id="dirModal" onclick="if(event.target===this)closeDir()">
   <div class="dir-modal-inner">
     <button class="dir-modal-close" onclick="closeDir()">×</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <button onclick="dirPrev()" style="background:rgba(201,168,76,0.2);border:1px solid rgba(201,168,76,0.4);color:#c9a84c;width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>
+      <span id="dmCounter" style="font-size:13px;color:#c9a84c;font-weight:600;">1 / 5</span>
+      <button onclick="dirNext()" style="background:rgba(201,168,76,0.2);border:1px solid rgba(201,168,76,0.4);color:#c9a84c;width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">›</button>
+    </div>
     <div id="dmImg"></div>
     <span class="dir-modal-flag" id="dmFlag"></span>
     <div class="dir-modal-title" id="dmTitle"></div>
@@ -339,6 +344,20 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()
 </div>
 
 <script>
+var DIR_ORDER = ['korea','china','japan','europe','georgia'];
+var currentDir = 0;
+
+
+
+function dirPrev() {
+  currentDir = (currentDir - 1 + DIR_ORDER.length) % DIR_ORDER.length;
+  renderDir(DIR_ORDER[currentDir]);
+}
+function dirNext() {
+  currentDir = (currentDir + 1) % DIR_ORDER.length;
+  renderDir(DIR_ORDER[currentDir]);
+}
+
 var DIRS = {
   korea: {photo: '/cars/korea.png',
     flag: '🇰🇷', title: 'Корея — <span>выгодный выбор</span>',
@@ -417,33 +436,17 @@ var DIRS = {
   }
 };
 
-function openDir(key) {
-  var d = DIRS[key];
-  if(d.photo){
-    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundImage = 'linear-gradient(to bottom, rgba(18,18,30,0.5) 0%, rgba(18,18,30,0.5) 100%), url('+d.photo+')';
-    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundSize = 'cover';
-    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundPosition = d.photoBg || 'center top';
-  }
-  document.getElementById('dmImg').innerHTML = '';
-  document.getElementById('dmFlag').textContent = d.flag;
-  document.getElementById('dmTitle').innerHTML = d.title;
-  document.getElementById('dmDesc').textContent = d.desc;
-  document.getElementById('dmHitName').textContent = d.hitName;
-  document.getElementById('dmHitPrice').textContent = d.hitPrice;
-  document.getElementById('dmHitDesc').textContent = d.hitDesc;
-  var pros = d.pros.map(function(p){
-    return '<div class="dir-modal-pro ' + (p.yes?'yes':'no') + '">' + (p.yes?'✅':'❌') + ' ' + p.text + '</div>';
-  }).join('');
-  document.getElementById('dmPros').innerHTML = pros;
-  document.getElementById('dirModal').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
+
 function closeDir() {
   document.getElementById('dirModal').classList.remove('open');
   document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundImage = '';
   document.body.style.overflow = '';
 }
-document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDir(); });
+document.addEventListener('keydown', function(e){
+  if(e.key==='Escape') closeDir();
+  if(e.key==='ArrowLeft') dirPrev();
+  if(e.key==='ArrowRight') dirNext();
+});
 </script>
 
 </body>

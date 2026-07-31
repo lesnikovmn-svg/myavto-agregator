@@ -419,8 +419,12 @@ var DIRS = {
 
 function openDir(key) {
   var d = DIRS[key];
-  var imgHtml = d.photo ? '<img src="'+d.photo+'" style="width:100%;height:200px;object-fit:cover;border-radius:8px;margin-bottom:20px;" alt="">' : '';
-  document.getElementById('dmImg').innerHTML = imgHtml;
+  if(d.photo){
+    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundImage = 'linear-gradient(to bottom, rgba(10,10,10,0.3) 0%, rgba(18,18,30,0.95) 45%, rgba(18,18,30,1) 100%), url('+d.photo+')';
+    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundSize = 'cover';
+    document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundPosition = 'center top';
+  }
+  document.getElementById('dmImg').innerHTML = '';
   document.getElementById('dmFlag').textContent = d.flag;
   document.getElementById('dmTitle').innerHTML = d.title;
   document.getElementById('dmDesc').textContent = d.desc;
@@ -436,6 +440,7 @@ function openDir(key) {
 }
 function closeDir() {
   document.getElementById('dirModal').classList.remove('open');
+  document.getElementById('dirModal').querySelector('.dir-modal-inner').style.backgroundImage = '';
   document.body.style.overflow = '';
 }
 document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDir(); });

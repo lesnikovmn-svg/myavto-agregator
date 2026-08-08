@@ -169,7 +169,12 @@ def lookup_inn(inn):
     годами и закрыть старое ИП, но текущий зелёный бейдж не должен создавать
     впечатление, что регистрация актуальна на сегодня, если это не так.
     """
-    inn = re.sub(r'\D', '', str(inn or ''))
+    inn_str = str(inn or '').strip()
+    if inn_str.endswith('.0'):
+        # Артефакт Google Sheets gviz-API: длинные числовые ячейки
+        # приходят как float ("6234062211" -> "6234062211.0").
+        inn_str = inn_str[:-2]
+    inn = re.sub(r'\D', '', inn_str)
     if len(inn) not in (10, 12):
         return None
 

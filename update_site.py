@@ -20,11 +20,18 @@ for row in rows[0:]:
         if i < len(c) and c[i] and c[i].get('v') is not None:
             return str(c[i]['v']).strip()
         return ''
+    # gviz-API отдаёт длинные числовые ячейки (например ИНН) как float —
+    # "6234062211" превращается в "6234062211.0". Если это не почистить,
+    # verify_egrul потом вырежет только точку регэкспом и получит
+    # "62340622110" — лишний ноль, ИНН не совпадёт ни с чем.
+    raw_inn = val(18)
+    inn = raw_inn[:-2] if raw_inn.endswith('.0') else raw_inn
+
     company = dict(id=val(0),name=val(1),rating=val(2),reviews=val(3),years=val(4),
         delivered=val(5),description=val(6),directions=val(7),tags=val(8),
         telegram=val(9),phone=val(10),site=val(11),manager=val(12),
         region=val(13),featured=val(14),avatar=val(15),color=val(16),yandex=val(17),
-        inn=val(18))
+        inn=inn)
     if company['name']:
         companies.append(company)
 

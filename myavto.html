@@ -68,6 +68,19 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .calc-result-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;}
 .calc-result-price{font-family:Unbounded,sans-serif;font-size:32px;font-weight:900;color:var(--gold);}
 .calc-result-note{font-size:12px;color:var(--muted);margin-top:6px;}
+.calc-tabs{display:flex;gap:8px;margin-bottom:4px;}
+.calc-tab{flex:1;text-align:center;padding:12px 12px;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;color:var(--muted);background:var(--gray2);border:1px solid rgba(201,168,76,0.15);border-radius:4px;cursor:pointer;transition:all .2s;font-weight:600;}
+.calc-tab.active{background:var(--gold);color:var(--black);border-color:var(--gold);}
+.calc-panel{display:none;flex-direction:column;gap:16px;}
+.calc-panel.active{display:flex;}
+.calc-group input[type=number]{background:var(--gray2);border:1px solid rgba(201,168,76,0.2);color:var(--white);padding:12px 14px;border-radius:4px;font-size:14px;font-family:Inter,sans-serif;outline:none;width:100%;}
+.calc-group input[type=number]::placeholder{color:#555;}
+.calc-breakdown{display:flex;flex-direction:column;gap:10px;}
+.calc-breakdown-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--muted);}
+.calc-breakdown-row b{color:var(--gold);font-family:Unbounded,sans-serif;font-size:15px;font-weight:700;}
+.calc-breakdown-row.total{border-top:1px solid rgba(201,168,76,0.2);padding-top:10px;margin-top:2px;}
+.calc-breakdown-row.total b{font-size:22px;}
+.calc-disclaimer{font-size:11px;color:var(--muted);line-height:1.5;margin-top:4px;}
 .process{padding:100px 40px;}
 .process-steps{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin-top:48px;position:relative;}
 .process-steps::before{content:'';position:absolute;top:32px;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
@@ -208,34 +221,81 @@ footer{padding:48px 40px;border-top:1px solid rgba(201,168,76,0.1);display:flex;
     <div>
       <div class="section-label">Калькулятор</div>
       <h2 class="calc-title">Сколько стоит <span>доставка?</span></h2>
-      <p class="calc-sub">Рассчитайте примерную стоимость. Точный расчёт бесплатно в Telegram.</p>
+      <p class="calc-sub">Рассчитайте примерную стоимость под ключ или растаможку при самостоятельном ввозе. Точный расчёт бесплатно в Telegram.</p>
     </div>
     <div class="calc-form">
-      <div class="calc-row">
-        <div class="calc-group"><label for="cc">Страна</label>
-          <select id="cc" onchange="cp()">
-            <option value="korea">🇰🇷 Корея</option>
-            <option value="china">🇨🇳 Китай</option>
-            <option value="japan">🇯🇵 Япония</option>
-            <option value="europe">🇪🇺 Европа</option>
-            <option value="georgia">🇬🇪 Грузия</option>
-          </select>
+      <div class="calc-tabs">
+        <div class="calc-tab active" id="tabTurnkey" onclick="calcTab('turnkey')">Под ключ</div>
+        <div class="calc-tab" id="tabSelf" onclick="calcTab('self')">Самостоятельно</div>
+      </div>
+
+      <div class="calc-panel active" id="panelTurnkey">
+        <div class="calc-row">
+          <div class="calc-group"><label for="cc">Страна</label>
+            <select id="cc" onchange="cp()">
+              <option value="korea">🇰🇷 Корея</option>
+              <option value="china">🇨🇳 Китай</option>
+              <option value="japan">🇯🇵 Япония</option>
+              <option value="europe">🇪🇺 Европа</option>
+              <option value="georgia">🇬🇪 Грузия</option>
+            </select>
+          </div>
+          <div class="calc-group"><label for="cb">Бюджет авто</label>
+            <select id="cb" onchange="cp()">
+              <option value="1">до 1.5 млн ₽</option>
+              <option value="2">1.5 — 3 млн ₽</option>
+              <option value="3">3 — 5 млн ₽</option>
+              <option value="4">от 5 млн ₽</option>
+            </select>
+          </div>
         </div>
-        <div class="calc-group"><label for="cb">Бюджет авто</label>
-          <select id="cb" onchange="cp()">
-            <option value="1">до 1.5 млн ₽</option>
-            <option value="2">1.5 — 3 млн ₽</option>
-            <option value="3">3 — 5 млн ₽</option>
-            <option value="4">от 5 млн ₽</option>
-          </select>
+        <div class="calc-result">
+          <div class="calc-result-label">Доставка + растаможка</div>
+          <div class="calc-result-price" id="cr">от 180 000 ₽</div>
+          <div class="calc-result-note">включая утильсбор и СБКТС</div>
+        </div>
+        <a href="#" class="btn-primary" onclick="openModal();return false;" style="text-align:center;justify-content:center;">Получить точный расчёт →</a>
+      </div>
+
+      <div class="calc-panel" id="panelSelf">
+        <div class="calc-row">
+          <div class="calc-group"><label for="sAge">Возраст авто</label>
+            <select id="sAge">
+              <option value="lt3">до 3 лет</option>
+              <option value="35">от 3 до 5 лет</option>
+              <option value="gt5">старше 5 лет</option>
+            </select>
+          </div>
+          <div class="calc-group"><label for="sFuel">Тип двигателя</label>
+            <select id="sFuel">
+              <option value="ice">Бензин / дизель</option>
+              <option value="hybrid">Гибрид</option>
+              <option value="electro">Электро</option>
+            </select>
+          </div>
+        </div>
+        <div class="calc-row">
+          <div class="calc-group"><label for="sCC">Объём двигателя, см³</label>
+            <input type="number" id="sCC" placeholder="1998">
+          </div>
+          <div class="calc-group"><label for="sHP">Мощность, л.с.</label>
+            <input type="number" id="sHP" placeholder="150">
+          </div>
+        </div>
+        <div class="calc-group"><label for="sPrice">Стоимость авто, ₽</label>
+          <input type="number" id="sPrice" placeholder="1 500 000">
+        </div>
+        <a href="#" class="btn-primary" onclick="calcSelf();return false;" style="text-align:center;justify-content:center;">Рассчитать растаможку →</a>
+        <div class="calc-result" id="sResult" style="display:none;">
+          <div class="calc-breakdown">
+            <div class="calc-breakdown-row"><span>Таможенная пошлина</span><b id="sDuty">—</b></div>
+            <div class="calc-breakdown-row"><span>Утилизационный сбор</span><b id="sUtil">—</b></div>
+            <div class="calc-breakdown-row"><span>Сбор за оформление</span><b id="sFee">—</b></div>
+            <div class="calc-breakdown-row total"><span>Итого платежи</span><b id="sTotal">—</b></div>
+          </div>
+          <div class="calc-disclaimer">Предварительный расчёт по действующим ставкам ЕАЭС на 2026 год (курс ≈95 ₽/€). Не включает акциз для мощных авто и стоимость перегона/логистики. Точную сумму фиксируем в договоре — сверим бесплатно в Telegram.</div>
         </div>
       </div>
-      <div class="calc-result">
-        <div class="calc-result-label">Доставка + растаможка</div>
-        <div class="calc-result-price" id="cr">от 180 000 ₽</div>
-        <div class="calc-result-note">включая утильсбор и СБКТС</div>
-      </div>
-      <a href="#" class="btn-primary" onclick="openModal();return false;" style="text-align:center;justify-content:center;">Получить точный расчёт →</a>
     </div>
   </div>
 </section>
@@ -326,6 +386,54 @@ function cp(){
   var c=document.getElementById('cc').value,b=parseInt(document.getElementById('cb').value);
   var p={korea:['от 180 000 ₽','от 220 000 ₽','от 290 000 ₽','от 380 000 ₽'],china:['от 150 000 ₽','от 200 000 ₽','от 270 000 ₽','от 340 000 ₽'],japan:['от 200 000 ₽','от 260 000 ₽','от 330 000 ₽','от 420 000 ₽'],europe:['от 300 000 ₽','от 390 000 ₽','от 470 000 ₽','от 620 000 ₽'],georgia:['от 250 000 ₽','от 310 000 ₽','от 390 000 ₽','от 500 000 ₽']};
   document.getElementById('cr').textContent=p[c][b-1];
+}
+function calcTab(t){
+  document.getElementById('tabTurnkey').classList.toggle('active',t==='turnkey');
+  document.getElementById('tabSelf').classList.toggle('active',t==='self');
+  document.getElementById('panelTurnkey').classList.toggle('active',t==='turnkey');
+  document.getElementById('panelSelf').classList.toggle('active',t==='self');
+}
+function fmtRub(n){return Math.round(n).toLocaleString('ru-RU')+' ₽';}
+function calcSelf(){
+  var age=document.getElementById('sAge').value;
+  var fuel=document.getElementById('sFuel').value;
+  var cc=parseFloat(document.getElementById('sCC').value)||0;
+  var hp=parseFloat(document.getElementById('sHP').value)||0;
+  var price=parseFloat(document.getElementById('sPrice').value)||0;
+  if(!cc||!price){alert('Укажите объём двигателя и стоимость авто');return;}
+  var eurRate=95;
+  var priceEur=price/eurRate;
+  var duty=0;
+  if(age==='lt3'){
+    var tiers=[[8500,0.54,2.5],[16700,0.48,3.5],[42300,0.48,5.5],[84500,0.48,7.5],[169000,0.48,15],[Infinity,0.48,20]];
+    for(var i=0;i<tiers.length;i++){
+      if(priceEur<=tiers[i][0]){
+        duty=Math.max(price*tiers[i][1],cc*tiers[i][2]*eurRate);
+        break;
+      }
+    }
+  }else if(age==='35'){
+    var r1=cc<=1000?1.5:cc<=1500?1.7:cc<=1800?2.5:cc<=2300?2.7:cc<=3000?3:3.6;
+    duty=cc*r1*eurRate;
+  }else{
+    var r2=cc<=1000?3:cc<=1500?3.2:cc<=1800?3.5:cc<=2300?4.8:cc<=3000?5:5.7;
+    duty=cc*r2*eurRate;
+  }
+  var isLgota=(fuel==='electro'||fuel==='hybrid')?hp<=80:hp<=160;
+  var util=isLgota?(age==='lt3'?3400:5200):null;
+  var feeTiers=[[200000,1231],[450000,2462],[1200000,4924],[2700000,13541],[4200000,18465],[5500000,21344],[10000000,49240],[Infinity,73860]];
+  var declFee=0;
+  for(var j=0;j<feeTiers.length;j++){if(price<=feeTiers[j][0]){declFee=feeTiers[j][1];break;}}
+  document.getElementById('sDuty').textContent=fmtRub(duty);
+  document.getElementById('sFee').textContent=fmtRub(declFee);
+  if(util!==null){
+    document.getElementById('sUtil').textContent=fmtRub(util);
+    document.getElementById('sTotal').textContent=fmtRub(duty+util+declFee);
+  }else{
+    document.getElementById('sUtil').textContent='индивидуально (>160 л.с.)';
+    document.getElementById('sTotal').textContent='от '+fmtRub(duty+declFee)+' + утильсбор';
+  }
+  document.getElementById('sResult').style.display='block';
 }
 function openModal(){document.getElementById('modal').classList.add('open');document.body.style.overflow='hidden';return false;}
 function closeModal(){document.getElementById('modal').classList.remove('open');document.body.style.overflow='';}

@@ -174,43 +174,51 @@ def lookup_inn(inn):
         return None
 
     cache = _load_cache()
-    if inn in cache:
+    # Кэшируем только УСПЕШНЫЕ проверки. Неудачу (None) не кэшируем —
+    # иначе один сбойный запрос (403, таймаут и т.п.) навсегда "залипает"
+    # в кэше, и все последующие попытки молча возвращают None без единого
+    # реального запроса — это как раз то, что произошло с 6234062211.
+    if cache.get(inn) is not None:
         return cache[inn]
 
     result = None
 
-    # Источник 1: бесплатное зеркало без ключа. Может отдавать 403/бывать
-    # нестабильным (bot-detection, смена формата) — тогда просто идём дальше.
-    try:
-        data = _fetch_itsoft(inn)
-        reg_date = _extract_reg_date(data)
-        terminated = _extract_terminated(data)
-        name = None
-        if isinstance(data, dict):
-            name = data.get('НаимСокр') or data.get('НаимПолн') or data.get('name')
-        if reg_date:
-            year_match = re.search(r'(\d{4})', reg_date)
-            if year_match:
-                result = {
-                    'registered_year': int(year_match.group(1)),
-                    'name': name,
-                    'active': not terminated,
-                }
-    except Exception as e:
-        print(f'  ЕГРЮЛ (itsoft): не удалось проверить ИНН {inn}: {e}')
-
-    # Источник 2 (резерв): DaData, если в itsoft не вышло и задан DADATA_TOKEN
-    # в agent_config.env. Требует бесплатной регистрации на dadata.ru.
-    if result is None:
+    # Источник 1: DaData — если задан DADATA_TOKEN в agent_config.env, пробуем
+    # его первым. itsoft.ru на практике (08.08.2026) стабильно отдаёт 403
+    # даже с браузерными заголовками — похоже, зеркало сейчас недоступно
+    # для скриптовых запросов, гонять его первым только тратит время.
+    if os.environ.get('DADATA_TOKEN'):
         try:
             result = _fetch_dadata(inn)
             if result:
-                print(f'  ЕГРЮЛ (DaData): {inn} — резервный источник сработал')
+                print(f'  ЕГРЮЛ (DaData): {inn} — подтверждено')
         except Exception as e:
             print(f'  ЕГРЮЛ (DaData): не удалось проверить ИНН {inn}: {e}')
 
-    cache[inn] = result
-    _save_cache(cache)
+    # Источник 2 (резерв): бесплатное зеркало без ключа — пробуем, если
+    # DaData не настроен или не дал результата. Может отдавать 403.
+    if result is None:
+        try:
+            data = _fetch_itsoft(inn)
+            reg_date = _extract_reg_date(data)
+            terminated = _extract_terminated(data)
+            name = None
+            if isinstance(data, dict):
+                name = data.get('НаимСокр') or data.get('НаимПолн') or data.get('name')
+            if reg_date:
+                year_match = re.search(r'(\d{4})', reg_date)
+                if year_match:
+                    result = {
+                        'registered_year': int(year_match.group(1)),
+                        'name': name,
+                        'active': not terminated,
+                    }
+        except Exception as e:
+            print(f'  ЕГРЮЛ (itsoft): не удалось проверить ИНН {inn}: {e}')
+
+    if result is not None:
+        cache[inn] = result
+        _save_cache(cache)
     time.sleep(1)
     return result
 

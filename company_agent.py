@@ -207,4 +207,5 @@ def run_agent():
     print("\nГотово! Добавлено: " + str(found) + ", пропущено: " + str(skipped))
     print("Запусти python3 update_site.py чтобы обновить сайт!")
 
-run_agent()
+if __name__ == "__main__":
+    run_agent()

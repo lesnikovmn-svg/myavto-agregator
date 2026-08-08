@@ -36,6 +36,24 @@ def extract_telegram(text):
     m = re.search(r"@([A-Za-z0-9_]{3,32})", text)
     return m.group(1) if m else ""
 
+def extract_inn(text):
+    # Ищем ИНН только рядом со словом "ИНН" — просто 10/12-значное число
+    # в тексте слишком часто оказывается номером телефона или ОГРН.
+    m = re.search(r"ИНН[:\s№]{0,5}(\d{10}|\d{12})", text, re.IGNORECASE)
+    return m.group(1) if m else ""
+
+def fetch_site_text(url):
+    # Отдельно от check_site: тут нужен именно текст страницы, чтобы
+    # поискать в нём ИНН/реквизиты компании. Если не получилось — не страшно,
+    # просто не найдём ИНН для этой компании сейчас.
+    try:
+        r = requests.get(url, timeout=6, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code == 200:
+            return r.text
+    except Exception:
+        pass
+    return ""
+
 def get_directions(text):
     t = text.lower()
     dm = {"Китай":["китай","china","byd","haval","geely","chery","далянь"],"Корея":["корея","korea","kia","hyundai","genesis"],"Япония":["япония","japan","toyota","lexus","honda","nissan","mazda"],"США":["сша","usa","america","tesla","ford","cadillac"],"ОАЭ":["оаэ","uae","dubai","эмираты"],"Европа":["европа","europe","bmw","mercedes","audi","volkswagen"],"Канада":["канада","canada"],"Грузия":["грузия","georgia"],"Армения":["армения","armenia"]}
@@ -98,10 +116,11 @@ def get_existing(ws):
         return set()
 
 def add_company(ws, data, row_num):
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",""]
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray","",data.get("inn","")]
     ws.append_row(row)
     subs = data.get("subscribers",0)
-    print("  OK: " + data["name"] + (" (" + str(subs) + " подписчиков)" if subs > 0 else ""))
+    inn_note = " [ИНН найден]" if data.get("inn") else ""
+    print("  OK: " + data["name"] + (" (" + str(subs) + " подписчиков)" if subs > 0 else "") + inn_note)
 
 BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","youtube","instagram","facebook","tiktok","yandex","google","wikipedia","zhihu","rutube","tgstat","nicegram","telegramchannels"]
 
@@ -169,8 +188,16 @@ def run_agent():
             if name.lower() in existing or (link and link.lower() in existing):
                 skipped += 1
                 continue
+            # Пробуем найти ИНН на самом сайте компании (обычно в футере
+            # или на странице "Реквизиты"/"О компании"). Если не вышло —
+            # не страшно, компания просто пока без бейджа ЕГРЮЛ.
+            inn = ""
+            if link.startswith("http"):
+                site_text = fetch_site_text(link)
+                if site_text:
+                    inn = extract_inn(site_text)
             next_id += 1
-            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else ""}, next_id)
+            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn}, next_id)
             existing.add(name.lower())
             if link: existing.add(link.lower())
             found += 1

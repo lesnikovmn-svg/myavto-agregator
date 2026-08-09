@@ -303,6 +303,37 @@ def extract_social_from_text(text):
                 break
     return insta, vk
 
+def extract_extra_contacts_from_text(text):
+    """
+    То же самое, что extract_social_from_text, но для мессенджера MAX
+    (max.ru/username), YouTube, RuTube и WhatsApp-группы — нужны для
+    правила приоритета клика по карточке (см. update_site.py: site >
+    telegram > instagram > vk > max > youtube > rutube > whatsapp).
+    Добавлено 09.08.2026 по просьбе пользователя. Ищем прямые ссылки в
+    тексте/футере сайта — компания сама их указала, это надёжнее поиска.
+    """
+    result = {"max": "", "youtube": "", "rutube": "", "whatsapp": ""}
+    if not text:
+        return result
+    for cand in re.findall(r"https?://(?:www\.)?max\.ru/[A-Za-z0-9_.\-]+", text):
+        if is_real_profile_url(cand.lower()):
+            result["max"] = cand
+            break
+    for cand in re.findall(r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+", text):
+        result["youtube"] = cand
+        break
+    for cand in re.findall(r"https?://(?:www\.)?rutube\.ru/(?:channel|u)/[A-Za-z0-9_.\-]+", text):
+        result["rutube"] = cand
+        break
+    for cand in re.findall(r"https?://chat\.whatsapp\.com/[A-Za-z0-9]+", text):
+        result["whatsapp"] = cand
+        break
+    if not result["whatsapp"]:
+        for cand in re.findall(r"https?://wa\.me/\d+", text):
+            result["whatsapp"] = cand
+            break
+    return result
+
 def find_social_links(name, text="", phone=""):
     """Instagram/VK компании — сначала пробуем достать прямо со страницы
     (см. extract_social_from_text — прямая ссылка от самой компании уже
@@ -337,6 +368,131 @@ def find_marketplace_links(name, phone=""):
     autoru, aruv = find_platform_link(f"{name} auto.ru", ["auto.ru"], key, pd)
     time.sleep(1)
     return avito, drom, autoru, (av or dv or aruv)
+
+def extract_contacts_from_2gis(html):
+    """
+    2ГИС отдаёт карточку организации с серверным рендерингом (проверено
+    вручную 09.08.2026 на живой карточке LikeAvto в Чите:
+    2gis.ru/chita/firm/70000001039726563 — в HTML прямо лежат ссылка на
+    сайт likeavto.ru, ВКонтакте, Telegram-канал, YouTube, WhatsApp). Раньше
+    2ГИС использовался только как ПЛОЩАДКА ДЛЯ ПРОВЕРКИ уже найденных
+    ссылок (find_map_links) — но не как ИСТОЧНИК для поиска сайта/соцсетей,
+    хотя сама компания уже все их указала в своём профиле 2ГИС. Пользователь
+    нашёл сайт LikeAvto именно так — вручную зайдя на карточку в 2ГИС,
+    попросил добавить это в алгоритм агента.
+
+    Сайт на карточке 2ГИС обычно обёрнут в редирект-ссылку вида
+    "link.2gis.ru/.../?http://домен.ru" — настоящий адрес идёт после
+    последнего "?http". Telegram/VK/Instagram/маркетплейсы бывают и в таких
+    же обёртках, и прямыми ссылками — поэтому классифицируем ПО ДОМЕНУ
+    целевого адреса, а не по порядку блоков на странице (порядок может
+    отличаться от карточки к карточке).
+
+    Возвращает dict {"site","telegram","vk","instagram","avito","drom",
+    "autoru","max","youtube","rutube","whatsapp"} — пустая строка, если
+    что-то не нашлось. Ничего не выдумываем: не смогли распарсить — поле
+    просто остаётся пустым, вызывающий код может попробовать другие
+    источники.
+
+    max/youtube/rutube/whatsapp добавлены 09.08.2026 — нужны для правила
+    приоритета клика по карточке на сайте (site > telegram > instagram >
+    vk > max > youtube > rutube > whatsapp), карточка 2ГИС уже отдаёт
+    YouTube/WhatsApp напрямую (видно на живом примере LikeAvto), раньше
+    просто игнорировались.
+    """
+    result = {"site": "", "telegram": "", "vk": "", "instagram": "",
+               "avito": "", "drom": "", "autoru": "",
+               "max": "", "youtube": "", "rutube": "", "whatsapp": ""}
+    if not html:
+        return result
+
+    def classify(url):
+        u = url.lower()
+        if "t.me" in u or "telegram.me" in u:
+            return "telegram"
+        if "vk.com" in u or "vk.ru" in u:
+            return "vk"
+        if "instagram.com" in u:
+            return "instagram"
+        if "avito.ru" in u:
+            return "avito"
+        if "drom.ru" in u:
+            return "drom"
+        if "auto.ru" in u:
+            return "autoru"
+        if "max.ru" in u:
+            return "max"
+        if "youtube.com" in u or "youtu.be" in u:
+            return "youtube"
+        if "rutube.ru" in u:
+            return "rutube"
+        if "wa.me" in u or "whatsapp.com" in u:
+            return "whatsapp"
+        if "2gis." in u:
+            return None
+        return "site"
+
+    # Ссылки, обёрнутые в редирект 2ГИС (link.2gis.ru/...?http://...)
+    for target in re.findall(r"link\.2gis\.ru/[^\"'<>\s]*?\?(https?://[^\"'<>\s&]+)", html):
+        kind = classify(target)
+        if not kind or result.get(kind):
+            continue
+        if kind == "telegram":
+            m = re.search(r"t\.me/([A-Za-z0-9_]+)", target, re.IGNORECASE)
+            if m:
+                result["telegram"] = m.group(1)
+        else:
+            result[kind] = target
+
+    # Прямые (без обёртки) ссылки на соцсети/маркетплейсы/мессенджеры в HTML
+    direct_patterns = {
+        "vk": r"https?://(?:www\.)?vk\.(?:com|ru)/[A-Za-z0-9_.\-]+",
+        "instagram": r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.\-]+",
+        "avito": r"https?://(?:www\.)?avito\.ru/[A-Za-z0-9_/\-]+",
+        "drom": r"https?://(?:www\.)?[a-z0-9\-]+\.drom\.ru/[A-Za-z0-9_/\-]*",
+        "autoru": r"https?://(?:www\.)?auto\.ru/[A-Za-z0-9_/\-]+",
+        "max": r"https?://(?:www\.)?max\.ru/[A-Za-z0-9_.\-]+",
+        "youtube": r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+",
+        "rutube": r"https?://(?:www\.)?rutube\.ru/(?:channel|u)/[A-Za-z0-9_.\-]+",
+        "whatsapp": r"https?://(?:chat\.whatsapp\.com/[A-Za-z0-9]+|wa\.me/\d+)",
+    }
+    for kind, pattern in direct_patterns.items():
+        if result[kind]:
+            continue
+        for cand in re.findall(pattern, html):
+            if is_real_profile_url(cand.lower()):
+                result[kind] = cand
+                break
+
+    if not result["telegram"]:
+        m = re.search(r"https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)", html, re.IGNORECASE)
+        if m:
+            result["telegram"] = m.group(1)
+
+    return result
+
+def backfill_from_2gis(gis2_url, current):
+    """
+    Дозаполняет ТОЛЬКО пустые поля из уже подтверждённой карточки 2ГИС
+    (gis2_url должен быть результатом find_map_links с verified=True —
+    сюда НЕ передаём непроверенные ссылки). Никогда не перезаписывает уже
+    найденное другим путём значение — 2ГИС тут дополнительный источник,
+    а не приоритетный.
+
+    current — dict с текущими значениями (может не содержать всех ключей).
+    Возвращает новый dict с теми же ключами, что и extract_contacts_from_2gis,
+    дополненный тем, что уже было в current.
+    """
+    filled = dict(current)
+    if not gis2_url or not gis2_url.startswith("http"):
+        return filled
+    html = fetch_site_text(gis2_url)
+    found = extract_contacts_from_2gis(html)
+    for key, val in found.items():
+        if val and not filled.get(key):
+            filled[key] = val
+            print(f"    из карточки 2ГИС нашлось {key}: {val}")
+    return filled
 
 def mentions_ukraine(text):
     # Ловит "Украина/Украину/Украины/украинский" и т.п. — любые формы
@@ -476,7 +632,7 @@ def get_existing(ws):
         return set()
 
 def add_company(ws, data, row_num):
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru","")]
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp","")]
     # ВАЖНО: без table_range='A1' append_row без явного якоря может "уехать"
     # вправо — Sheets API ищет "таблицу" по всему листу и в редких случаях
     # (09.08.2026, найдено при разборе бага с 52 vs 82 строк) начинает
@@ -563,6 +719,26 @@ def run_agent():
         yandex, google, gis2, maps_verified = find_map_links(name, phone)
         insta, vk, social_verified = find_social_links(name, text, phone)
         avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
+        extra = extract_extra_contacts_from_text(text)
+        maxm, youtube, rutube, whatsapp = extra["max"], extra["youtube"], extra["rutube"], extra["whatsapp"]
+        # Карточка 2ГИС (если нашлась и подтвердилась) сама по себе часто
+        # содержит сайт/соцсети/мессенджеры компании — дозаполняем то, что
+        # выше не нашли другими способами (см. extract_contacts_from_2gis).
+        site = ""
+        if gis2 and maps_verified:
+            filled = backfill_from_2gis(gis2, {"site": site, "telegram": username, "vk": vk,
+                "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
+                "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
+            site = filled["site"]
+            vk = vk or filled["vk"]
+            insta = insta or filled["instagram"]
+            avito = avito or filled["avito"]
+            drom = drom or filled["drom"]
+            autoru = autoru or filled["autoru"]
+            maxm = maxm or filled["max"]
+            youtube = youtube or filled["youtube"]
+            rutube = rutube or filled["rutube"]
+            whatsapp = whatsapp or filled["whatsapp"]
         # Раньше публиковали только при подтверждении хотя бы на одной
         # независимой площадке. Теперь добавляем и при единственном
         # источнике (сам тг-канал) — но название стараемся взять максимально
@@ -571,7 +747,7 @@ def run_agent():
         if not (maps_verified or social_verified or market_verified):
             print(f"    ⚠️ {name}: подтвердилось только в Telegram, добавляю как есть")
         next_id += 1
-        add_company(ws, {"name":name,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":phone,"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru}, next_id)
+        add_company(ws, {"name":name,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":phone,"site":site,"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp}, next_id)
         existing.add(name.lower())
         existing.add(username.lower())
         found += 1
@@ -670,6 +846,29 @@ def run_agent():
             yandex, google, gis2, maps_verified = find_map_links(name, phone)
             insta, vk, social_verified = find_social_links(name, text + " " + site_text, phone)
             avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
+            extra = extract_extra_contacts_from_text(text + " " + site_text)
+            maxm, youtube, rutube, whatsapp = extra["max"], extra["youtube"], extra["rutube"], extra["whatsapp"]
+            site = link if link.startswith("http") else ""
+            # Карточка 2ГИС (если нашлась и подтвердилась) сама по себе часто
+            # содержит сайт/соцсети/мессенджеры компании — дозаполняем то, что
+            # выше не нашли другими способами (см. extract_contacts_from_2gis;
+            # добавлено 09.08.2026 по просьбе пользователя, который сам нашёл
+            # сайт LikeAvto именно через карточку 2ГИС).
+            if gis2 and maps_verified:
+                filled = backfill_from_2gis(gis2, {"site": site, "telegram": tg, "vk": vk,
+                    "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
+                    "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
+                site = site or filled["site"]
+                tg = tg or filled["telegram"]
+                vk = vk or filled["vk"]
+                insta = insta or filled["instagram"]
+                avito = avito or filled["avito"]
+                drom = drom or filled["drom"]
+                autoru = autoru or filled["autoru"]
+                maxm = maxm or filled["max"]
+                youtube = youtube or filled["youtube"]
+                rutube = rutube or filled["rutube"]
+                whatsapp = whatsapp or filled["whatsapp"]
             # Добавляем и при подтверждении только из одного источника —
             # но название уже взято максимально верно (title_name из
             # заголовка выдачи, а не домен, см. clean_name_from_title выше).
@@ -678,7 +877,7 @@ def run_agent():
             if not (inn or maps_verified or social_verified or market_verified):
                 print(f"    ⚠️ {name}: подтвердилось только по исходному источнику, добавляю как есть")
             next_id += 1
-            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru}, next_id)
+            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":site,"inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp}, next_id)
             existing.add(name.lower())
             if link: existing.add(link.lower())
             if dom: existing.add(dom)

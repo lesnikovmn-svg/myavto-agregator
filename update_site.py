@@ -45,7 +45,10 @@ for row in all_rows:
         telegram=val(9),phone=val(10),site=val(11),manager=val(12),
         region=val(13),featured=val(14),avatar=val(15),color=val(16),yandex=val(17),
         inn=val(18),google=val(19),gis2=val(20),instagram=val(21),vk=val(22),
-        avito=val(23),drom=val(24),autoru=val(25))
+        avito=val(23),drom=val(24),autoru=val(25),
+        # Добавлено 09.08.2026 для правила приоритета клика по карточке
+        # (см. clink ниже): мессенджер MAX, YouTube, RuTube, WhatsApp.
+        max=val(26),youtube=val(27),rutube=val(28),whatsapp=val(29))
     if company['name']:
         companies.append(company)
 
@@ -96,7 +99,16 @@ for c in companies:
     else:
         cyrs = str(int(float(raw_years))) if raw_years else '1'
     total_reviews += int(crev)
-    clink = c['site'] if c['site'] else ('https://t.me/' + c['telegram'] if c['telegram'] else '#')
+    # Приоритет клика по всей карточке (не по конкретной иконке-кнопке) —
+    # правило от 09.08.2026: сайт > telegram > instagram > vk > MAX >
+    # YouTube > RuTube > WhatsApp-группа > ничего (раньше был только
+    # site -> telegram -> '#', теперь полная цепочка по просьбе
+    # пользователя, который нашёл несколько компаний без сайта, но с
+    # соцсетями через карточку 2ГИС).
+    clink = (c['site'] or
+             (('https://t.me/' + c['telegram']) if c['telegram'] else '') or
+             c['instagram'] or c['vk'] or c['max'] or c['youtube'] or
+             c['rutube'] or c['whatsapp'] or '#')
     egrul_verified = 'true' if c['egrul_year'] else 'false'
     js += (f'  {{id:{cid},name:"{c["name"]}",rating:{c["rating"]},reviews:{crev},years:{cyrs},'
            f'delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},'
@@ -105,6 +117,7 @@ for c in companies:
            f'yandex:"{c["yandex"]}",google:"{c["google"]}",gis2:"{c["gis2"]}",'
            f'instagram:"{c["instagram"]}",vk:"{c["vk"]}",'
            f'avito:"{c["avito"]}",drom:"{c["drom"]}",autoru:"{c["autoru"]}",'
+           f'max:"{c["max"]}",youtube:"{c["youtube"]}",rutube:"{c["rutube"]}",whatsapp:"{c["whatsapp"]}",'
            f'link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}"}},\n')
 js = js.rstrip(',\n') + '\n];'
 

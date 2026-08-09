@@ -48,7 +48,7 @@ def clean_name_from_title(title):
     """
     if not title:
         return ""
-    for sep in [" — ", " – ", " | ", " - "]:
+    for sep in [" — ", " – ", " | ", " - ", " · "]:
         if sep in title:
             candidate = title.split(sep)[0].strip()
             if len(candidate) >= 2:

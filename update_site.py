@@ -31,7 +31,7 @@ for row in rows[0:]:
         delivered=val(5),description=val(6),directions=val(7),tags=val(8),
         telegram=val(9),phone=val(10),site=val(11),manager=val(12),
         region=val(13),featured=val(14),avatar=val(15),color=val(16),yandex=val(17),
-        inn=inn)
+        inn=inn,google=val(19),gis2=val(20))
     if company['name']:
         companies.append(company)
 
@@ -74,7 +74,8 @@ for c in companies:
            f'delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},'
            f'telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",'
            f'region:"{c["region"]}",featured:{featured},avatar:"{c["avatar"]}",color:"{c["color"]}",'
-           f'yandex:"{c["yandex"]}",link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}"}},\n')
+           f'yandex:"{c["yandex"]}",google:"{c["google"]}",gis2:"{c["gis2"]}",'
+           f'link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}"}},\n')
 js = js.rstrip(',\n') + '\n];'
 
 html = open('index.html').read()

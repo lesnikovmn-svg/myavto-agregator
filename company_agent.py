@@ -2,6 +2,7 @@ import requests
 import json
 import re
 import time
+import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 from ddgs import DDGS
@@ -72,6 +73,56 @@ def fetch_site_text(url):
         pass
     return ""
 
+def extract_years_experience(text):
+    """
+    Если у компании нет ИНН (или его проверка не даёт года регистрации),
+    пробуем вытащить реальный стаж работы из текста самого сайта/канала:
+    "с 2015 года", "работаем с 2015-го", "10 лет на рынке", "опыт 8+ лет".
+    Возвращает int или None, если ничего похожего не нашли — в этом случае
+    вызывающий код оставляет старый безопасный дефолт ("1" год), а не
+    выдумывает цифру.
+    """
+    if not text:
+        return None
+    current_year = datetime.date.today().year
+    m = re.search(r"с\s+(19\d{2}|20\d{2})[\s\-–]*(?:го)?\s*год", text, re.IGNORECASE)
+    if m:
+        year = int(m.group(1))
+        if 1990 <= year <= current_year:
+            return max(1, current_year - year)
+    m = re.search(r"(\d{1,2})\+?\s*лет", text, re.IGNORECASE)
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= 40:
+            return n
+    return None
+
+def find_map_profile(query, domain_filters):
+    """Ищем реальную ссылку на карточку компании через DDG, привязываясь
+    к конкретному домену площадки (Яндекс/Google/2ГИС), чтобы не взять
+    случайную ссылку не по теме."""
+    for r in search_ddgs(query, num=5):
+        link = (r.get("link") or "").lower()
+        if any(d in link for d in domain_filters):
+            return r.get("link")
+    return ""
+
+def find_map_links(name):
+    """
+    Ищем карточку компании на трёх площадках отзывов. Никаких рейтингов
+    отсюда не тянем (Google Maps/2ГИС отдают оценку только через JS, без
+    платного API её надёжно не вытащить) — только ссылка, если карточка
+    реально нашлась. Кнопка на сайте будет вести на неё, а пользователь
+    сам увидит реальный рейтинг на самой площадке.
+    """
+    yandex = find_map_profile(f"{name} отзывы", ["yandex.ru/maps", "yandex.com/maps"])
+    time.sleep(1)
+    google = find_map_profile(f"{name} отзывы", ["google.com/maps", "maps.app.goo.gl", "goo.gl/maps"])
+    time.sleep(1)
+    gis2 = find_map_profile(f"{name} отзывы 2гис", ["2gis.ru", "2gis.com"])
+    time.sleep(1)
+    return yandex, google, gis2
+
 def mentions_ukraine(text):
     # Ловит "Украина/Украину/Украины/украинский" и т.п. — любые формы
     # с корнем "укра". Сайт нацелен на СНГ (Россия, Казахстан, Беларусь...),
@@ -140,7 +191,7 @@ def get_existing(ws):
         return set()
 
 def add_company(ws, data, row_num):
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray","",data.get("inn","")]
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2","")]
     ws.append_row(row)
     subs = data.get("subscribers",0)
     inn_note = " [ИНН найден]" if data.get("inn") else ""
@@ -185,7 +236,9 @@ def run_agent():
             skipped += 1
             continue
         next_id += 1
-        add_company(ws, {"name":username,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":extract_phone(text),"subscribers":info["subscribers"]}, next_id)
+        years = extract_years_experience(text)
+        yandex, google, gis2 = find_map_links(username)
+        add_company(ws, {"name":username,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":extract_phone(text),"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2}, next_id)
         existing.add(username.lower())
         found += 1
         time.sleep(1)
@@ -237,6 +290,7 @@ def run_agent():
             # в meta-описании ни слова про Украину, а на самой странице
             # это единственное реальное направление доставки).
             inn = ""
+            site_text = ""
             if link.startswith("http"):
                 site_text = fetch_site_text(link)
                 if site_text:
@@ -244,8 +298,17 @@ def run_agent():
                         skipped += 1
                         continue
                     inn = extract_inn(site_text)
+            # Если ИНН найти не удалось (а значит, и год регистрации по
+            # ЕГРЮЛ мы позже не узнаем) — пробуем достать стаж работы прямо
+            # из текста: описания, сниппета, самого сайта ("с 2015 года",
+            # "10 лет на рынке"). Не нашли — оставляем безопасный дефолт "1",
+            # а не гадаем.
+            years = None
+            if not inn:
+                years = extract_years_experience(text + " " + site_text)
+            yandex, google, gis2 = find_map_links(name)
             next_id += 1
-            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn}, next_id)
+            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2}, next_id)
             existing.add(name.lower())
             if link: existing.add(link.lower())
             found += 1

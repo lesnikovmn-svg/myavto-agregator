@@ -234,6 +234,11 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .verified-basic { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 .phone-reveal { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: none; }
 .phone-reveal.phone-revealed { color: var(--accent); border-color: var(--accent-light); background: var(--accent-light); }
+.review-links { display: flex; gap: 6px; }
+.review-icon-btn { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; text-decoration: none; color: #fff; flex-shrink: 0; }
+.review-yandex { background: #fc3f1d; }
+.review-google { background: #4285f4; }
+.review-2gis { background: #12a54b; }
 .card-desc { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .tag { font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; color: var(--muted); }
@@ -735,6 +740,14 @@ function renderCompanies(list) {
     const phone = (c.phone && c.phone !== '-')
       ? `<div class="meta-item"><button type="button" class="phone-reveal" data-phone="${c.phone}" onclick="revealPhone(this)">📞 Показать номер</button></div>`
       : '';
+    // Кнопки-иконки на реальные карточки компании на картах/справочниках.
+    // Показываем только те площадки, где карточка реально найдена —
+    // никаких выдуманных ссылок или рейтингов на кнопке.
+    const reviewLinks = [
+      c.yandex ? `<a href="${c.yandex}" target="_blank" class="review-icon-btn review-yandex" title="Яндекс Карты">Я</a>` : '',
+      c.google ? `<a href="${c.google}" target="_blank" class="review-icon-btn review-google" title="Google Карты">G</a>` : '',
+      c.gis2 ? `<a href="${c.gis2}" target="_blank" class="review-icon-btn review-2gis" title="2ГИС">2</a>` : ''
+    ].join('');
     return `
     <article class="company-card ${isTop?'top':''}" data-link="${c.link||'#'}" style="cursor:${c.link&&c.link!=='#'?'pointer':'default'}">
       <div class="card-header">
@@ -765,7 +778,7 @@ function renderCompanies(list) {
           ${phone}
         </div>
         <div class="card-actions">
-          <a href="${c.yandex || 'https://yandex.ru/maps/?text=' + encodeURIComponent(c.name + ' импорт авто')}" target="_blank"><button class="btn-secondary">Отзывы ↗</button></a>
+          ${reviewLinks ? `<div class="review-links">${reviewLinks}</div>` : ''}
           ${contact}
         </div>
       </div>

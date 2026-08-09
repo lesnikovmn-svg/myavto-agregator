@@ -1,37 +1,49 @@
-import urllib.request, json, re, subprocess
+import json, re, subprocess
 
 import os
+import gspread
+from google.oauth2.service_account import Credentials
 import verify_egrul
 
-SHEET_ID = os.environ.get('SHEET_ID', '1u3WuYo6Iyb4RJMQVbanx4YGm29B2V-DQMuKzVrtdcLY')
-URL = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:json'
+# Раньше данные читались через публичный gviz/tq JSON-эндпоинт Google
+# Sheets. У него есть собственный серверный кэш (не наш HTTP-кэш, повлиять
+# на него заголовками Cache-Control нельзя) — 09.08.2026 это аукнулось:
+# company_agent.py дописал 14 новых компаний через gspread, а update_site.py,
+# запущенный сразу следом, всё равно увидел старые 52 — свежие строки в
+# таблице реально были, просто gviz ещё не обновил кэш. Раз в даже обычном
+# ручном прогоне это создаёт риск "потерять" сегодняшние добавления до
+# следующего раза — а в daily_update.sh (cron) company_agent.py и
+# update_site.py как раз запускаются один за другим без паузы, так что бага
+# бы повторялся каждый день. Переключились на тот же способ чтения, что уже
+# использует company_agent.py — авторизованный gspread без кэширующего слоя.
+config = {}
+if os.path.exists('agent_config.env'):
+    with open('agent_config.env') as f:
+        for line in f:
+            if '=' in line:
+                k, v = line.strip().split('=', 1)
+                config[k] = v
+SHEET_ID = os.environ.get('SHEET_ID') or config.get('SHEET_ID', '1u3WuYo6Iyb4RJMQVbanx4YGm29B2V-DQMuKzVrtdcLY')
 
 print('Загружаю данные из Google Sheets...')
-req = urllib.request.Request(URL, headers={'User-Agent': 'Mozilla/5.0'})
-raw = urllib.request.urlopen(req).read().decode('utf-8')
-json_str = re.search(r'setResponse\((.*)\)', raw, re.DOTALL).group(1)
-data = json.loads(json_str)
-rows = data['table']['rows']
+scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+creds = Credentials.from_service_account_file('credentials.json', scopes=scopes)
+client = gspread.authorize(creds)
+ws = client.open_by_key(SHEET_ID).sheet1
+all_rows = ws.get_all_values()[1:]  # без строки заголовков
 
 companies = []
-for row in rows[0:]:
-    c = row['c']
+for row in all_rows:
     def val(i):
-        if i < len(c) and c[i] and c[i].get('v') is not None:
-            return str(c[i]['v']).strip()
-        return ''
-    # gviz-API отдаёт длинные числовые ячейки (например ИНН) как float —
-    # "6234062211" превращается в "6234062211.0". Если это не почистить,
-    # verify_egrul потом вырежет только точку регэкспом и получит
-    # "62340622110" — лишний ноль, ИНН не совпадёт ни с чем.
-    raw_inn = val(18)
-    inn = raw_inn[:-2] if raw_inn.endswith('.0') else raw_inn
-
+        return row[i].strip() if i < len(row) and row[i] else ''
+    # gspread отдаёт значения уже как обычные строки (в отличие от gviz,
+    # который превращал длинные числа вроде ИНН во float "...​.0") — отдельная
+    # чистка ИНН больше не нужна.
     company = dict(id=val(0),name=val(1),rating=val(2),reviews=val(3),years=val(4),
         delivered=val(5),description=val(6),directions=val(7),tags=val(8),
         telegram=val(9),phone=val(10),site=val(11),manager=val(12),
         region=val(13),featured=val(14),avatar=val(15),color=val(16),yandex=val(17),
-        inn=inn,google=val(19),gis2=val(20),instagram=val(21),vk=val(22),
+        inn=val(18),google=val(19),gis2=val(20),instagram=val(21),vk=val(22),
         avito=val(23),drom=val(24),autoru=val(25))
     if company['name']:
         companies.append(company)

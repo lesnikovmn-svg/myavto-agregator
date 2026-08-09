@@ -4,9 +4,10 @@
 5 поисковых запросов company_agent.py, но пользователь точно знает, что он
 существует и подходит).
 
-Проходит ту же честную проверку, что и обычный агент: публикуется в каталог,
-только если название/телефон подтвердились на независимой площадке (карты,
-соцсети, маркетплейсы) — порога по числу подписчиков нет.
+Как и обычный агент — публикует даже при подтверждении из одного источника
+(сам канал), порога по подписчикам нет. Если tgstat.ru не знает канал
+(частый случай для небольших каналов), пробует получить название/описание
+напрямую с t.me.
 
 Запуск: python3 add_specific_channel.py <username>
 Пример: python3 add_specific_channel.py japanautozakaz
@@ -14,8 +15,8 @@
 """
 import sys
 from company_agent import (
-    connect_sheets, get_existing, parse_tgstat_channel, extract_phone,
-    get_directions, get_tags, mentions_ukraine, extract_years_experience,
+    connect_sheets, get_existing, parse_tgstat_channel, fetch_telegram_preview,
+    extract_phone, get_directions, get_tags, mentions_ukraine, extract_years_experience,
     find_map_links, find_social_links, find_marketplace_links, add_company,
 )
 
@@ -31,7 +32,12 @@ def run(username):
 
     info = parse_tgstat_channel(username)
     if not info:
-        print("Не удалось получить данные канала с tgstat.ru (не найден или недоступен).")
+        print("tgstat.ru не знает такой канал (обычно — маленькие каналы, мало подписчиков).")
+        print("Пробую напрямую через t.me...")
+        info = fetch_telegram_preview(username)
+    if not info:
+        print("Не удалось получить данные канала ни с tgstat.ru, ни напрямую с t.me.")
+        print("Либо канал закрытый/приватный, либо username введён неверно.")
         return
 
     text = info["description"] or ""
@@ -43,26 +49,27 @@ def run(username):
         print("В описании упоминается Украина — не подходит для этого каталога. Не добавляю.")
         return
 
+    name = info.get("title") or username.replace("_", " ").title()
+    if name.lower() in existing:
+        print("Уже есть в каталоге под этим названием — ничего не делаю.")
+        return
+
     phone = extract_phone(text)
     years = extract_years_experience(text)
 
     print("Ищу подтверждение на картах...")
-    yandex, google, gis2, maps_verified = find_map_links(username, phone)
+    yandex, google, gis2, maps_verified = find_map_links(name, phone)
     print("Ищу подтверждение в соцсетях...")
-    insta, vk, social_verified = find_social_links(username, text, phone)
+    insta, vk, social_verified = find_social_links(name, text, phone)
     print("Ищу подтверждение на маркетплейсах...")
-    avito, drom, autoru, market_verified = find_marketplace_links(username, phone)
+    avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
 
     if not (maps_verified or social_verified or market_verified):
-        print("\nНе подтвердилось ни на одной независимой площадке (карты/соцсети/маркетплейсы).")
-        print("Это не значит, что канал плохой — просто найти его карточку/название")
-        print("нигде отдельно не вышло. Если уверен, что канал настоящий, могу добавить")
-        print("без этой проверки — скажи явно, и уберу условие для этого конкретного случая.")
-        return
+        print(f"  ⚠️ {name}: подтвердилось только в Telegram, добавляю как есть")
 
     row_num = len(ws.get_all_values()) + 1
     add_company(ws, {
-        "name": username,
+        "name": name,
         "description": text or f"Telegram канал @{username}",
         "directions": get_directions(text),
         "tags": get_tags(text),

@@ -259,6 +259,44 @@ def parse_tgstat_channel(username):
     except:
         return None
 
+def fetch_telegram_preview(username):
+    """
+    Резерв на случай, если tgstat.ru не проиндексировал канал (обычно —
+    небольшие каналы, мало подписчиков). Публичная превью-страница
+    t.me/<username> отдаёт og:title/og:description и число подписчиков
+    без JS — этого достаточно, чтобы добавить канал, даже если tgstat
+    его не знает.
+    """
+    try:
+        r = requests.get(f"https://t.me/{username}", timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200:
+            return None
+        html = r.text
+        title_m = re.search(r'<meta property="og:title" content="([^"]*)"', html)
+        desc_m = re.search(r'<meta property="og:description" content="([^"]*)"', html)
+        subs_m = re.search(r'([\d\s]+)\s*subscribers', html)
+        title = title_m.group(1).strip() if title_m else ""
+        desc = desc_m.group(1).strip() if desc_m else ""
+        subs = int(subs_m.group(1).replace(" ", "")) if subs_m else 0
+        if not title and not desc:
+            return None
+        return {"subscribers": subs, "description": desc, "title": clean_channel_title(title)}
+    except Exception:
+        return None
+
+def clean_channel_title(title):
+    """Название телеграм-канала часто обвешано эмодзи и уточнением в
+    скобках ("🇯🇵🚘JAPANCARs-NVRSK(авто под заказ...)") — убираем эмодзи
+    спереди и оставляем текст до открывающей скобки, уточнение и так
+    попадёт в описание отдельным полем."""
+    if not title:
+        return ""
+    t = re.sub(r"^[^\wА-Яа-яЁё]+", "", title).strip()
+    m = re.match(r"^([^(]+)", t)
+    if m:
+        t = m.group(1).strip(" -")
+    return t or title
+
 def search_ddgs(query, num=5):
     try:
         results = []
@@ -377,12 +415,19 @@ def run_agent():
             title_name = clean_name_from_title(title)
             if domain and domain.group(1).lower() in ("t.me", "telegram.me"):
                 # Ссылка на Telegram-канал/бота — домен "T.Me" бесполезен
-                # как имя компании. Достаём хэндл из самой ссылки и берём
-                # имя из заголовка выдачи, а не из домена.
+                # как имя компании. Заголовок из DDG для t.me-ссылок тоже
+                # часто бесполезен: это сырой <title> превью-страницы вида
+                # "Telegram: View @auto_import_cars_ru", а не og:title с
+                # настоящим названием канала (баг, из-за которого в каталог
+                # однажды попала компания с именно таким именем). Поэтому
+                # для t.me НЕ доверяем clean_name_from_title(title) вообще —
+                # идём напрямую на превью-страницу канала за og:title, как
+                # уже делаем в fetch_telegram_preview()/add_specific_channel.py.
                 handle_m = re.search(r"(?:t|telegram)\.me/([A-Za-z0-9_]+)", link, re.IGNORECASE)
                 if handle_m and not tg:
                     tg = handle_m.group(1)
-                name = title_name or tg or domain_name
+                preview = fetch_telegram_preview(tg) if tg else None
+                name = (preview["title"] if preview and preview.get("title") else "") or tg or domain_name
             else:
                 # Предпочитаем название из заголовка поисковой выдачи — это
                 # почти всегда настоящее имя компании. Домен — запасной

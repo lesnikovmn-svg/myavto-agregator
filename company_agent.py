@@ -72,6 +72,12 @@ def fetch_site_text(url):
         pass
     return ""
 
+def mentions_ukraine(text):
+    # Ловит "Украина/Украину/Украины/украинский" и т.п. — любые формы
+    # с корнем "укра". Сайт нацелен на СНГ (Россия, Казахстан, Беларусь...),
+    # компании, которые возят машины в Украину, сюда не нужны.
+    return bool(re.search(r"укра", text, re.IGNORECASE))
+
 def get_directions(text):
     t = text.lower()
     dm = {"Китай":["китай","china","byd","haval","geely","chery","далянь"],"Корея":["корея","korea","kia","hyundai","genesis"],"Япония":["япония","japan","toyota","lexus","honda","nissan","mazda"],"США":["сша","usa","america","tesla","ford","cadillac"],"ОАЭ":["оаэ","uae","dubai","эмираты"],"Европа":["европа","europe","bmw","mercedes","audi","volkswagen"],"Канада":["канада","canada"],"Грузия":["грузия","georgia"],"Армения":["армения","armenia"]}
@@ -175,7 +181,7 @@ def run_agent():
             continue
         text = info["description"]
         has_auto = any(w in text.lower() for w in ["авто","машин","импорт","корея","китай","япония","пригон"])
-        if not has_auto:
+        if not has_auto or mentions_ukraine(text):
             skipped += 1
             continue
         next_id += 1
@@ -200,7 +206,7 @@ def run_agent():
             has_auto = any(w in text.lower() for w in ["авто","импорт","машин","автомобил","пригон","корея","китай","япония"])
             tg = extract_telegram(text)
             phone = extract_phone(text)
-            if not has_auto or (not tg and phone == "-" and not link.startswith("http")):
+            if not has_auto or mentions_ukraine(text) or (not tg and phone == "-" and not link.startswith("http")):
                 skipped += 1
                 continue
             domain = re.search(r"https?://(?:www\.)?([^/]+)", link)
@@ -225,12 +231,18 @@ def run_agent():
                 skipped += 1
                 continue
             # Пробуем найти ИНН на самом сайте компании (обычно в футере
-            # или на странице "Реквизиты"/"О компании"). Если не вышло —
-            # не страшно, компания просто пока без бейджа ЕГРЮЛ.
+            # или на странице "Реквизиты"/"О компании"). Заодно проверяем
+            # полный текст страницы на упоминание Украины — сниппет из
+            # поиска часто этого не показывает (как было с NorthAm Cars:
+            # в meta-описании ни слова про Украину, а на самой странице
+            # это единственное реальное направление доставки).
             inn = ""
             if link.startswith("http"):
                 site_text = fetch_site_text(link)
                 if site_text:
+                    if mentions_ukraine(site_text):
+                        skipped += 1
+                        continue
                     inn = extract_inn(site_text)
             next_id += 1
             add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn}, next_id)

@@ -134,18 +134,45 @@ def _name_key(name):
         return ""
     return re.split(r"[\s.]+", name.lower())[0]
 
+def is_real_profile_url(link_lower):
+    """
+    Отсекаем ссылки, которые технически совпадают по домену, но заведомо
+    НЕ являются карточкой/профилем компании: страница ПОИСКА (а не
+    конкретной организации) или отдельный пост/видео в чужой ленте VK.
+    Найдено 09.08.2026 на реальных примерах в каталоге: yandex-кнопка у
+    нескольких компаний вела на "yandex.ru/maps/search/{имя} {слово}" —
+    это страница результатов поиска, а не карточка организации (по такой
+    ссылке можно попасть куда угодно, включая не ту компанию); VK-кнопка
+    у другой компании вела на "vk.com/wall-.../123" — конкретный пост в
+    чужом паблике, а не профиль компании.
+    """
+    if "maps/search" in link_lower or "/search/" in link_lower or "?text=" in link_lower:
+        return False
+    if "vk.com" in link_lower or "vk.ru" in link_lower:
+        if re.search(r"/(wall|video|photo|topic|board|clip)-?\d", link_lower):
+            return False
+    return True
+
 def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
     """
     Ищем ссылку на конкретной площадке через DDG, привязываясь к домену
-    (чтобы не взять случайную ссылку не по теме). Если передали name_key
-    и/или phone_digits — заодно проверяем, встречается ли название компании
-    или её телефон в заголовке/сниппете найденного результата. Это и есть
-    кросс-проверка "это та же компания, а не однофамилец/совпадение" —
-    возвращаем (ссылка, подтверждено_ли).
+    (чтобы не взять случайную ссылку не по теме). Раньше брали ПЕРВЫЙ
+    результат с нужным доменом даже без подтверждения имени/телефона —
+    из-за этого в каталог попадали ссылки на чужие компании (например,
+    2ГИС-карточка одной фирмы у совершенно другой — просто потому что она
+    была первой в выдаче по такому запросу). Теперь: перебираем все
+    результаты и возвращаем ссылку, ТОЛЬКО если она (а) похожа на настоящую
+    карточку/профиль (см. is_real_profile_url), и (б) реально подтвердилась
+    по имени компании или телефону в заголовке/сниппете. Не нашли ни одного
+    подтверждённого варианта среди результатов — возвращаем пустую строку,
+    а не первую попавшуюся ссылку.
     """
     for r in search_ddgs(query, num=5):
-        link = (r.get("link") or "").lower()
-        if not any(d in link for d in domain_filters):
+        link = r.get("link") or ""
+        link_lower = link.lower()
+        if not any(d in link_lower for d in domain_filters):
+            continue
+        if not is_real_profile_url(link_lower):
             continue
         snippet = ((r.get("title") or "") + " " + (r.get("snippet") or "")).lower()
         verified = False
@@ -153,7 +180,8 @@ def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
             verified = True
         if phone_digits and phone_digits in re.sub(r"\D", "", snippet):
             verified = True
-        return r.get("link"), verified
+        if verified:
+            return link, True
     return "", False
 
 def find_map_links(name, phone=""):

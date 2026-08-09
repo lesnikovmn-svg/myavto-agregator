@@ -16,7 +16,7 @@
 import time
 import gspread
 from google.oauth2.service_account import Credentials
-from company_agent import find_map_links, find_social_links, extract_years_experience, fetch_site_text
+from company_agent import find_map_links, find_social_links, find_marketplace_links, extract_years_experience, fetch_site_text
 
 config = {}
 with open("agent_config.env") as f:
@@ -29,10 +29,11 @@ SHEET_ID = config["SHEET_ID"]
 
 # id,name,rating,reviews,years,delivered,description,directions,tags,
 # telegram,phone,site,manager,region,featured,avatar,color,yandex,inn,
-# google,gis2,instagram,vk
+# google,gis2,instagram,vk,avito,drom,autoru
 NAME_COL = 2
 YEARS_COL = 5
 DESC_COL = 7
+PHONE_COL = 11
 SITE_COL = 12
 YANDEX_COL = 18
 INN_COL = 19
@@ -40,6 +41,9 @@ GOOGLE_COL = 20
 GIS2_COL = 21
 INSTAGRAM_COL = 22
 VK_COL = 23
+AVITO_COL = 24
+DROM_COL = 25
+AUTORU_COL = 26
 
 
 def connect_sheets():
@@ -63,6 +67,7 @@ def run():
     updated_maps = 0
     updated_years = 0
     updated_social = 0
+    updated_market = 0
     for i, row in enumerate(rows[1:], start=2):
         name = cell(row, NAME_COL)
         if not name:
@@ -77,13 +82,17 @@ def run():
         desc = cell(row, DESC_COL)
         insta = cell(row, INSTAGRAM_COL)
         vk = cell(row, VK_COL)
+        phone = cell(row, PHONE_COL)
+        avito = cell(row, AVITO_COL)
+        drom = cell(row, DROM_COL)
+        autoru = cell(row, AUTORU_COL)
 
         print(f"[{i - 1}] {name}")
 
         # 1) Карты — ищем только то, чего ещё нет, старое не трогаем.
         if not (yandex and google and gis2):
             try:
-                y2, g2, gi2 = find_map_links(name)
+                y2, g2, gi2, _ = find_map_links(name, phone)
             except Exception as e:
                 print(f"    ошибка поиска карт: {e}")
                 y2, g2, gi2 = "", "", ""
@@ -106,7 +115,7 @@ def run():
             if site and site.startswith("http"):
                 site_text_for_social = fetch_site_text(site)
             try:
-                i2, v2 = find_social_links(name, (desc or "") + " " + site_text_for_social)
+                i2, v2, _ = find_social_links(name, (desc or "") + " " + site_text_for_social, phone)
             except Exception as e:
                 print(f"    ошибка поиска соцсетей: {e}")
                 i2, v2 = "", ""
@@ -117,6 +126,23 @@ def run():
             if i2 or v2:
                 updated_social += 1
                 print(f"    соцсети: instagram={'✓' if i2 else '-'} vk={'✓' if v2 else '-'}")
+
+        # 1в) Авито/Дром/Авто.ру — тоже только то, чего ещё нет.
+        if not (avito and drom and autoru):
+            try:
+                a2, d2, ar2, _ = find_marketplace_links(name, phone)
+            except Exception as e:
+                print(f"    ошибка поиска маркетплейсов: {e}")
+                a2, d2, ar2 = "", "", ""
+            if not avito and a2:
+                ws.update_cell(i, AVITO_COL, a2)
+            if not drom and d2:
+                ws.update_cell(i, DROM_COL, d2)
+            if not autoru and ar2:
+                ws.update_cell(i, AUTORU_COL, ar2)
+            if a2 or d2 or ar2:
+                updated_market += 1
+                print(f"    маркетплейсы: avito={'✓' if a2 else '-'} drom={'✓' if d2 else '-'} auto.ru={'✓' if ar2 else '-'}")
 
         # 2) Стаж — только если ИНН нет (и значит, год по ЕГРЮЛ не узнать)
         # и в years сейчас похоже на дефолтную заглушку.
@@ -134,7 +160,7 @@ def run():
 
         time.sleep(1)
 
-    print(f"\nГотово. Карты дополнены у {updated_maps} компаний, соцсети — у {updated_social}, стаж — у {updated_years}.")
+    print(f"\nГотово. Карты дополнены у {updated_maps}, соцсети — у {updated_social}, маркетплейсы — у {updated_market}, стаж — у {updated_years}.")
     print("Теперь прогони python3 update_site.py, чтобы пересобрать сайт с новыми данными.")
 
 

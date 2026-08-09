@@ -97,31 +97,54 @@ def extract_years_experience(text):
             return n
     return None
 
-def find_map_profile(query, domain_filters):
-    """Ищем реальную ссылку на карточку компании через DDG, привязываясь
-    к конкретному домену площадки (Яндекс/Google/2ГИС), чтобы не взять
-    случайную ссылку не по теме."""
+def _name_key(name):
+    # Первое "слово" названия (до пробела/точки) — по нему ищем совпадение
+    # в чужих сниппетах. "CarsKorea" ищем как "carskorea", длинное название
+    # с пунктуацией целиком слишком легко не совпадает буквально.
+    if not name:
+        return ""
+    return re.split(r"[\s.]+", name.lower())[0]
+
+def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
+    """
+    Ищем ссылку на конкретной площадке через DDG, привязываясь к домену
+    (чтобы не взять случайную ссылку не по теме). Если передали name_key
+    и/или phone_digits — заодно проверяем, встречается ли название компании
+    или её телефон в заголовке/сниппете найденного результата. Это и есть
+    кросс-проверка "это та же компания, а не однофамилец/совпадение" —
+    возвращаем (ссылка, подтверждено_ли).
+    """
     for r in search_ddgs(query, num=5):
         link = (r.get("link") or "").lower()
-        if any(d in link for d in domain_filters):
-            return r.get("link")
-    return ""
+        if not any(d in link for d in domain_filters):
+            continue
+        snippet = ((r.get("title") or "") + " " + (r.get("snippet") or "")).lower()
+        verified = False
+        if name_key and name_key in snippet:
+            verified = True
+        if phone_digits and phone_digits in re.sub(r"\D", "", snippet):
+            verified = True
+        return r.get("link"), verified
+    return "", False
 
-def find_map_links(name):
+def find_map_links(name, phone=""):
     """
-    Ищем карточку компании на трёх площадках отзывов. Никаких рейтингов
-    отсюда не тянем (Google Maps/2ГИС отдают оценку только через JS, без
-    платного API её надёжно не вытащить) — только ссылка, если карточка
-    реально нашлась. Кнопка на сайте будет вести на неё, а пользователь
-    сам увидит реальный рейтинг на самой площадке.
+    Ищем карточку компании на трёх картографических площадках. Никаких
+    рейтингов отсюда не тянем (Google Maps/2ГИС отдают оценку только через
+    JS, без платного API её надёжно не вытащить) — только ссылка, если
+    карточка реально нашлась. Возвращает (yandex, google, gis2, verified) —
+    verified=True, если хотя бы на одной площадке название/телефон реально
+    совпали (используется как сигнал для проверки перед публикацией).
     """
-    yandex = find_map_profile(f"{name} отзывы", ["yandex.ru/maps", "yandex.com/maps"])
+    key = _name_key(name)
+    pd = re.sub(r"\D", "", phone) if phone and phone != "-" else ""
+    yandex, yv = find_platform_link(f"{name} отзывы", ["yandex.ru/maps", "yandex.com/maps"], key, pd)
     time.sleep(1)
-    google = find_map_profile(f"{name} отзывы", ["google.com/maps", "maps.app.goo.gl", "goo.gl/maps"])
+    google, gv = find_platform_link(f"{name} отзывы", ["google.com/maps", "maps.app.goo.gl", "goo.gl/maps"], key, pd)
     time.sleep(1)
-    gis2 = find_map_profile(f"{name} отзывы 2гис", ["2gis.ru", "2gis.com"])
+    gis2, g2v = find_platform_link(f"{name} отзывы 2гис", ["2gis.ru", "2gis.com"], key, pd)
     time.sleep(1)
-    return yandex, google, gis2
+    return yandex, google, gis2, (yv or gv or g2v)
 
 def extract_social_from_text(text):
     """Ищем прямые ссылки на Instagram/VK в самом тексте страницы (обычно
@@ -137,18 +160,40 @@ def extract_social_from_text(text):
             vk = m.group(0)
     return insta, vk
 
-def find_social_links(name, text=""):
+def find_social_links(name, text="", phone=""):
     """Instagram/VK компании — сначала пробуем достать прямо со страницы
-    (см. extract_social_from_text), а если там нет — ищем через DDG,
-    привязываясь к домену, чтобы не подцепить случайную ссылку не по теме."""
+    (см. extract_social_from_text — прямая ссылка от самой компании уже
+    считается подтверждением), а если там нет — ищем через DDG. Возвращает
+    (insta, vk, verified)."""
     insta, vk = extract_social_from_text(text)
+    verified = bool(insta or vk)
+    key = _name_key(name)
+    pd = re.sub(r"\D", "", phone) if phone and phone != "-" else ""
     if not insta:
-        insta = find_map_profile(f"{name} instagram", ["instagram.com"])
+        insta, iv = find_platform_link(f"{name} instagram", ["instagram.com"], key, pd)
+        verified = verified or iv
         time.sleep(1)
     if not vk:
-        vk = find_map_profile(f"{name} вконтакте", ["vk.com"])
+        vk, vv = find_platform_link(f"{name} вконтакте", ["vk.com"], key, pd)
+        verified = verified or vv
         time.sleep(1)
-    return insta, vk
+    return insta, vk, verified
+
+def find_marketplace_links(name, phone=""):
+    """
+    Ищем объявления/карточку компании на маркетплейсах (Авито, Дром,
+    Авто.ру) — тоже только ссылка, без выдуманных цифр. Возвращает
+    (avito, drom, autoru, verified).
+    """
+    key = _name_key(name)
+    pd = re.sub(r"\D", "", phone) if phone and phone != "-" else ""
+    avito, av = find_platform_link(f"{name} avito", ["avito.ru"], key, pd)
+    time.sleep(1)
+    drom, dv = find_platform_link(f"{name} drom", ["drom.ru"], key, pd)
+    time.sleep(1)
+    autoru, aruv = find_platform_link(f"{name} auto.ru", ["auto.ru"], key, pd)
+    time.sleep(1)
+    return avito, drom, autoru, (av or dv or aruv)
 
 def mentions_ukraine(text):
     # Ловит "Украина/Украину/Украины/украинский" и т.п. — любые формы
@@ -181,6 +226,25 @@ def search_tgstat(query):
     except:
         return []
 
+def _extract_tgstat_title(html):
+    """
+    Настоящее название канала (не @username) — пробуем og:title, потом
+    обычный <title>. tgstat обычно кладёт туда что-то вроде
+    "Название канала - Telegram канал статистика...", берём первый
+    осмысленный сегмент через clean_name_from_title.
+    """
+    m = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+    if m:
+        title = clean_name_from_title(m.group(1))
+        if title:
+            return title
+    m = re.search(r"<title>([^<]+)</title>", html)
+    if m:
+        title = clean_name_from_title(m.group(1))
+        if title:
+            return title
+    return ""
+
 def parse_tgstat_channel(username):
     try:
         r = requests.get("https://tgstat.ru/channel/@" + username, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
@@ -190,7 +254,8 @@ def parse_tgstat_channel(username):
         subs = int(subs_m.group(1).replace(" ","")) if subs_m else 0
         desc_m = re.search(r"peer-description[^>]*>(.*?)</div>", html, re.DOTALL)
         desc = re.sub(r"<[^>]+>","",desc_m.group(1)).strip()[:200] if desc_m else ""
-        return {"subscribers": subs, "description": desc}
+        title = _extract_tgstat_title(html)
+        return {"subscribers": subs, "description": desc, "title": title}
     except:
         return None
 
@@ -218,7 +283,7 @@ def get_existing(ws):
         return set()
 
 def add_company(ws, data, row_num):
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk","")]
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru","")]
     ws.append_row(row)
     subs = data.get("subscribers",0)
     inn_note = " [ИНН найден]" if data.get("inn") else ""
@@ -254,7 +319,7 @@ def run_agent():
             skipped += 1
             continue
         info = parse_tgstat_channel(username)
-        if not info or info["subscribers"] < 500:
+        if not info:
             skipped += 1
             continue
         text = info["description"]
@@ -262,11 +327,28 @@ def run_agent():
         if not has_auto or mentions_ukraine(text):
             skipped += 1
             continue
-        next_id += 1
         years = extract_years_experience(text)
-        yandex, google, gis2 = find_map_links(username)
-        insta, vk = find_social_links(username, text)
-        add_company(ws, {"name":username,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":extract_phone(text),"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk}, next_id)
+        phone = extract_phone(text)
+        # Настоящее название канала (не @username), если tgstat его отдал —
+        # иначе fallback на username, отформатированный чуть приличнее сырого
+        # нижнего регистра с подчёркиваниями.
+        name = info.get("title") or username.replace("_", " ").title()
+        if name.lower() in existing:
+            skipped += 1
+            continue
+        yandex, google, gis2, maps_verified = find_map_links(name, phone)
+        insta, vk, social_verified = find_social_links(name, text, phone)
+        avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
+        # Раньше публиковали только при подтверждении хотя бы на одной
+        # независимой площадке. Теперь добавляем и при единственном
+        # источнике (сам тг-канал) — но название стараемся взять максимально
+        # верное (см. title выше), а не сырой ник, и печатаем в лог, если
+        # подтверждения нигде не нашлось — для ручного контроля.
+        if not (maps_verified or social_verified or market_verified):
+            print(f"    ⚠️ {name}: подтвердилось только в Telegram, добавляю как есть")
+        next_id += 1
+        add_company(ws, {"name":name,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":phone,"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru}, next_id)
+        existing.add(name.lower())
         existing.add(username.lower())
         found += 1
         time.sleep(1)
@@ -334,10 +416,18 @@ def run_agent():
             years = None
             if not inn:
                 years = extract_years_experience(text + " " + site_text)
-            yandex, google, gis2 = find_map_links(name)
-            insta, vk = find_social_links(name, text + " " + site_text)
+            yandex, google, gis2, maps_verified = find_map_links(name, phone)
+            insta, vk, social_verified = find_social_links(name, text + " " + site_text, phone)
+            avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
+            # Добавляем и при подтверждении только из одного источника —
+            # но название уже взято максимально верно (title_name из
+            # заголовка выдачи, а не домен, см. clean_name_from_title выше).
+            # Печатаем в лог, если независимого подтверждения нигде не нашлось
+            # — для ручного контроля, не блокирует публикацию.
+            if not (inn or maps_verified or social_verified or market_verified):
+                print(f"    ⚠️ {name}: подтвердилось только по исходному источнику, добавляю как есть")
             next_id += 1
-            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk}, next_id)
+            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru}, next_id)
             existing.add(name.lower())
             if link: existing.add(link.lower())
             found += 1

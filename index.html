@@ -159,7 +159,7 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--tex
 nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
 .logo { display: flex; align-items: center; gap: 8px; font-family: 'Manrope', sans-serif; font-size: 17px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
 .logo span { color: var(--accent); }
-.logo-mark { height: 28px; width: 28px; object-fit: contain; }
+.logo-mark { height: 56px; width: auto; object-fit: contain; display: block; }
 .nav-links { display: flex; gap: 20px; align-items: center; }
 .nav-links a { font-size: 13px; color: var(--muted); text-decoration: none; }
 .nav-links a:hover { color: var(--text); }
@@ -322,7 +322,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 <body>
 
 <nav>
-  <div class="logo"><img src="/nav-logo-mark.png" alt="My Avto Agregator" class="logo-mark">My<span>Avto</span>Agregator</div>
+  <div class="logo"><img src="/nav-logo-full.png" alt="My Avto Agregator" class="logo-mark"></div>
   <div class="nav-links">
     <a href="#catalog">Каталог</a>
     <a href="/myavto.html">MY Avto</a>

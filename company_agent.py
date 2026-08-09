@@ -140,7 +140,9 @@ def add_company(ws, data, row_num):
     inn_note = " [ИНН найден]" if data.get("inn") else ""
     print("  OK: " + data["name"] + (" (" + str(subs) + " подписчиков)" if subs > 0 else "") + inn_note)
 
-BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","youtube","instagram","facebook","tiktok","yandex","google","wikipedia","zhihu","rutube","tgstat","nicegram","telegramchannels"]
+BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","youtube","instagram","facebook","tiktok","yandex","google","wikipedia","zhihu","rutube","tgstat","nicegram","telegramchannels",
+    # Украинские площадки/сервисы — не имеют отношения к импорту авто в СНГ
+    "auto.ria","ria.com"]
 
 def run_agent():
     print("Запускаю агента v2...")

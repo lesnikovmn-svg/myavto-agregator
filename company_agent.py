@@ -150,6 +150,64 @@ VK_RESERVED_PATHS = {"js","video","videos","wall","photo","photos","clips","away
 INSTAGRAM_RESERVED_PATHS = {"favicon.ico","p","explore","accounts","reel","reels",
     "stories","tv","about","legal","developer","robots.txt"}
 
+# Прямые (без редиректов) ссылки на соцсети/маркетплейсы/мессенджеры —
+# общий словарь для карточек 2ГИС, Яндекс.Карт и собственного сайта
+# компании (везде, где такие ссылки могут встретиться в сыром HTML без
+# площадко-специфичной обёртки вроде link.2gis.ru). Добавлено 09.08.2026.
+DIRECT_CONTACT_PATTERNS = {
+    "vk": r"https?://(?:www\.)?vk\.(?:com|ru)/[A-Za-z0-9_.\-]+",
+    "instagram": r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.\-]+",
+    "avito": r"https?://(?:www\.)?avito\.ru/[A-Za-z0-9_/\-]+",
+    "drom": r"https?://(?:www\.)?[a-z0-9\-]+\.drom\.ru/[A-Za-z0-9_/\-]*",
+    "autoru": r"https?://(?:www\.)?auto\.ru/[A-Za-z0-9_/\-]+",
+    "max": r"https?://(?:www\.)?max\.ru/[A-Za-z0-9_.\-]+",
+    "youtube": r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+",
+    "rutube": r"https?://(?:www\.)?rutube\.ru/(?:channel|u)/[A-Za-z0-9_.\-]+",
+    "whatsapp": r"https?://(?:chat\.whatsapp\.com/[A-Za-z0-9]+|wa\.me/\d+)",
+    "yandex": r"https?://(?:www\.)?yandex\.\w+/maps/org/[A-Za-z0-9_\-]+/\d+",
+    "gis2": r"https?://(?:www\.)?2gis\.\w+/[a-z\-]+/firm/\d+",
+}
+
+# Официальные соцсети/каналы самих площадок-агрегаторов (не компании!) —
+# встречаются в футере/шапке их же карточек и по формату URL неотличимы от
+# настоящего профиля компании. Найдено 09.08.2026 на живой карточке
+# LikeAvto в Яндекс.Картах: внизу страницы — "vk.com/yandex.maps",
+# "t.me/mapsyandex" — это соцсети самого Яндекс.Карт, не LikeAvto.
+KNOWN_PLATFORM_OWN_ACCOUNTS = {
+    "vk.com/yandex.maps", "vk.ru/yandex.maps", "t.me/mapsyandex",
+    "vk.com/2gis", "vk.ru/2gis", "t.me/dvagis",
+}
+
+def _account_handle(url):
+    """"vk.com/likeavto_import" из полного URL — для сверки с
+    KNOWN_PLATFORM_OWN_ACCOUNTS без привязки к схеме/query-строке."""
+    m = re.search(r"https?://(?:www\.)?([^/]+/[^/?#]+)", url or "")
+    return m.group(1).lower().rstrip("/") if m else ""
+
+def extract_direct_contacts(html):
+    """
+    Ищет прямые ссылки на все известные площадки (DIRECT_CONTACT_PATTERNS)
+    в сыром HTML/тексте страницы — общая логика для карточек 2ГИС,
+    Яндекс.Карт и собственного сайта компании. Берёт ПЕРВОЕ совпадение на
+    каждую площадку, которое проходит is_real_profile_url И не является
+    "родным" аккаунтом самой площадки-агрегатора (см.
+    KNOWN_PLATFORM_OWN_ACCOUNTS). Ничего не выдумываем — не нашли, поле
+    остаётся пустым.
+    """
+    result = {k: "" for k in DIRECT_CONTACT_PATTERNS}
+    if not html:
+        return result
+    for kind, pattern in DIRECT_CONTACT_PATTERNS.items():
+        for cand in re.findall(pattern, html):
+            cl = cand.lower()
+            if not is_real_profile_url(cl):
+                continue
+            if _account_handle(cl) in KNOWN_PLATFORM_OWN_ACCOUNTS:
+                continue
+            result[kind] = cand
+            break
+    return result
+
 def is_real_profile_url(link_lower):
     """
     Отсекаем ссылки, которые технически совпадают по домену, но заведомо
@@ -444,30 +502,68 @@ def extract_contacts_from_2gis(html):
         else:
             result[kind] = target
 
-    # Прямые (без обёртки) ссылки на соцсети/маркетплейсы/мессенджеры в HTML
-    direct_patterns = {
-        "vk": r"https?://(?:www\.)?vk\.(?:com|ru)/[A-Za-z0-9_.\-]+",
-        "instagram": r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.\-]+",
-        "avito": r"https?://(?:www\.)?avito\.ru/[A-Za-z0-9_/\-]+",
-        "drom": r"https?://(?:www\.)?[a-z0-9\-]+\.drom\.ru/[A-Za-z0-9_/\-]*",
-        "autoru": r"https?://(?:www\.)?auto\.ru/[A-Za-z0-9_/\-]+",
-        "max": r"https?://(?:www\.)?max\.ru/[A-Za-z0-9_.\-]+",
-        "youtube": r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+",
-        "rutube": r"https?://(?:www\.)?rutube\.ru/(?:channel|u)/[A-Za-z0-9_.\-]+",
-        "whatsapp": r"https?://(?:chat\.whatsapp\.com/[A-Za-z0-9]+|wa\.me/\d+)",
-    }
-    for kind, pattern in direct_patterns.items():
-        if result[kind]:
-            continue
-        for cand in re.findall(pattern, html):
-            if is_real_profile_url(cand.lower()):
-                result[kind] = cand
-                break
+    # Прямые (без обёртки) ссылки на соцсети/маркетплейсы/мессенджеры в HTML —
+    # общая функция extract_direct_contacts (см. выше), делит логику с
+    # extract_contacts_from_yandex.
+    direct = extract_direct_contacts(html)
+    for kind, val in direct.items():
+        if kind in result and val and not result[kind]:
+            result[kind] = val
 
     if not result["telegram"]:
         m = re.search(r"https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)", html, re.IGNORECASE)
         if m:
             result["telegram"] = m.group(1)
+
+    return result
+
+def extract_contacts_from_yandex(html):
+    """
+    Яндекс.Карты отдают карточку организации тоже с серверным рендерингом
+    (проверено вручную 09.08.2026 на живой карточке LikeAvto:
+    yandex.com/maps/org/likeavto/111072758131/ — в разделе "Contacts"
+    прямым текстом лежат сайт likeavto.ru, t.me/likeavto_import,
+    wa.me/79243878787, youtube.com/@likeavto_import, vk.com/likeavto_import
+    — БЕЗ редиректной обёртки, в отличие от 2ГИС). Добавлено по просьбе
+    пользователя: бэкофилл не должен ограничиваться только 2ГИС — если
+    данные есть на Яндекс.Картах, надо брать их оттуда же.
+
+    ВАЖНО: в футере той же страницы (уже за пределами карточки компании)
+    Яндекс.Карты рекламируют СВОИ СОБСТВЕННЫЕ соцсети
+    ("vk.com/yandex.maps", "t.me/mapsyandex") — по формату URL это
+    неотличимо от настоящего профиля компании, но это НЕ компания.
+    Отфильтровано через KNOWN_PLATFORM_OWN_ACCOUNTS в extract_direct_contacts.
+
+    Сайт компании на Яндекс.Картах — обычная прямая ссылка вида
+    `<a href="https://likeavto.ru/">likeavto.ru</a>` (текст ссылки — сам
+    домен), без спецобёртки. Ищем анкор, где видимый текст совпадает с
+    доменом из href — это надёжно отличает "официальный сайт" от любых
+    других ссылок Яндекса на странице (внутренние ссылки на разделы карт
+    так не оформлены).
+
+    Возвращает тот же набор ключей, что и extract_contacts_from_2gis.
+    """
+    result = {"site": "", "telegram": "", "vk": "", "instagram": "",
+               "avito": "", "drom": "", "autoru": "",
+               "max": "", "youtube": "", "rutube": "", "whatsapp": ""}
+    if not html:
+        return result
+
+    m = re.search(
+        r'<a[^>]+href="(https?://(?:www\.)?([a-z0-9][a-z0-9\-]*\.[a-z]{2,})[^"]*)"[^>]*>\s*(?:<[^>]+>\s*)*\2',
+        html, re.IGNORECASE)
+    if m and "yandex." not in m.group(2).lower():
+        result["site"] = m.group(1)
+
+    if not result["telegram"]:
+        tm = re.search(r"https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)", html, re.IGNORECASE)
+        if tm and _account_handle(tm.group(0)) not in KNOWN_PLATFORM_OWN_ACCOUNTS:
+            result["telegram"] = tm.group(1)
+
+    direct = extract_direct_contacts(html)
+    for kind, val in direct.items():
+        if kind in result and val and not result[kind]:
+            result[kind] = val
 
     return result
 
@@ -492,6 +588,73 @@ def backfill_from_2gis(gis2_url, current):
         if val and not filled.get(key):
             filled[key] = val
             print(f"    из карточки 2ГИС нашлось {key}: {val}")
+    return filled
+
+def backfill_from_sources(sources, current, content_check=None):
+    """
+    Обобщение backfill_from_2gis: дозаполняет пустые поля из НЕСКОЛЬКИХ
+    подтверждённых источников подряд, а не только 2ГИС — по просьбе
+    пользователя ("заполнять можно не только тугиз, а из известных
+    источников карточки, если есть на яндексе данные то добираем оттуда,
+    есть сайт — берём оттуда"). Идём по source'ам В ПОРЯДКЕ ПРИОРИТЕТА,
+    пока не заполнены все поля; каждый следующий источник добавляет только
+    то, что предыдущие не нашли — никогда не перезаписывает уже найденное.
+
+    sources — список кортежей (kind, url), kind один из "site"/"2gis"/
+    "yandex". Для "site" используется own-site-текст (компания не может
+    указать сама себя как "сайт", это поле просто не заполняется этим
+    источником, но заполняет все остальные — telegram/vk/instagram/
+    max/youtube/rutube/whatsapp/маркетплейсы). url для "site" должен быть
+    самим сайтом компании — используем ту же fetch_site_text.
+
+    content_check — необязательная пара (name_key, phone_digits): если
+    передана, каждый источник сначала проверяется на то, что страница
+    реально про эту компанию (название/телефон встречаются в её тексте) —
+    та же осторожность, что и в find_platform_link/content-верификации.
+    Не прошло проверку — источник пропускается целиком, ничего из него не
+    берём (может быть "чужая" карточка, которая случайно осталась в
+    таблице от старой, менее строгой проверки).
+
+    current — dict с текущими значениями. Возвращает новый dict.
+    """
+    filled = dict(current)
+    for kind, url in sources:
+        if not url or not url.startswith("http"):
+            continue
+        html = fetch_site_text(url)
+        if not html:
+            continue
+        if content_check:
+            name_key, phone_digits = content_check
+            text_lower = html.lower()
+            digits = "".join(ch for ch in text_lower if ch.isdigit())
+            name_match = bool(name_key and name_key in text_lower)
+            phone_match = bool(phone_digits and phone_digits in digits)
+            if not (name_match or phone_match):
+                print(f"    ⚠️ карточка {kind} не подтверждает название/телефон — пропускаю")
+                continue
+        if kind == "2gis":
+            found = extract_contacts_from_2gis(html)
+        elif kind == "yandex":
+            found = extract_contacts_from_yandex(html)
+        elif kind == "site":
+            insta, vk = extract_social_from_text(html)
+            extra = extract_extra_contacts_from_text(html)
+            direct = extract_direct_contacts(html)
+            found = {"telegram": "", "vk": vk, "instagram": insta,
+                      "avito": direct.get("avito", ""), "drom": direct.get("drom", ""),
+                      "autoru": direct.get("autoru", ""),
+                      "max": extra.get("max", ""), "youtube": extra.get("youtube", ""),
+                      "rutube": extra.get("rutube", ""), "whatsapp": extra.get("whatsapp", "")}
+            tm = re.search(r"https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)", html, re.IGNORECASE)
+            if tm:
+                found["telegram"] = tm.group(1)
+        else:
+            continue
+        for key, val in found.items():
+            if val and not filled.get(key):
+                filled[key] = val
+                print(f"    из карточки {kind} нашлось {key}: {val}")
     return filled
 
 def mentions_ukraine(text):
@@ -721,14 +884,17 @@ def run_agent():
         avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
         extra = extract_extra_contacts_from_text(text)
         maxm, youtube, rutube, whatsapp = extra["max"], extra["youtube"], extra["rutube"], extra["whatsapp"]
-        # Карточка 2ГИС (если нашлась и подтвердилась) сама по себе часто
-        # содержит сайт/соцсети/мессенджеры компании — дозаполняем то, что
-        # выше не нашли другими способами (см. extract_contacts_from_2gis).
+        # Карточки на площадках (если нашлись и подтвердились) сами по себе
+        # часто содержат сайт/соцсети/мессенджеры компании — дозаполняем то,
+        # что выше не нашли другими способами. Не только 2ГИС — по просьбе
+        # пользователя пробуем и Яндекс.Карты (см. backfill_from_sources).
         site = ""
-        if gis2 and maps_verified:
-            filled = backfill_from_2gis(gis2, {"site": site, "telegram": username, "vk": vk,
-                "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
-                "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
+        if maps_verified and (gis2 or yandex):
+            filled = backfill_from_sources(
+                [("2gis", gis2), ("yandex", yandex)],
+                {"site": site, "telegram": username, "vk": vk,
+                 "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
+                 "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
             site = filled["site"]
             vk = vk or filled["vk"]
             insta = insta or filled["instagram"]
@@ -849,15 +1015,28 @@ def run_agent():
             extra = extract_extra_contacts_from_text(text + " " + site_text)
             maxm, youtube, rutube, whatsapp = extra["max"], extra["youtube"], extra["rutube"], extra["whatsapp"]
             site = link if link.startswith("http") else ""
-            # Карточка 2ГИС (если нашлась и подтвердилась) сама по себе часто
-            # содержит сайт/соцсети/мессенджеры компании — дозаполняем то, что
-            # выше не нашли другими способами (см. extract_contacts_from_2gis;
-            # добавлено 09.08.2026 по просьбе пользователя, который сам нашёл
-            # сайт LikeAvto именно через карточку 2ГИС).
-            if gis2 and maps_verified:
-                filled = backfill_from_2gis(gis2, {"site": site, "telegram": tg, "vk": vk,
-                    "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
-                    "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
+            # Собственный сайт компании (уже загружен как site_text выше) —
+            # тоже источник для маркетплейсов, если ссылки на них есть в
+            # футере сайта (переиспользуем уже загруженный текст, не грузим
+            # сайт повторно).
+            if site_text:
+                site_direct = extract_direct_contacts(site_text)
+                avito = avito or site_direct.get("avito", "")
+                drom = drom or site_direct.get("drom", "")
+                autoru = autoru or site_direct.get("autoru", "")
+            # Карточки на площадках (2ГИС, Яндекс.Карты — если нашлись и
+            # подтвердились) сами по себе часто содержат сайт/соцсети/
+            # мессенджеры компании — дозаполняем то, что выше не нашли
+            # другими способами. Не только 2ГИС — по просьбе пользователя
+            # пробуем и Яндекс.Карты (добавлено 09.08.2026, после того как
+            # пользователь нашёл сайт LikeAvto именно через карточку 2ГИС и
+            # попросил не ограничиваться одной площадкой).
+            if maps_verified and (gis2 or yandex):
+                filled = backfill_from_sources(
+                    [("2gis", gis2), ("yandex", yandex)],
+                    {"site": site, "telegram": tg, "vk": vk,
+                     "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
+                     "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
                 site = site or filled["site"]
                 tg = tg or filled["telegram"]
                 vk = vk or filled["vk"]

@@ -325,7 +325,15 @@ def get_existing(ws):
 
 def add_company(ws, data, row_num):
     row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru","")]
-    ws.append_row(row)
+    # ВАЖНО: без table_range='A1' append_row без явного якоря может "уехать"
+    # вправо — Sheets API ищет "таблицу" по всему листу и в редких случаях
+    # (09.08.2026, найдено при разборе бага с 52 vs 82 строк) начинает
+    # дописывать новые строки не с колонки A, а сразу за самой правой уже
+    # занятой ячейкой на листе, со сдвигом, который растёт с каждым новым
+    # вызовом (20 -> 44 -> 67 -> 89 -> 112 колонок вправо на реальном
+    # прогоне). table_range='A1' явно фиксирует, что "таблица" начинается
+    # с колонки A, и это гарантированно лечит сдвиг.
+    ws.append_row(row, table_range='A1')
     subs = data.get("subscribers",0)
     inn_note = " [ИНН найден]" if data.get("inn") else ""
     print("  OK: " + data["name"] + (" (" + str(subs) + " подписчиков)" if subs > 0 else "") + inn_note)

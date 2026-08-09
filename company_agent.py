@@ -73,6 +73,35 @@ def fetch_site_text(url):
         pass
     return ""
 
+def extract_brand_from_site(html):
+    """
+    Настоящее название бренда со страницы сайта — надёжнее, чем сырой
+    <title> из поисковой выдачи (тот часто оказывается рекламным
+    заголовком/SEO-текстом, а не именем компании: "Купить новое авто с
+    доставкой" вместо "GazTormoz", "Японский аукцион автомобилей Toyota из
+    Японии" вместо "ПримАвто"). Сайты обычно кладут настоящий бренд в
+    og:site_name или apple-mobile-web-app-title — проверено вручную
+    09.08.2026 на gaztormoz.ru (og:site_name: "GazTormoz") и tokidoki.su
+    (apple-mobile-web-app-title: "ТокиДоки"). Если ни того ни другого нет —
+    возвращаем "", вызывающий код падает обратно на clean_name_from_title.
+    """
+    if not html:
+        return ""
+    m = re.search(r'<meta property="og:site_name" content="([^"]+)"', html)
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    m = re.search(r'<meta name="apple-mobile-web-app-title" content="([^"]+)"', html)
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    return ""
+
+def domain_of(url):
+    """Домен без www/схемы/пути — для сравнения "это тот же сайт?" вместо
+    точного совпадения полного URL (иначе japantransit.ru и
+    japantransit.ru/japan/auctions считаются разными компаниями)."""
+    m = re.search(r"https?://(?:www\.)?([^/]+)", url or "")
+    return m.group(1).lower() if m else ""
+
 def extract_years_experience(text):
     """
     Если у компании нет ИНН (или его проверка не даёт года регистрации),
@@ -319,6 +348,15 @@ def get_existing(ws):
             if len(row) > 1 and row[1]: ex.add(row[1].lower().strip())
             if len(row) > 9 and row[9]: ex.add(row[9].lower().strip())
             if len(row) > 11 and row[11]: ex.add(row[11].lower().strip())
+            # Домен сайта отдельно от полного URL — иначе одна и та же
+            # компания под разными страницами (japantransit.ru vs
+            # japantransit.ru/japan/auctions) считается двумя разными
+            # компаниями (баг 09.08.2026: одна фирма добавилась дважды из
+            # разных подстраниц одного сайта в разных поисковых запросах).
+            if len(row) > 11 and row[11]:
+                d = domain_of(row[11])
+                if d:
+                    ex.add(d)
         return ex
     except:
         return set()
@@ -451,6 +489,16 @@ def run_agent():
                 continue
             domain = re.search(r"https?://(?:www\.)?([^/]+)", link)
             domain_name = domain.group(1).replace(".ru","").replace(".com","").title() if domain else ""
+            dom = domain_of(link)
+            # Дедуп по домену, а не только по имени/точной ссылке — без
+            # этого одна и та же компания под разными подстраницами сайта
+            # (japantransit.ru vs japantransit.ru/japan/auctions) в разных
+            # поисковых запросах добавлялась дважды под двумя разными
+            # (оба неверными) названиями. Проверяем ДО похода на сайт, чтобы
+            # не тратить запрос впустую.
+            if dom and dom in existing:
+                skipped += 1
+                continue
             title_name = clean_name_from_title(title)
             if domain and domain.group(1).lower() in ("t.me", "telegram.me"):
                 # Ссылка на Telegram-канал/бота — домен "T.Me" бесполезен
@@ -467,31 +515,31 @@ def run_agent():
                     tg = handle_m.group(1)
                 preview = fetch_telegram_preview(tg) if tg else None
                 name = (preview["title"] if preview and preview.get("title") else "") or tg or domain_name
+                site_text = ""
             else:
-                # Предпочитаем название из заголовка поисковой выдачи — это
-                # почти всегда настоящее имя компании. Домен — запасной
-                # вариант на случай, если заголовок пустой/бесполезный.
-                name = title_name or domain_name or title[:30]
-                if not title_name:
+                # Идём на сайт ДО выбора имени (а не только потом за ИНН) —
+                # у сайта обычно есть og:site_name/apple-mobile-web-app-title
+                # с настоящим брендом, который надёжнее сырого SEO-заголовка
+                # из выдачи ("Купить новое авто с доставкой" вместо
+                # "GazTormoz", проверено вручную 09.08.2026 на gaztormoz.ru
+                # и tokidoki.su). Приоритет: бренд с сайта > заголовок выдачи
+                # > домен как последний fallback.
+                site_text = fetch_site_text(link) if link.startswith("http") else ""
+                if site_text and mentions_ukraine(site_text):
+                    skipped += 1
+                    continue
+                brand_name = extract_brand_from_site(site_text)
+                name = brand_name or title_name or domain_name or title[:30]
+                if brand_name and brand_name != title_name:
+                    print(f"    имя со страницы сайта (og:site_name): '{brand_name}' (в выдаче было: '{title[:50]}')")
+                elif not title_name and not brand_name:
                     print(f"    ⚠️ имя взято из домена ({name}) — стоит проверить вручную")
             if name.lower() in existing or (link and link.lower() in existing):
                 skipped += 1
                 continue
-            # Пробуем найти ИНН на самом сайте компании (обычно в футере
-            # или на странице "Реквизиты"/"О компании"). Заодно проверяем
-            # полный текст страницы на упоминание Украины — сниппет из
-            # поиска часто этого не показывает (как было с NorthAm Cars:
-            # в meta-описании ни слова про Украину, а на самой странице
-            # это единственное реальное направление доставки).
-            inn = ""
-            site_text = ""
-            if link.startswith("http"):
-                site_text = fetch_site_text(link)
-                if site_text:
-                    if mentions_ukraine(site_text):
-                        skipped += 1
-                        continue
-                    inn = extract_inn(site_text)
+            # ИНН — из уже загруженного текста сайта (см. выше), запрос
+            # повторно не делаем.
+            inn = extract_inn(site_text) if site_text else ""
             # Если ИНН найти не удалось (а значит, и год регистрации по
             # ЕГРЮЛ мы позже не узнаем) — пробуем достать стаж работы прямо
             # из текста: описания, сниппета, самого сайта ("с 2015 года",
@@ -514,6 +562,7 @@ def run_agent():
             add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru}, next_id)
             existing.add(name.lower())
             if link: existing.add(link.lower())
+            if dom: existing.add(dom)
             found += 1
             time.sleep(0.5)
         time.sleep(3)

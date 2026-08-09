@@ -153,19 +153,45 @@ def is_real_profile_url(link_lower):
             return False
     return True
 
+def fetch_page_signal_text(url):
+    """
+    Для финальной проверки нужен текст СТРАНИЦЫ НАЗНАЧЕНИЯ, а не сниппет из
+    поисковой выдачи. Берём и og:title/og:description (обычно рендерятся
+    на сервере и присутствуют, даже если сама страница тяжёлая на JS вроде
+    2ГИС/VK), и весь остальной HTML на всякий случай.
+    """
+    html = fetch_site_text(url)
+    if not html:
+        return ""
+    parts = [html]
+    for m in re.finditer(r'<meta property="og:(?:title|description)" content="([^"]*)"', html):
+        parts.append(m.group(1))
+    return " ".join(parts).lower()
+
 def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
     """
     Ищем ссылку на конкретной площадке через DDG, привязываясь к домену
-    (чтобы не взять случайную ссылку не по теме). Раньше брали ПЕРВЫЙ
-    результат с нужным доменом даже без подтверждения имени/телефона —
-    из-за этого в каталог попадали ссылки на чужие компании (например,
-    2ГИС-карточка одной фирмы у совершенно другой — просто потому что она
-    была первой в выдаче по такому запросу). Теперь: перебираем все
-    результаты и возвращаем ссылку, ТОЛЬКО если она (а) похожа на настоящую
-    карточку/профиль (см. is_real_profile_url), и (б) реально подтвердилась
-    по имени компании или телефону в заголовке/сниппете. Не нашли ни одного
-    подтверждённого варианта среди результатов — возвращаем пустую строку,
-    а не первую попавшуюся ссылку.
+    (чтобы не взять случайную ссылку не по теме).
+
+    История багов, которые это лечит (все найдены 09.08.2026 на реальных
+    компаниях в каталоге):
+    1. Раньше брали ПЕРВЫЙ результат с нужным доменом даже без
+       подтверждения — чинили сверкой по сниппету поисковой выдачи.
+    2. Но и сверка по сниппету ненадёжна сама по себе: сниппет DDG может
+       обрезать текст или быть неточным, и формально "совпасть" по общему
+       слову (например, часть названия), при этом сама ссылка на самом
+       деле ведёт на СОВСЕМ ДРУГУЮ компанию — так были пойманы неверные
+       2ГИС/VK-ссылки у Winner Auto Club, Artalex Group, Primorye China
+       Export (2ГИС Артalex, например, реально вёл на другую фирму в том
+       же доме в Москве — координаты в URL те же, компания другая).
+
+    Поэтому проверка теперь в два шага: (а) сниппет — дешёвый
+    предварительный фильтр, отсекает совсем не по теме результаты, (б)
+    если сниппет прошёл — ОБЯЗАТЕЛЬНО фетчим саму ссылку и проверяем
+    название/телефон уже в реальном содержимом страницы назначения
+    (fetch_page_signal_text). Не удалось загрузить страницу или там нет
+    совпадения — результат не считается подтверждённым, пробуем следующий.
+    Возвращаем ссылку, только если ОБА шага прошли.
     """
     for r in search_ddgs(query, num=5):
         link = r.get("link") or ""
@@ -175,12 +201,20 @@ def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
         if not is_real_profile_url(link_lower):
             continue
         snippet = ((r.get("title") or "") + " " + (r.get("snippet") or "")).lower()
-        verified = False
-        if name_key and name_key in snippet:
-            verified = True
-        if phone_digits and phone_digits in re.sub(r"\D", "", snippet):
-            verified = True
-        if verified:
+        snippet_match = bool(
+            (name_key and name_key in snippet) or
+            (phone_digits and phone_digits in re.sub(r"\D", "", snippet))
+        )
+        if not snippet_match:
+            continue
+        page_text = fetch_page_signal_text(link)
+        if not page_text:
+            continue
+        page_match = bool(
+            (name_key and name_key in page_text) or
+            (phone_digits and phone_digits in re.sub(r"\D", "", page_text))
+        )
+        if page_match:
             return link, True
     return "", False
 

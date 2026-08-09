@@ -172,13 +172,29 @@ def _name_key(name):
 # профиль компании).
 VK_RESERVED_PATHS = {"js","video","videos","wall","photo","photos","clips","away",
     "login","join","search","catalog","market","games","apps","about","help",
-    "dev","faq","id","feed","audio","music","topic","board"}
+    "dev","faq","id","feed","audio","music","topic","board",
+    # "rtrg" — найдено 09.08.2026: это ссылка на РЕТАРГЕТИНГ-ПИКСЕЛЬ ВК
+    # (vk.com/rtrg?...), техническая метка для рекламы, которую компании
+    # вставляют себе на сайт как обычный <script>/<img> — не чей-то
+    # профиль. Извлекалась напрямую с сайтов компаний (extract_social_
+    # from_text доверяет прямым ссылкам с сайта без доп. проверки) и по
+    # ошибке "подтвердилась" сразу для 3 РАЗНЫХ компаний (OTRADACARS,
+    # Jplife, ТокиДоки) — тот же класс бага, что и "vk.com/js" раньше.
+    "rtrg", "widget_comments", "share", "widget"}
 
 # Instagram: системные файлы/служебные разделы, не профиль компании.
 # Найдено 09.08.2026: "instagram.com/favicon.ico" (иконка сайта!)
 # "подтвердилась" как аккаунт компании.
 INSTAGRAM_RESERVED_PATHS = {"favicon.ico","p","explore","accounts","reel","reels",
     "stories","tv","about","legal","developer","robots.txt"}
+
+# MAX: тот же класс бага — виджет "Поделиться в MAX"/кнопка подписки на
+# сайте компании ведёт по общему техническому пути, а не на профиль
+# компании. Найдено 09.08.2026: "max.ru/u" встретился СРАЗУ У СЕМИ разных
+# компаний (DSS Group, Восток Транс Импорт, OTRADACARS, Autoimport.Group,
+# CarsKorea, Es-Transit, Altais-Cars) — явно общий виджет-редирект, не
+# профиль; "max.ru/join" тоже общее действие, не профиль.
+MAX_RESERVED_PATHS = {"u", "join", "login", "share", "widget", "app", "id"}
 
 # Прямые (без редиректов) ссылки на соцсети/маркетплейсы/мессенджеры —
 # общий словарь для карточек 2ГИС, Яндекс.Карт и собственного сайта
@@ -258,6 +274,14 @@ def is_real_profile_url(link_lower):
     if "vk.com" in link_lower or "vk.ru" in link_lower:
         if re.search(r"/(wall|video|photo|topic|board|clip)s?-?\d", link_lower):
             return False
+        # Технические скрипты/пиксели VK (retargeting, openapi, share-виджеты
+        # и т.п.) почти всегда отдаются как *.php — реальные профили/группы
+        # никогда не заканчиваются на .php. Найдено 09.08.2026: "vk.com/
+        # video_ext.php" (виджет встроенного видео) "подтвердился" как
+        # профиль Worldcar — .php в пути был явным признаком, что это не
+        # профиль, но старая проверка его не ловила.
+        if ".php" in link_lower:
+            return False
         m = re.search(r"vk\.(?:com|ru)/([a-z0-9_.\-]+)", link_lower)
         if m:
             first_seg = m.group(1).split("?")[0].rstrip("/")
@@ -265,10 +289,18 @@ def is_real_profile_url(link_lower):
             if base in VK_RESERVED_PATHS:
                 return False
     if "instagram.com" in link_lower:
+        if ".php" in link_lower:
+            return False
         m = re.search(r"instagram\.com/([a-z0-9_.\-]+)", link_lower)
         if m:
             seg = m.group(1).split("?")[0].rstrip("/")
             if seg in INSTAGRAM_RESERVED_PATHS:
+                return False
+    if "max.ru" in link_lower:
+        m = re.search(r"max\.ru/([a-z0-9_.\-]+)", link_lower)
+        if m:
+            seg = m.group(1).split("?")[0].rstrip("/")
+            if seg in MAX_RESERVED_PATHS:
                 return False
     return True
 

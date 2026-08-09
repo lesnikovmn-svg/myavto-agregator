@@ -333,10 +333,21 @@ footer{padding:48px 40px;border-top:1px solid rgba(201,168,76,0.1);display:flex;
       </div>
     </div>
   </div>
-  <div class="reviews-grid">
-    <div class="review-card"><div class="review-stars">★★★★★</div><p class="review-text">Привезли BMW X5 из Кореи. Всё чётко по договору, никаких сюрпризов. Максим на связи всегда. Рекомендую.</p><div class="review-author">Александр К.</div><div class="review-car">BMW X5 · Корея</div></div>
-    <div class="review-card"><div class="review-stars">★★★★★</div><p class="review-text">Заказывал Hyundai Palisade. Уложились в срок, растаможка без проблем. Второй раз буду обращаться.</p><div class="review-author">Дмитрий В.</div><div class="review-car">Hyundai Palisade · Корея</div></div>
-    <div class="review-card"><div class="review-stars">★★★★★</div><p class="review-text">Chery Tiggo 8 из Китая через My Avto Optimal. Сэкономил больше 600 тысяч по сравнению с дилером.</p><div class="review-author">Сергей М.</div><div class="review-car">Chery Tiggo 8 · Китай</div></div>
+  <!--
+    Текстовых отзывов пока нет — раньше здесь были три примера-заглушки
+    с вымышленными именами (Александр К., Дмитрий В., Сергей М.), их убрали:
+    сайт строится на честных данных, выдумывать отзывы для собственной
+    компании — то же самое, что мы правили у компаний в каталоге.
+    Когда пойдут реальные отзывы с Яндекса/2ГИС/Google — добавляй карточки
+    сюда по образцу .review-card (см. CSS выше), с иконкой площадки-источника.
+  -->
+  <div class="reviews-empty" style="background:var(--gray2);padding:48px 32px;text-align:center;">
+    <p style="font-size:14px;color:var(--muted);margin-bottom:20px;max-width:480px;margin-left:auto;margin-right:auto;">
+      Реальных отзывов пока немного — соберём их с площадок, где клиенты уже оставляют оценки. Если работали с нами, будем благодарны за отзыв:
+    </p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="https://yandex.ru/profile/-/CTvFvXPa" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:4px;background:var(--gold);color:var(--black);text-decoration:none;font-size:13px;font-weight:600;">★ Оставить отзыв на Яндексе</a>
+    </div>
   </div>
 </section>
 

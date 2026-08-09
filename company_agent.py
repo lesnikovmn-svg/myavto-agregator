@@ -134,23 +134,54 @@ def _name_key(name):
         return ""
     return re.split(r"[\s.]+", name.lower())[0]
 
+# VK: служебные разделы сайта (не группы/профили конкретной компании).
+# Найдено 09.08.2026: "vk.com/js" (заглушка "включите JavaScript",
+# отдаётся VK ботам без нормальных заголовков — по ошибке "подтвердилась"
+# сразу для 4 РАЗНЫХ компаний, т.к. это общая страница, а не чья-то
+# карточка), "vk.com/video"/"vk.com/clips" (общий раздел видео сайта, а не
+# профиль компании).
+VK_RESERVED_PATHS = {"js","video","videos","wall","photo","photos","clips","away",
+    "login","join","search","catalog","market","games","apps","about","help",
+    "dev","faq","id","feed","audio","music","topic","board"}
+
+# Instagram: системные файлы/служебные разделы, не профиль компании.
+# Найдено 09.08.2026: "instagram.com/favicon.ico" (иконка сайта!)
+# "подтвердилась" как аккаунт компании.
+INSTAGRAM_RESERVED_PATHS = {"favicon.ico","p","explore","accounts","reel","reels",
+    "stories","tv","about","legal","developer","robots.txt"}
+
 def is_real_profile_url(link_lower):
     """
     Отсекаем ссылки, которые технически совпадают по домену, но заведомо
     НЕ являются карточкой/профилем компании: страница ПОИСКА (а не
-    конкретной организации) или отдельный пост/видео в чужой ленте VK.
-    Найдено 09.08.2026 на реальных примерах в каталоге: yandex-кнопка у
-    нескольких компаний вела на "yandex.ru/maps/search/{имя} {слово}" —
-    это страница результатов поиска, а не карточка организации (по такой
-    ссылке можно попасть куда угодно, включая не ту компанию); VK-кнопка
-    у другой компании вела на "vk.com/wall-.../123" — конкретный пост в
-    чужом паблике, а не профиль компании.
+    конкретной организации), отдельный пост/видео в чужой ленте VK, или
+    служебный/общий раздел сайта (вроде "vk.com/js" — заглушка про
+    JavaScript, не чей-то профиль; "instagram.com/favicon.ico" — иконка
+    сайта). Найдено 09.08.2026 на реальных примерах в каталоге:
+    yandex-кнопка у нескольких компаний вела на
+    "yandex.ru/maps/search/{имя} {слово}" — это страница результатов
+    поиска; VK-кнопка у другой компании вела на "vk.com/wall-.../123" —
+    конкретный пост в чужом паблике; ещё у нескольких — на "vk.com/js"
+    (общая заглушка) или "vk.com/video" (общий раздел, без ID) — ни то ни
+    другое не относится к конкретной компании.
     """
     if "maps/search" in link_lower or "/search/" in link_lower or "?text=" in link_lower:
         return False
     if "vk.com" in link_lower or "vk.ru" in link_lower:
-        if re.search(r"/(wall|video|photo|topic|board|clip)-?\d", link_lower):
+        if re.search(r"/(wall|video|photo|topic|board|clip)s?-?\d", link_lower):
             return False
+        m = re.search(r"vk\.(?:com|ru)/([a-z0-9_.\-]+)", link_lower)
+        if m:
+            first_seg = m.group(1).split("?")[0].rstrip("/")
+            base = first_seg.split("-")[0]
+            if base in VK_RESERVED_PATHS:
+                return False
+    if "instagram.com" in link_lower:
+        m = re.search(r"instagram\.com/([a-z0-9_.\-]+)", link_lower)
+        if m:
+            seg = m.group(1).split("?")[0].rstrip("/")
+            if seg in INSTAGRAM_RESERVED_PATHS:
+                return False
     return True
 
 def fetch_page_signal_text(url):

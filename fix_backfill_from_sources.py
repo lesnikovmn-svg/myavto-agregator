@@ -41,7 +41,7 @@ creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
 client = gspread.authorize(creds)
 ws = client.open_by_key(SHEET_ID).sheet1
 
-NAME_COL, TELEGRAM_COL, PHONE_COL, SITE_COL = 2, 10, 11, 12
+ID_COL, NAME_COL, TELEGRAM_COL, PHONE_COL, SITE_COL = 1, 2, 10, 11, 12
 YANDEX_COL, GOOGLE_COL, GIS2_COL = 18, 20, 21
 INSTAGRAM_COL, VK_COL = 22, 23
 AVITO_COL, DROM_COL, AUTORU_COL = 24, 25, 26
@@ -72,8 +72,16 @@ filled_total = 0
 checked = 0
 
 for i, row in enumerate(rows, start=2):
+    cid = cell(row, ID_COL)
     name = cell(row, NAME_COL)
     if not name:
+        continue
+    if cid == "1" or name.strip().lower() == "my avto":
+        # MY Avto — единственная компания с данными, подтверждёнными лично
+        # владельцем (см. PROJECT_STATE.md), не трогаем автоматически.
+        # Баг найден 09.08.2026: именно эту строку однажды заразило
+        # мусором из-за слишком общего ключа сверки ("my" совпадало почти
+        # с любой чужой страницей) — см. _name_key в company_agent.py.
         continue
 
     current = {f: cell(row, c) for f, c in ALL_FILL_FIELDS.items()}

@@ -126,13 +126,43 @@ def extract_years_experience(text):
             return n
     return None
 
+# Первые слова названий, которые слишком короткие или слишком общеупотребимы,
+# чтобы одни, без остального названия, надёжно отличать "это точно ТА
+# компания" от случайного совпадения на чужой странице. Баг найден
+# 09.08.2026: "MY Avto" (id:1, компания САМОГО АВТОРА!) давала ключ "my" —
+# обычное английское слово, встречается практически на любой странице с
+# английским текстом; "Winner Auto Club" давала "winner" — тоже частое
+# слово (казино/ставки/реклама и т.п.). Из-за этого find_platform_link при
+# автопоиске недостающей карточки 2ГИС в fix_backfill_from_sources.py
+# "подтвердил" СЛУЧАЙНУЮ карточку другой компании (2gis.ru/vladivostok/
+# firm/70000001110946107 — не MY Avto), а раз карточка была принята,
+# backfill_from_sources каскадно растащил из неё же ВСЕ остальные пустые
+# поля (vk/instagram/telegram/avito/drom/autoru/max/youtube/rutube/
+# whatsapp) — один неверный "якорь" заразил сразу много полей.
+_GENERIC_NAME_WORDS = {"my","the","a","auto","avto","car","cars","trade","import",
+    "impex","group","club","center","centre","express","asia","east","west",
+    "north","south","global","inter","trans","world","winner","premium","elite",
+    "prime","star","best","top","new","first","royal","classic","standard"}
+
 def _name_key(name):
-    # Первое "слово" названия (до пробела/точки) — по нему ищем совпадение
-    # в чужих сниппетах. "CarsKorea" ищем как "carskorea", длинное название
-    # с пунктуацией целиком слишком легко не совпадает буквально.
+    """
+    Ключ для сверки "это точно та компания?" в чужом тексте (сниппет DDG
+    или содержимое страницы назначения). Обычно — первое слово названия
+    ("CarsKorea" -> "carskorea"). Но если первое слово короче 4 символов
+    ИЛИ входит в список общеупотребимых слов (_GENERIC_NAME_WORDS) — оно
+    само по себе слишком ненадёжно (см. баг выше), берём первые ДВА слова
+    вместе через пробел — такое сочетание уже гораздо специфичнее и
+    случайно на чужой странице не совпадёт.
+    """
     if not name:
         return ""
-    return re.split(r"[\s.]+", name.lower())[0]
+    words = [w for w in re.split(r"[\s.]+", name.lower()) if w]
+    if not words:
+        return ""
+    first = words[0]
+    if (len(first) < 4 or first in _GENERIC_NAME_WORDS) and len(words) > 1:
+        return first + " " + words[1]
+    return first
 
 # VK: служебные разделы сайта (не группы/профили конкретной компании).
 # Найдено 09.08.2026: "vk.com/js" (заглушка "включите JavaScript",

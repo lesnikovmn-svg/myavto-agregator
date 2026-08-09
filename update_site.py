@@ -1,5 +1,6 @@
 import json, re, subprocess
 
+import datetime
 import os
 import gspread
 from google.oauth2.service_account import Credentials
@@ -79,7 +80,21 @@ for c in companies:
     desc = c['description'].replace('"', '\\"')
     cid = str(int(float(c['id']))) if c['id'] else '0'
     crev = str(int(float(c['reviews']))) if c['reviews'] else '0'
-    cyrs = str(int(float(c['years']))) if c['years'] else '1'
+    # "Лет на рынке" (years) и год из ЕГРЮЛ — разные вещи (см. кейс
+    # Altais-Cars: сайт заявляет "с 1998", а юрлицо перерегистрировано в
+    # 2025), но если years так и остался неопределённым дефолтом "1"
+    # (extract_years_experience в company_agent.py ничего не нашла в
+    # тексте), а ЕГРЮЛ при этом подтверждён — честнее показать возраст
+    # юрлица, чем откровенно заниженную "1 год" (баг замечен 09.08.2026 на
+    # China Trade: years=1, хотя ЕГРЮЛ — с 2024 года).
+    raw_years = c['years']
+    if (not raw_years or raw_years == '1') and c['egrul_year']:
+        try:
+            cyrs = str(max(1, datetime.date.today().year - int(c['egrul_year'])))
+        except ValueError:
+            cyrs = str(int(float(raw_years))) if raw_years else '1'
+    else:
+        cyrs = str(int(float(raw_years))) if raw_years else '1'
     total_reviews += int(crev)
     clink = c['site'] if c['site'] else ('https://t.me/' + c['telegram'] if c['telegram'] else '#')
     egrul_verified = 'true' if c['egrul_year'] else 'false'

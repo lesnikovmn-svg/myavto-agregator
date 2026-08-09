@@ -184,7 +184,13 @@ def extract_social_from_text(text):
         m = re.search(r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.]+", text)
         if m:
             insta = m.group(0)
-        m = re.search(r"https?://(?:www\.)?vk\.com/[A-Za-z0-9_.]+", text)
+        # ВКонтакте переезжает на новый домен vk.ru — старый vk.com пока
+        # тоже работает, но сайты компаний всё чаще ставят у себя именно
+        # vk.ru-ссылку. Баг найден 09.08.2026 на EncarRus: на сайте прямым
+        # текстом была ссылка на vk.ru/encarrus, но регэксп её не поймал
+        # (искал только vk.com) — агент вместо неё нашёл что-то постороннее
+        # через DDG-поиск. Ловим оба домена.
+        m = re.search(r"https?://(?:www\.)?vk\.(?:com|ru)/[A-Za-z0-9_.]+", text)
         if m:
             vk = m.group(0)
     return insta, vk
@@ -203,7 +209,7 @@ def find_social_links(name, text="", phone=""):
         verified = verified or iv
         time.sleep(1)
     if not vk:
-        vk, vv = find_platform_link(f"{name} вконтакте", ["vk.com"], key, pd)
+        vk, vv = find_platform_link(f"{name} вконтакте", ["vk.com", "vk.ru"], key, pd)
         verified = verified or vv
         time.sleep(1)
     return insta, vk, verified
@@ -376,7 +382,7 @@ def add_company(ws, data, row_num):
     inn_note = " [ИНН найден]" if data.get("inn") else ""
     print("  OK: " + data["name"] + (" (" + str(subs) + " подписчиков)" if subs > 0 else "") + inn_note)
 
-BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","youtube","instagram","facebook","tiktok","yandex","google","wikipedia","zhihu","rutube","tgstat","nicegram","telegramchannels",
+BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","instagram","facebook","tiktok","yandex","google","wikipedia","zhihu","rutube","tgstat","nicegram","telegramchannels",
     # Украинские площадки/сервисы — не имеют отношения к импорту авто в СНГ
     "auto.ria","ria.com"]
 
@@ -540,14 +546,19 @@ def run_agent():
             # ИНН — из уже загруженного текста сайта (см. выше), запрос
             # повторно не делаем.
             inn = extract_inn(site_text) if site_text else ""
-            # Если ИНН найти не удалось (а значит, и год регистрации по
-            # ЕГРЮЛ мы позже не узнаем) — пробуем достать стаж работы прямо
-            # из текста: описания, сниппета, самого сайта ("с 2015 года",
-            # "10 лет на рынке"). Не нашли — оставляем безопасный дефолт "1",
-            # а не гадаем.
-            years = None
-            if not inn:
-                years = extract_years_experience(text + " " + site_text)
+            # Стаж ("N лет на рынке") и год регистрации по ЕГРЮЛ — РАЗНЫЕ
+            # вещи (см. кейс Altais-Cars: сайт заявляет "с 1998", а
+            # юрлицо переоформлено в 2025 — это два независимых факта,
+            # update_site.py показывает оба честно). Раньше при найденном
+            # ИНН стаж вообще не пытались достать из текста, оставляя
+            # безопасный дефолт "1" — из-за этого на сайте появлялись
+            # нелепые расхождения вида "1 год на рынке" рядом с зелёным
+            # бейджем "в ЕГРЮЛ с 2024 года" (баг замечен 09.08.2026 на
+            # China Trade). Теперь пробуем извлечь стаж из текста ВСЕГДА,
+            # независимо от того, нашёлся ИНН или нет — не нашли ничего
+            # в тексте, update_site.py на этапе рендера сам подставит
+            # возраст по ЕГРЮЛ как более честный fallback, чем "1".
+            years = extract_years_experience(text + " " + site_text)
             yandex, google, gis2, maps_verified = find_map_links(name, phone)
             insta, vk, social_verified = find_social_links(name, text + " " + site_text, phone)
             avito, drom, autoru, market_verified = find_marketplace_links(name, phone)

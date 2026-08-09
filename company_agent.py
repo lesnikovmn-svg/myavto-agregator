@@ -269,23 +269,38 @@ def find_map_links(name, phone=""):
     return yandex, google, gis2, (yv or gv or g2v)
 
 def extract_social_from_text(text):
-    """Ищем прямые ссылки на Instagram/VK в самом тексте страницы (обычно
+    """
+    Ищем прямые ссылки на Instagram/VK в самом тексте страницы (обычно
     в футере сайта) — это надёжнее, чем поиск, если компания сама уже
-    указала ссылку у себя на сайте."""
+    указала ссылку у себя на сайте.
+
+    ВАЖНО: сайты часто встраивают виджет ВКонтакте (кнопка "Поделиться",
+    комментарии) — его SDK грузится со скрипта вида
+    "vk.com/js/api/openapi.js?169", и старый regex.search() (первое
+    совпадение) хватал именно его, обрезая по первому "/" до "vk.com/js" —
+    служебный путь, не профиль компании. Баг найден 09.08.2026: несколько
+    компаний получили в поле VK именно "vk.com/js" вместо настоящей
+    страницы (или вместо пустого поля, если настоящей ссылки на сайте
+    нет). Теперь: собираем ВСЕ совпадения (re.findall), а не только первое,
+    и берём первое, которое проходит is_real_profile_url — то есть реально
+    похоже на профиль/группу, а не на служебный путь площадки.
+    """
     insta, vk = "", ""
     if text:
-        m = re.search(r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.]+", text)
-        if m:
-            insta = m.group(0)
+        for cand in re.findall(r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.\-]+", text):
+            if is_real_profile_url(cand.lower()):
+                insta = cand
+                break
         # ВКонтакте переезжает на новый домен vk.ru — старый vk.com пока
         # тоже работает, но сайты компаний всё чаще ставят у себя именно
         # vk.ru-ссылку. Баг найден 09.08.2026 на EncarRus: на сайте прямым
         # текстом была ссылка на vk.ru/encarrus, но регэксп её не поймал
         # (искал только vk.com) — агент вместо неё нашёл что-то постороннее
         # через DDG-поиск. Ловим оба домена.
-        m = re.search(r"https?://(?:www\.)?vk\.(?:com|ru)/[A-Za-z0-9_.]+", text)
-        if m:
-            vk = m.group(0)
+        for cand in re.findall(r"https?://(?:www\.)?vk\.(?:com|ru)/[A-Za-z0-9_.\-]+", text):
+            if is_real_profile_url(cand.lower()):
+                vk = cand
+                break
     return insta, vk
 
 def find_social_links(name, text="", phone=""):

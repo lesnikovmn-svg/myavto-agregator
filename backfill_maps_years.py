@@ -16,7 +16,7 @@
 import time
 import gspread
 from google.oauth2.service_account import Credentials
-from company_agent import find_map_links, extract_years_experience, fetch_site_text
+from company_agent import find_map_links, find_social_links, extract_years_experience, fetch_site_text
 
 config = {}
 with open("agent_config.env") as f:
@@ -28,7 +28,8 @@ with open("agent_config.env") as f:
 SHEET_ID = config["SHEET_ID"]
 
 # id,name,rating,reviews,years,delivered,description,directions,tags,
-# telegram,phone,site,manager,region,featured,avatar,color,yandex,inn,google,gis2
+# telegram,phone,site,manager,region,featured,avatar,color,yandex,inn,
+# google,gis2,instagram,vk
 NAME_COL = 2
 YEARS_COL = 5
 DESC_COL = 7
@@ -37,6 +38,8 @@ YANDEX_COL = 18
 INN_COL = 19
 GOOGLE_COL = 20
 GIS2_COL = 21
+INSTAGRAM_COL = 22
+VK_COL = 23
 
 
 def connect_sheets():
@@ -59,6 +62,7 @@ def run():
 
     updated_maps = 0
     updated_years = 0
+    updated_social = 0
     for i, row in enumerate(rows[1:], start=2):
         name = cell(row, NAME_COL)
         if not name:
@@ -71,6 +75,8 @@ def run():
         years = cell(row, YEARS_COL)
         site = cell(row, SITE_COL)
         desc = cell(row, DESC_COL)
+        insta = cell(row, INSTAGRAM_COL)
+        vk = cell(row, VK_COL)
 
         print(f"[{i - 1}] {name}")
 
@@ -94,6 +100,24 @@ def run():
                 updated_maps += 1
                 print(f"    карты: yandex={'✓' if y2 else '-'} google={'✓' if g2 else '-'} 2gis={'✓' if gi2 else '-'}")
 
+        # 1б) Instagram/VK — тоже только то, чего ещё нет.
+        if not (insta and vk):
+            site_text_for_social = ""
+            if site and site.startswith("http"):
+                site_text_for_social = fetch_site_text(site)
+            try:
+                i2, v2 = find_social_links(name, (desc or "") + " " + site_text_for_social)
+            except Exception as e:
+                print(f"    ошибка поиска соцсетей: {e}")
+                i2, v2 = "", ""
+            if not insta and i2:
+                ws.update_cell(i, INSTAGRAM_COL, i2)
+            if not vk and v2:
+                ws.update_cell(i, VK_COL, v2)
+            if i2 or v2:
+                updated_social += 1
+                print(f"    соцсети: instagram={'✓' if i2 else '-'} vk={'✓' if v2 else '-'}")
+
         # 2) Стаж — только если ИНН нет (и значит, год по ЕГРЮЛ не узнать)
         # и в years сейчас похоже на дефолтную заглушку.
         if not inn and (not years or years == "1"):
@@ -110,7 +134,7 @@ def run():
 
         time.sleep(1)
 
-    print(f"\nГотово. Карты дополнены у {updated_maps} компаний, стаж — у {updated_years}.")
+    print(f"\nГотово. Карты дополнены у {updated_maps} компаний, соцсети — у {updated_social}, стаж — у {updated_years}.")
     print("Теперь прогони python3 update_site.py, чтобы пересобрать сайт с новыми данными.")
 
 

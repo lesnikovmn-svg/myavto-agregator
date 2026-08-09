@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 main
 daily_update.log
+venv/

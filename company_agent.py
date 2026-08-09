@@ -123,6 +123,33 @@ def find_map_links(name):
     time.sleep(1)
     return yandex, google, gis2
 
+def extract_social_from_text(text):
+    """Ищем прямые ссылки на Instagram/VK в самом тексте страницы (обычно
+    в футере сайта) — это надёжнее, чем поиск, если компания сама уже
+    указала ссылку у себя на сайте."""
+    insta, vk = "", ""
+    if text:
+        m = re.search(r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_.]+", text)
+        if m:
+            insta = m.group(0)
+        m = re.search(r"https?://(?:www\.)?vk\.com/[A-Za-z0-9_.]+", text)
+        if m:
+            vk = m.group(0)
+    return insta, vk
+
+def find_social_links(name, text=""):
+    """Instagram/VK компании — сначала пробуем достать прямо со страницы
+    (см. extract_social_from_text), а если там нет — ищем через DDG,
+    привязываясь к домену, чтобы не подцепить случайную ссылку не по теме."""
+    insta, vk = extract_social_from_text(text)
+    if not insta:
+        insta = find_map_profile(f"{name} instagram", ["instagram.com"])
+        time.sleep(1)
+    if not vk:
+        vk = find_map_profile(f"{name} вконтакте", ["vk.com"])
+        time.sleep(1)
+    return insta, vk
+
 def mentions_ukraine(text):
     # Ловит "Украина/Украину/Украины/украинский" и т.п. — любые формы
     # с корнем "укра". Сайт нацелен на СНГ (Россия, Казахстан, Беларусь...),
@@ -191,7 +218,7 @@ def get_existing(ws):
         return set()
 
 def add_company(ws, data, row_num):
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2","")]
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk","")]
     ws.append_row(row)
     subs = data.get("subscribers",0)
     inn_note = " [ИНН найден]" if data.get("inn") else ""
@@ -238,7 +265,8 @@ def run_agent():
         next_id += 1
         years = extract_years_experience(text)
         yandex, google, gis2 = find_map_links(username)
-        add_company(ws, {"name":username,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":extract_phone(text),"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2}, next_id)
+        insta, vk = find_social_links(username, text)
+        add_company(ws, {"name":username,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":extract_phone(text),"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk}, next_id)
         existing.add(username.lower())
         found += 1
         time.sleep(1)
@@ -307,8 +335,9 @@ def run_agent():
             if not inn:
                 years = extract_years_experience(text + " " + site_text)
             yandex, google, gis2 = find_map_links(name)
+            insta, vk = find_social_links(name, text + " " + site_text)
             next_id += 1
-            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2}, next_id)
+            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":link if link.startswith("http") else "","inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk}, next_id)
             existing.add(name.lower())
             if link: existing.add(link.lower())
             found += 1

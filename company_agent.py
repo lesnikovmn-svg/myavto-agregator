@@ -36,6 +36,24 @@ def extract_telegram(text):
     m = re.search(r"@([A-Za-z0-9_]{3,32})", text)
     return m.group(1) if m else ""
 
+def clean_name_from_title(title):
+    """
+    Заголовки в поисковой выдаче почти всегда содержат настоящее название
+    компании первым сегментом: "CarsKorea — авто из Южной Кореи...",
+    "Карсплюс Авто - честный автосалон...". Берём текст до первого
+    разделителя-тире/палки — это и есть имя. Если разделителя нет или
+    сегмент подозрительно короткий — не годится, пусть вызывающий код
+    решает, что делать (обычно — fallback на домен).
+    """
+    if not title:
+        return ""
+    for sep in [" — ", " – ", " | ", " - "]:
+        if sep in title:
+            candidate = title.split(sep)[0].strip()
+            if len(candidate) >= 2:
+                return candidate
+    return title.strip()
+
 def extract_inn(text):
     # Ищем ИНН только рядом со словом "ИНН" — просто 10/12-значное число
     # в тексте слишком часто оказывается номером телефона или ОГРН.
@@ -184,7 +202,23 @@ def run_agent():
                 skipped += 1
                 continue
             domain = re.search(r"https?://(?:www\.)?([^/]+)", link)
-            name = domain.group(1).replace(".ru","").replace(".com","").title() if domain else title[:30]
+            domain_name = domain.group(1).replace(".ru","").replace(".com","").title() if domain else ""
+            title_name = clean_name_from_title(title)
+            if domain and domain.group(1).lower() in ("t.me", "telegram.me"):
+                # Ссылка на Telegram-канал/бота — домен "T.Me" бесполезен
+                # как имя компании. Достаём хэндл из самой ссылки и берём
+                # имя из заголовка выдачи, а не из домена.
+                handle_m = re.search(r"(?:t|telegram)\.me/([A-Za-z0-9_]+)", link, re.IGNORECASE)
+                if handle_m and not tg:
+                    tg = handle_m.group(1)
+                name = title_name or tg or domain_name
+            else:
+                # Предпочитаем название из заголовка поисковой выдачи — это
+                # почти всегда настоящее имя компании. Домен — запасной
+                # вариант на случай, если заголовок пустой/бесполезный.
+                name = title_name or domain_name or title[:30]
+                if not title_name:
+                    print(f"    ⚠️ имя взято из домена ({name}) — стоит проверить вручную")
             if name.lower() in existing or (link and link.lower() in existing):
                 skipped += 1
                 continue

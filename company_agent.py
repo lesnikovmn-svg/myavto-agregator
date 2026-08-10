@@ -112,6 +112,93 @@ def fetch_site_text(url):
         pass
     return ""
 
+# Признаки того, что вместо реального содержимого страницы мы получили
+# антибот-заглушку/капчу/чисто-JS-обёртку (реальный контент рендерится в
+# браузере, а requests видит только "скелет"). Найдено 10.08.2026 на
+# auto-auc.online: страница отдаёт только "Loading..." + "JavaScript
+# отключен в вашем браузере" + ссылку на "Антибот Клауд", а при заходе
+# через настоящий браузер там ещё и капча ("нажмите на похожий цвет").
+# В таких случаях автоматически ничего не вытащить — компанию нужно
+# ПОДСВЕТИТЬ для ручного ввода, а не молча пропустить/оставить как есть.
+BOT_WALL_MARKERS = ["антибот", "antibot", "javascript отключен", "javascript is disabled",
+    "enable javascript", "checking your browser", "just a moment",
+    "attention required", "cloudflare", "verify you are human",
+    "нажмите на похожий цвет", "подтвердите, что вы не робот", "captcha"]
+
+def looks_like_bot_wall(html):
+    """True, если похоже, что requests получил антибот/капча-заглушку, а
+    не реальный контент страницы — тогда искать в html ИНН/телефон/соцсети
+    бессмысленно, компанию стоит явно пометить для ручной проверки."""
+    if not html:
+        return False
+    t = html.lower()
+    return any(marker in t for marker in BOT_WALL_MARKERS) and len(html) < 8000
+
+# Слова-подсказки для поиска ссылок на "Контакты"/"О нас" и похожие
+# подстраницы сайта. company_agent.py по умолчанию читает только главную
+# страницу сайта — телефон, реквизиты (ИНН/ОГРН) и часть соцсетей у многих
+# компаний лежат именно на этих подстраницах, а не в футере главной.
+# Найдено 10.08.2026 на реальном примере: auto-asia25.ru ("Авто Азия") —
+# на главной не было ни телефона, ни ИНН, ни правильного telegram, а на
+# /contacts было всё сразу (пользователь прислал текст этой страницы и
+# спросил "почему агент сам не вытащил?").
+SUBPAGE_HINTS = ["contact", "contacts", "kontakt", "kontakty", "kontaktyi",
+    "about", "o-nas", "onas", "o_nas", "o-kompanii", "o_kompanii",
+    "company", "rekvizity", "requisites", "о нас", "контакт"]
+
+def find_subpage_urls(html, base_url, limit=3):
+    """
+    Ищем на главной странице ссылки на подстраницы вида "Контакты"/"О нас"
+    (см. SUBPAGE_HINTS) — по href или по видимому тексту ссылки. Остаёмся
+    на том же домене (не уходим по чужим ссылкам в футере) и берём не
+    больше `limit` штук, чтобы не заваливать сайт компании лишними
+    запросами.
+    """
+    if not html:
+        return []
+    base_domain = domain_of(base_url)
+    if not base_domain:
+        return []
+    found = []
+    seen = set()
+    for m in re.finditer(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+                          html, re.IGNORECASE | re.DOTALL):
+        href, inner = m.group(1), m.group(2)
+        link_text = re.sub(r"<[^>]+>", " ", inner).strip().lower()
+        href_lower = href.lower()
+        if not any(h in href_lower or h in link_text for h in SUBPAGE_HINTS):
+            continue
+        if href.startswith("http"):
+            full = href
+        elif href.startswith("/"):
+            full = f"https://{base_domain}{href}"
+        else:
+            continue
+        if domain_of(full) != base_domain:
+            continue
+        if full in seen:
+            continue
+        seen.add(full)
+        found.append(full)
+        if len(found) >= limit:
+            break
+    return found
+
+def fetch_extra_site_text(html, base_url, limit=3):
+    """
+    Догружает и склеивает текст с подстраниц "Контакты"/"О нас" (см.
+    find_subpage_urls). Вызывающий код решает, КОГДА это нужно (обычно —
+    если с главной не хватило телефона/ИНН), чтобы не грузить сайты
+    компаний лишними запросами без необходимости.
+    """
+    urls = find_subpage_urls(html, base_url, limit=limit)
+    extra_text = ""
+    for u in urls:
+        t = fetch_site_text(u)
+        if t:
+            extra_text += " " + t
+    return extra_text
+
 def extract_brand_from_site(html):
     """
     Настоящее название бренда со страницы сайта — надёжнее, чем сырой
@@ -126,11 +213,17 @@ def extract_brand_from_site(html):
     """
     if not html:
         return ""
+    # Найдено 10.08.2026 (dryrun_reverify_sites.py по всей базе): страницы-
+    # превью t.me/telegram.me и их зеркала-каталоги (уже частично отсечены
+    # через BLACKLIST, но мало ли где ещё проскочит) отдают og:site_name
+    # буквально "Telegram" — это НЕ бренд компании, а название платформы.
+    # Такое значение отбрасываем, как будто его вообще не нашли.
+    generic_brands = {"telegram", "вконтакте", "vkontakte", "instagram", "youtube"}
     m = re.search(r'<meta property="og:site_name" content="([^"]+)"', html)
-    if m and m.group(1).strip():
+    if m and m.group(1).strip() and m.group(1).strip().lower() not in generic_brands:
         return m.group(1).strip()
     m = re.search(r'<meta name="apple-mobile-web-app-title" content="([^"]+)"', html)
-    if m and m.group(1).strip():
+    if m and m.group(1).strip() and m.group(1).strip().lower() not in generic_brands:
         return m.group(1).strip()
     return ""
 
@@ -368,6 +461,34 @@ def fetch_page_signal_text(url):
         parts.append(m.group(1))
     return " ".join(parts).lower()
 
+def _matches_domain_filter(link_lower, filt):
+    """
+    Проверяем, что filt (домен площадки, возможно с путём вроде
+    "yandex.ru/maps") встречается в link ИМЕННО как домен/поддомен, а не
+    как случайная подстрока внутри СОВСЕМ ДРУГОГО домена.
+
+    Баг найден 10.08.2026 (через dryrun_reverify_sites.py по всей базе):
+    старая проверка "auto.ru" in link.lower() считала совпадением ссылки
+    "http://intercityauto.ru" и "https://dolgov-auto.ru/" — это чужие/
+    собственные домены компаний, просто оканчивающиеся на те же буквы, не
+    имеющие отношения к площадке auto.ru. Из-за этого в поле "autoru" у
+    двух разных компаний ("Авто из Европы / Авто Импорт" и "Долгов Авто")
+    попали случайные (в одном случае — вообще чужой) сайты вместо ссылки
+    на профиль auto.ru. Теперь домен-часть проверяется по границе
+    поддомена (обязательная точка или начало строки перед ним), а не
+    произвольной подстрокой.
+    """
+    if "/" in filt:
+        domain_part, _, path_part = filt.partition("/")
+    else:
+        domain_part, path_part = filt, ""
+    pattern = r"https?://(?:[a-z0-9\-]+\.)*" + re.escape(domain_part) + r"(?:/|\?|$)"
+    if not re.search(pattern, link_lower):
+        return False
+    if path_part and path_part not in link_lower:
+        return False
+    return True
+
 def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
     """
     Ищем ссылку на конкретной площадке через DDG, привязываясь к домену
@@ -396,7 +517,7 @@ def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
     for r in search_ddgs(query, num=5):
         link = r.get("link") or ""
         link_lower = link.lower()
-        if not any(d in link_lower for d in domain_filters):
+        if not any(_matches_domain_filter(link_lower, d) for d in domain_filters):
             continue
         if not is_real_profile_url(link_lower):
             continue
@@ -955,7 +1076,22 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # SEO-зеркало/аналитика Telegram-каналов (аналог tgstat), не сайт самой
     # компании — попал как "сайт" компании, хотя это просто чужой
     # каталог-зеркало чужого канала.
-    "tenchat.ru","telagon.io"]
+    "tenchat.ru","telagon.io",
+    # Найдено 10.08.2026 через dryrun_reverify_sites.py (пользователь
+    # прогнал всю базу новым алгоритмом): та же болезнь, что и с
+    # tenchat.ru/telagon.io, но с ДРУГИМИ площадками-зеркалами Telegram-
+    # каналов — "telegram.menu", "telegram-dialogs.ru", "tele-finder.com",
+    # "tgramlink.com" — все они каталогизируют/зеркалят чужие каналы,
+    # НЕ являются сайтом самой компании. Из-за этого в таблице оказались
+    # карточки "Telegram Dialogs" и "TeleFinder — Каталог Telegram-
+    # каналов" — буквально название площадки-каталога вместо названия
+    # компании (og:site_name зеркала). "otzovik.com" — отзовик (агент
+    # утащил страницу отзыва о телеграм-канале как будто это сайт
+    # компании). "autonews.ru" — крупный автомобильный новостной портал,
+    # попал в таблицу как "компания" из-за одной конкретной новостной
+    # статьи, а не из-за того, что автопортал — компания-импортёр.
+    "telegram.menu","telegram-dialogs.ru","tele-finder.com","tgramlink.com",
+    "otzovik.com","autonews.ru"]
 
 # Продающие фразы ниши — собраны 09.08.2026 по реальным сайтам/TG-каналам
 # компаний-импортёров авто (WESTMOTORS, Япония Транзит, KoreaBlizko, ASIA
@@ -1129,18 +1265,40 @@ def run_agent():
                 if site_text and mentions_ukraine(site_text):
                     skipped += 1
                     continue
+                if looks_like_bot_wall(site_text):
+                    print(f"    🚧 {name or domain_name}: сайт {link} защищён антиботом/капчей — "
+                          f"автоматически не читается, нужен РУЧНОЙ ввод названия/соцсетей/ИНН/телефона")
+                    site_text = ""
                 brand_name = extract_brand_from_site(site_text)
                 name = brand_name or title_name or domain_name or title[:30]
                 if brand_name and brand_name != title_name:
                     print(f"    имя со страницы сайта (og:site_name): '{brand_name}' (в выдаче было: '{title[:50]}')")
                 elif not title_name and not brand_name:
                     print(f"    ⚠️ имя взято из домена ({name}) — стоит проверить вручную")
+                # Если с главной не хватает ИНН и телефона — пробуем
+                # догрузить "Контакты"/"О нас" (см. find_subpage_urls,
+                # 10.08.2026: auto-asia25.ru — телефон/ИНН/правильный
+                # telegram были только на /contacts, агент их не видел).
+                # Всё, что ищется ниже из site_text (ИНН, телефон, соцсети,
+                # маркетплейсы, прямые ссылки на карты/2ГИС), автоматически
+                # подхватит и добавленный текст подстраницы.
+                if site_text and not (extract_inn(site_text) and extract_phone(site_text) != "-"):
+                    extra_site_text = fetch_extra_site_text(site_text, link)
+                    if extra_site_text:
+                        print(f"    догрузил доп. страницы (контакты/о нас): +{len(extra_site_text)} симв.")
+                        site_text += extra_site_text
             if name.lower() in existing or (link and link.lower() in existing):
                 skipped += 1
                 continue
             # ИНН — из уже загруженного текста сайта (см. выше), запрос
             # повторно не делаем.
             inn = extract_inn(site_text) if site_text else ""
+            # Телефон из сниппета выдачи часто пустой ("-") — сайт компании
+            # (включая догруженные "Контакты"/"О нас", см. выше) надёжнее.
+            if phone == "-" and site_text:
+                site_phone = extract_phone(site_text)
+                if site_phone != "-":
+                    phone = site_phone
             # Стаж ("N лет на рынке") и год регистрации по ЕГРЮЛ — РАЗНЫЕ
             # вещи (см. кейс Altais-Cars: сайт заявляет "с 1998", а
             # юрлицо переоформлено в 2025 — это два независимых факта,

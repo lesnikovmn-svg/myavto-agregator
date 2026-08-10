@@ -1,0 +1,203 @@
+Всего компаний: 75
+======================================================================
+
+[3] ТамСямAUTO (https://tamsyamauto.ru)
+    youtube: '' -> 'https://youtube.com/@tamsyam26'
+    rutube: '' -> 'https://rutube.ru/channel/30969476'
+    whatsapp: '' -> 'https://wa.me/79288198007'
+
+[5] Winner Auto Club (https://langame.ru/799454487_computerniy_club_space-capsula_chelyabinsk?clckid=99266488)
+    youtube: '' -> 'https://www.youtube.com/@langameru'
+
+[6] Artalex Group (https://artalexgroup.com)
+    telegram: '' -> 'artalexgroup'
+
+[8] Westmotors (https://westmotors.ru)
+    phone: '-' -> '79819147027'
+    vk: '' -> 'https://vk.com/westmotorsby'
+    max: '' -> 'https://max.ru/id5003140189_biz'
+    youtube: '' -> 'https://www.youtube.com/channel/UCvN6YPNUPxMsTH9q5xD55-g'
+    whatsapp: '' -> 'https://wa.me/79091603094'
+
+[10] LikeAvto (http://likeavto.ru)
+    inn: '' -> '7536136957'
+
+[11] Veles Auto (http://veles-auto-dv.ru)
+    inn: '' -> '2536077538'
+
+[12] Восток Транс Импорт (https://koreacars.me)
+    max: '' -> 'https://max.ru/koreacarsme'
+
+[14] Auto Desk (http://auto-desk.pro)
+    phone: '-' -> '79311071344'
+[15] Трансгрупп Авто (https://transgroup-d.ru): сайт не ответил / пусто — пропускаю
+[17] Япония Транзит (https://japantransit.ru): сайт не ответил / пусто — пропускаю
+
+[18] Тачкиру (https://тачкиру.рф)
+    phone: '-' -> '70000001089'
+    telegram: '' -> 'tachkiru_official'
+
+[22] АВТОЗАКАЗ.РУ (https://autozakaz.ru)
+    phone: '-' -> '7-953-215-38-88'
+    youtube: '' -> 'https://www.youtube.com/@Autozakaz'
+
+[24] Shapcars (https://shapcars.ru)
+    phone: '-' -> '8-6563393262'
+[25] Dolgov Auto (https://dolgov-au.ru): сайт не ответил / пусто — пропускаю
+
+[26] Wanna-Car (https://wanna-car.ru)
+    name: 'Wanna-Car' -> 'Wanna Car' (og:site_name сайта)
+    phone: '-' -> '79256006777'
+    telegram: '' -> 'WannaCarSales'
+    youtube: '' -> 'https://youtube.com/@wannacar'
+    whatsapp: '' -> 'https://wa.me/79256006777'
+
+[28] OTRADACARS (https://otradacars.ru)
+    vk: '' -> 'https://vk.com/otradacars'
+    max: '' -> 'https://max.ru/otradacars'
+
+[29] Юнион Авто (https://unionauto.org)
+    phone: '-' -> '79510068050'
+    telegram: '' -> 'unionautorussia'
+
+[31] Prim-Auto (https://prim-auto.com/auction/)
+    phone: '-' -> '77794055914'
+    max: '' -> 'https://max.ru/id2536331512_biz'
+    youtube: '' -> 'https://www.youtube.com/@PRIMAUTOCHANNEL'
+    whatsapp: '' -> 'https://wa.me/79089848125'
+
+[32] Jplife (https://jplife.ru/)
+    name: 'Jplife' -> 'Japan Life' (og:site_name сайта)
+    phone: '-' -> '78635729334'
+    telegram: '' -> 'jpliferu'
+    vk: '' -> 'https://vk.com/japanlife'
+
+[33] Carwin (https://carwin.ru/japanauc/)
+    phone: '-' -> '79046238707'
+
+[34] Luxavtoprigon (https://luxavtoprigon.ru/)
+    phone: '-' -> '79010785245'
+    telegram: '' -> 'europaautoprigon'
+[35] Arnold-Auto (https://arnold-auto.com/): сайт не ответил / пусто — пропускаю
+
+[36] Autocreativ (https://autocreativ.ru/)
+    phone: '-' -> '82453445035'
+
+[37] Todes-Avto (https://todes-avto.ru/)
+    name: 'Todes-Avto' -> 'ТОДЕС-АВТО' (og:site_name сайта)
+    phone: '-' -> '74999611571'
+
+[38] Autoimport.Group (https://autoimport.group/)
+    phone: '-' -> '78635730540'
+    youtube: '' -> 'https://www.youtube.com/@user-is7jv2vv9s'
+
+[39] Autoimport.Toyota-T (https://autoimport.toyota-t.ru/)
+    phone: '-' -> '74872515836'
+
+[40] Liautoofficial (https://liautoofficial.ru/)
+    name: 'Liautoofficial' -> 'Li Auto в России' (og:site_name сайта)
+    phone: '-' -> '78599606729'
+
+[41] Incars-Avto (https://incars-avto.ru/)
+    phone: '-' -> '85714285714'
+    telegram: '' -> 'INCARSDIRECT'
+
+[42] Autocapital (https://autocapital.ru/)
+    name: 'Autocapital' -> 'АВТОМОБИЛЬНОЕ АГЕНСТВО АВТОКАПИТАЛ' (og:site_name сайта)
+    phone: '-' -> '79057707575'
+
+[43] CarsKorea (https://carskorea.shop)
+    max: '' -> 'https://max.ru/id2721156632_biz'
+
+[44] Anycar.Pro (https://anycar.pro/)
+    phone: '-' -> '79384876888'
+
+[45] Autogermanika (https://autogermanika.ru/)
+    phone: '-' -> '7-3064323062'
+    whatsapp: '' -> 'https://wa.me/79057444888'
+
+[46] Es-Transit (https://es-transit.ru/)
+    name: 'Es-Transit' -> 'ES Transit' (og:site_name сайта)
+    phone: '-' -> '70000001040'
+    telegram: '' -> 'estransitS'
+    max: '' -> 'https://max.ru/estransitru'
+    whatsapp: '' -> 'https://wa.me/79084441718'
+[47] Automotive-China (https://automotive-china.ru/): сайт не ответил / пусто — пропускаю
+
+[48] Carsplus (https://jtfgj.tb.ru/)
+    phone: '-' -> '79123458841'
+    youtube: '' -> 'https://youtube.com/@burtsev_autosi'
+    whatsapp: '' -> 'https://wa.me/79123458841'
+
+[49] Altais-Cars (https://altais-cars.ru/)
+    name: 'Altais-Cars' -> 'Altais Cars' (og:site_name сайта)
+    phone: '-' -> '74402995026'
+    avito: '' -> 'https://www.avito.ru/brands/altais_cars/all'
+    autoru: '' -> 'https://auto.ru/profile/xvEo0I-3gaaXo_TKLd9-Ig/'
+    whatsapp: '' -> 'https://wa.me/79104161222'
+
+[50] Авто из Европы / Авто Импорт (https://t.me/auto_import_cars_ru)
+    name: 'Авто из Европы / Авто Импорт' -> 'Telegram' (og:site_name сайта)
+    phone: '-' -> '74359703347'
+
+[52] LimCars (https://vk.ru/limcars)
+    phone: '-' -> '87790323673'
+
+[54] ТокиДоки (https://tokidoki.su/stat/)
+    inn: '' -> '5407052731'
+    phone: '-' -> '83832555007'
+
+[55] Честный Импорт (https://chest-import.com/)
+    phone: '-' -> '79030102342'
+
+[58] China Trade (https://jptrade.ru/chinacar/)
+    phone: '-' -> '88006003113'
+    max: '' -> 'https://max.ru/jptrade'
+    rutube: '' -> 'https://rutube.ru/channel/26064520'
+    whatsapp: '' -> 'https://wa.me/79941010020'
+
+[59] AutoImport Russia (https://telegram.menu/@autoimportrussiarf)
+    phone: '-' -> '8-906-466-75-71'
+    drom: '' -> 'https://auto.drom.ru/sever_dv/'
+
+[60] Telegram Dialogs (https://telegram-dialogs.ru/channel/@auto_import_cars_rus)
+    phone: '-' -> '79154906153'
+[61] Автомобили из Кореи и Китая на заказ (https://limeeauto-tg.ru/): сайт не ответил / пусто — пропускаю
+[62] Телеграм канал Levcar (https://www.levcar125.ru/telegram-canal): сайт не ответил / пусто — пропускаю
+
+[64] Ярдрей - Авто (https://auto.yardrey.ru/)
+    phone: '-' -> '75761075164'
+
+[65] Autonews (https://www.autonews.ru/news/6a75b6cc9a79470b4f46efc6)
+    phone: '-' -> '78610237701'
+    telegram: '' -> 'sergtselikov'
+
+[66] Долгов Авто - Машины из Кореи,Японии,Китая. (https://telegram.me/dolgov_auto/22193)
+    name: 'Долгов Авто - Машины из Кореи,Японии,Китая.' -> 'Telegram' (og:site_name сайта)
+
+[67] АИ Авто (https://ai-import.ru/)
+    phone: '-' -> '7-925-907-85-45'
+    telegram: '' -> 'Artem_Ivan_Auto'
+
+[68] AutoShoot (https://autoshoot.ru/)
+    phone: '-' -> '79361644354'
+    telegram: '' -> 'autoshoot77'
+
+[74] TeleFinder — Каталог Telegram-каналов (https://tele-finder.com/auto/)
+    telegram: '' -> 'freeimgadmin'
+[75] Otzovik (https://otzovik.com/reviews/telegram-kanal_avto_iz_evropi_pod_klyuch/): сайт не ответил / пусто — пропускаю
+[76] Ссылка на Telegram-канал Подбор и пригон авто "Под ключ" (https://tgramlink.com/ru/info/turnkey-car-selection-import-delivery): сайт не ответил / пусто — пропускаю
+
+======================================================================
+ТРЕБУЮТ РУЧНОЙ ПРОВЕРКИ (9) — сайт не читается автоматически (антибот/капча/недоступен), нужно зайти самому и прислать название + соцсети:
+  [15] Трансгрупп Авто (https://transgroup-d.ru) — сайт не отвечает (недоступен/таймаут)
+  [17] Япония Транзит (https://japantransit.ru) — сайт не отвечает (недоступен/таймаут)
+  [25] Dolgov Auto (https://dolgov-au.ru) — сайт не отвечает (недоступен/таймаут)
+  [35] Arnold-Auto (https://arnold-auto.com/) — сайт не отвечает (недоступен/таймаут)
+  [47] Automotive-China (https://automotive-china.ru/) — сайт не отвечает (недоступен/таймаут)
+  [61] Автомобили из Кореи и Китая на заказ (https://limeeauto-tg.ru/) — сайт не отвечает (недоступен/таймаут)
+  [62] Телеграм канал Levcar (https://www.levcar125.ru/telegram-canal) — сайт не отвечает (недоступен/таймаут)
+  [75] Otzovik (https://otzovik.com/reviews/telegram-kanal_avto_iz_evropi_pod_klyuch/) — сайт не отвечает (недоступен/таймаут)
+  [76] Ссылка на Telegram-канал Подбор и пригон авто "Под ключ" (https://tgramlink.com/ru/info/turnkey-car-selection-import-delivery) — сайт не отвечает (недоступен/таймаут)
+
+Готово. Это только ОТЧЁТ — в таблицу ничего не записано.

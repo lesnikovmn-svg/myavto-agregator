@@ -37,6 +37,23 @@ def extract_telegram(text):
     m = re.search(r"@([A-Za-z0-9_]{3,32})", text)
     return m.group(1) if m else ""
 
+def is_probably_tagline(text):
+    """
+    Отличаем настоящее название компании от рекламного слогана/заголовка
+    страницы. Найдено 09.08.2026: сайт autoshoot.ru не содержал ни
+    og:site_name, ни разделителя в заголовке выдачи — в итоге в поле name
+    целиком попал H1 "Подбор, покупка и доставка авто из Европы под ключ"
+    (полное предложение, а не название компании). Настоящие названия
+    компаний почти всегда короткие (1-3 слова, обычно без пробела вообще
+    или с одним): "CarsKorea", "Japan Transit", "China Trade". Слоганы —
+    длинные фразы из нескольких слов, часто с предлогами ("из", "под",
+    "для") и знаками препинания.
+    """
+    if not text:
+        return False
+    words = text.split()
+    return len(text) > 35 or len(words) > 4
+
 def clean_name_from_title(title):
     """
     Заголовки в поисковой выдаче почти всегда содержат настоящее название
@@ -45,6 +62,12 @@ def clean_name_from_title(title):
     разделителя-тире/палки — это и есть имя. Если разделителя нет или
     сегмент подозрительно короткий — не годится, пусть вызывающий код
     решает, что делать (обычно — fallback на домен).
+
+    Если разделителя нет вообще (весь title — одна фраза) и эта фраза
+    похожа на рекламный слоган (см. is_probably_tagline), а не на
+    название — возвращаем "", а не сырой текст целиком: вызывающий код
+    в этом случае падает на domain_name, что честнее, чем показывать
+    целое предложение как "название компании".
     """
     if not title:
         return ""
@@ -53,7 +76,10 @@ def clean_name_from_title(title):
             candidate = title.split(sep)[0].strip()
             if len(candidate) >= 2:
                 return candidate
-    return title.strip()
+    stripped = title.strip()
+    if is_probably_tagline(stripped):
+        return ""
+    return stripped
 
 def extract_inn(text):
     # Ищем ИНН только рядом со словом "ИНН" — просто 10/12-значное число
@@ -68,6 +94,19 @@ def fetch_site_text(url):
     try:
         r = requests.get(url, timeout=6, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code == 200:
+            # Баг найден 09.08.2026 (кодировка): если сервер не указал
+            # charset в заголовке Content-Type (а полагается только на
+            # <meta charset="utf-8"> внутри HTML, которую requests не
+            # читает), requests по старому стандарту HTTP по умолчанию
+            # считает текст ISO-8859-1 — реальный UTF-8 (кириллица) при
+            # этом превращается в "кракозябры" (пример: имя компании с
+            # ai-import.ru записалось в таблицу как "ÐÐ ÐÐ²ÑÐ¾" вместо
+            # нормального русского названия). Если charset в заголовке не
+            # объявлен явно — используем угаданную requests'ом кодировку
+            # (apparent_encoding) вместо дефолтной ISO-8859-1.
+            content_type = r.headers.get("Content-Type", "")
+            if "charset" not in content_type.lower():
+                r.encoding = r.apparent_encoding
             return r.text
     except Exception:
         pass
@@ -735,6 +774,30 @@ def mentions_ukraine(text):
     # компании, которые возят машины в Украину, сюда не нужны.
     return bool(re.search(r"укра", text, re.IGNORECASE))
 
+def is_vin_check_service(text):
+    """
+    Отсекаем сервисы/боты ПРОВЕРКИ авто по VIN/госномеру (SonarBot и
+    похожие) — они почти всегда упоминают слово "авто" сколько угодно раз
+    и формально проходят обычную проверку has_auto, но это НЕ компания по
+    ИМПОРТУ авто, а инструмент проверки истории машины. Найдено
+    09.08.2026 на живом прогоне через cron: "SonarBot" (Telegram-бот
+    "Проверяйте автомобиль перед покупкой... Введите VIN или госномер")
+    ошибочно попал в каталог как импортёр.
+
+    Сигнал: одновременно упоминаются и "бот"/"сервис", и явная лексика
+    проверки (VIN, госномер, пробив, история авто) — реальные компании по
+    импорту иногда предлагают проверку авто ПЕРЕД покупкой как одну из
+    услуг, но не строят вокруг этого всё описание и не называют себя
+    "бот для пробива/проверки".
+    """
+    t = text.lower()
+    has_bot_or_service = ("бот" in t) or ("сервис проверки" in t)
+    has_check_lexicon = any(w in t for w in
+        ["пробив авто", "пробив по vin", "пробить авто", "проверка vin",
+         "проверить vin", "vin-check", "vin check", "по vin или",
+         "введите vin", "госномер", "автокриминалист"])
+    return has_bot_or_service and has_check_lexicon
+
 def get_directions(text):
     t = text.lower()
     dm = {"Китай":["китай","china","byd","haval","geely","chery","далянь"],"Корея":["корея","korea","kia","hyundai","genesis"],"Япония":["япония","japan","toyota","lexus","honda","nissan","mazda"],"США":["сша","usa","america","tesla","ford","cadillac"],"ОАЭ":["оаэ","uae","dubai","эмираты"],"Европа":["европа","europe","bmw","mercedes","audi","volkswagen"],"Канада":["канада","canada"],"Грузия":["грузия","georgia"],"Армения":["армения","armenia"]}
@@ -883,7 +946,16 @@ def add_company(ws, data, row_num):
 
 BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","instagram","facebook","tiktok","yandex","google","wikipedia","zhihu","rutube","tgstat","nicegram","telegramchannels",
     # Украинские площадки/сервисы — не имеют отношения к импорту авто в СНГ
-    "auto.ria","ria.com"]
+    "auto.ria","ria.com",
+    # Найдено 09.08.2026 (прогон через cron, без присмотра): "tenchat.ru" —
+    # блог-платформа (вроде LinkedIn), агент утащил ЧУЖУЮ СТАТЬЮ про личный
+    # опыт с "мошенником" как если бы это была карточка компании (имя
+    # получилось "Пробив авто перед покупкой: бесплатный бот для пробива в
+    # Telegram" — заголовок статьи, а не название фирмы). "telagon.io" —
+    # SEO-зеркало/аналитика Telegram-каналов (аналог tgstat), не сайт самой
+    # компании — попал как "сайт" компании, хотя это просто чужой
+    # каталог-зеркало чужого канала.
+    "tenchat.ru","telagon.io"]
 
 # Продающие фразы ниши — собраны 09.08.2026 по реальным сайтам/TG-каналам
 # компаний-импортёров авто (WESTMOTORS, Япония Транзит, KoreaBlizko, ASIA
@@ -939,7 +1011,7 @@ def run_agent():
             continue
         text = info["description"]
         has_auto = any(w in text.lower() for w in ["авто","машин","импорт","корея","китай","япония","пригон"])
-        if not has_auto or mentions_ukraine(text):
+        if not has_auto or mentions_ukraine(text) or is_vin_check_service(text):
             skipped += 1
             continue
         years = extract_years_experience(text)
@@ -1012,7 +1084,8 @@ def run_agent():
             has_auto = any(w in text.lower() for w in ["авто","импорт","машин","автомобил","пригон","корея","китай","япония"])
             tg = extract_telegram(text)
             phone = extract_phone(text)
-            if not has_auto or mentions_ukraine(text) or (not tg and phone == "-" and not link.startswith("http")):
+            if (not has_auto or mentions_ukraine(text) or is_vin_check_service(text)
+                    or (not tg and phone == "-" and not link.startswith("http"))):
                 skipped += 1
                 continue
             domain = re.search(r"https?://(?:www\.)?([^/]+)", link)

@@ -142,7 +142,17 @@ def extract_years_experience(text):
 _GENERIC_NAME_WORDS = {"my","the","a","auto","avto","car","cars","trade","import",
     "impex","group","club","center","centre","express","asia","east","west",
     "north","south","global","inter","trans","world","winner","premium","elite",
-    "prime","star","best","top","new","first","royal","classic","standard"}
+    "prime","star","best","top","new","first","royal","classic","standard",
+    # Кириллические аналоги — найдено 09.08.2026 на "Авто из Европы / Авто
+    # Импорт ПРО": "авто" (4 символа — НЕ короче лимита в 4, поэтому не
+    # ловилось прежним условием len(first)<4) — самое общеупотребимое
+    # слово в этой нише вообще, встречается практически на любой странице
+    # про машины. Из-за этого на карточку налипли telegram
+    # @auto_import_cars_rus, vk antaresauto (.com и .ru), сайт
+    # americanauto.ru?utm_source=2gis — явно чужие совпадения.
+    "авто","авта","машина","машины","импорт","экспорт","групп","клуб",
+    "центр","трейд","трэйд","сервис","компания","премиум","элит","топ",
+    "новый","новая","первый","классик","стандарт"}
 
 def _name_key(name):
     """

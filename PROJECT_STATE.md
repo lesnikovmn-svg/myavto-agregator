@@ -580,6 +580,19 @@ find_marketplace_links/find_platform_link/fix_reverify_after_key_fix.py) —
   2ГИС/Instagram/VK — там либо буква в фирменном цвете, либо SVG-иконка
   "под оригинал"). Взять официальные логотипы/favicon Avito, Drom, Auto.ru
   и оформить в том же стиле, что и остальные review-icon-btn.
+- VK API-токен для надёжной проверки VK-групп (не вслепую по content-check)
+  — ПОПРОБОВАЛИ 09.08.2026, НЕ ПОЛУЧИЛОСЬ. VK больше не даёт создавать
+  новые Standalone-приложения (только Web/Android/iOS). Пробовали через
+  Web-приложение (client_id зарегистрирован, redirect_uri =
+  `https://oauth.vk.com/blank.html`) implicit OAuth-флоу
+  (`response_type=token`) — VK вернул `{"error":"invalid_request",
+  "error_description":"Security Error"}`. Дальше не копали: Authorization
+  Code flow потребовал бы отдельный бэкенд на VPS для обмена кода на
+  токен — ощутимая разработка ради второстепенного улучшения. Решили
+  оставить VK-проверку как есть (content-check + ручное подтверждение
+  пользователем в спорных случаях, как с Winner Auto Club). Если позже
+  понадобится вернуться — начинать с Authorization Code flow через VPS,
+  а не с implicit-флоу (он для новых приложений, похоже, закрыт).
 
 ## Частые команды
 ```bash

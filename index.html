@@ -163,7 +163,9 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .nav-links { display: flex; gap: 20px; align-items: center; }
 .nav-links a { font-size: 13px; color: var(--muted); text-decoration: none; }
 .nav-links a:hover { color: var(--text); }
-.nav-tg { background: var(--accent); color: #fff; padding: 7px 16px; border-radius: 20px; font-size: 13px; text-decoration: none; font-weight: 500; }
+.nav-tg { background: #0088cc; color: #fff; padding: 7px 16px 7px 12px; border-radius: 20px; font-size: 13px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s; box-shadow: 0 2px 6px rgba(0,136,204,0.35); }
+.nav-tg:hover { background: #0077b3; }
+.nav-tg svg { width: 15px; height: 15px; fill: #fff; flex-shrink: 0; }
 .nav-rate { background: #fc3f1d; color: #fff !important; padding: 7px 16px; border-radius: 20px; font-size: 13px; text-decoration: none; font-weight: 500; }
 
 /* Hero */
@@ -366,7 +368,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
     <a href="#faq">FAQ</a>
     <a href="#about">О нас</a>
     <a href="https://yandex.ru/profile/-/CTSvi0y-" target="_blank" class="nav-rate">★ Оценить нас</a>
-    <a href="https://t.me/My_Avto_Agregator" class="nav-tg">Telegram</a>
+    <a href="https://t.me/My_Avto_Agregator" class="nav-tg" target="_blank"><svg viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-2.008 9.46c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L6.864 14.42l-2.95-.924c-.642-.2-.654-.642.136-.953l11.52-4.44c.535-.194 1.003.13.992.144z"/></svg>Telegram</a>
   </div>
 </nav>
 
@@ -396,7 +398,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 
 <!-- Stats -->
 <div class="stats-bar">
-  <div class="stat"><div class="stat-n">77</div><div class="stat-l">Компаний в каталоге</div></div>
+  <div class="stat"><div class="stat-n">76</div><div class="stat-l">Компаний в каталоге</div></div>
   <div class="stat"><div class="stat-n">29 110</div><div class="stat-l">Отзывов в каталоге</div></div>
   <div class="stat"><div class="stat-n">8</div><div class="stat-l">Направлений импорта</div></div>
   <div class="stat"><div class="stat-n">9 стран</div><div class="stat-l">Покрытие СНГ</div></div>
@@ -843,8 +845,7 @@ const COMPANIES = [
   {id:77,name:"West-Motors.De",rating:4.5,reviews:0,years:1,delivered:"-",description:"Купить авто из США, Китая, Кореи, Европы и ОАЭ в Германию, Германию под ключ. ✓ Официальный договор ✓ Растаможка ✓ Доставка под заказ ✓ Без скрытых комиссий.",directions:["США", "ОАЭ"],tags:["Под ключ", "Растаможка"],telegram:"",phone:"-",site:"https://west-motors.de/",manager:"-",region:"Берлин, Германия (офис)",featured:false,avatar:"WES",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://west-motors.de/",egrulVerified:false,egrulYear:""},
   {id:78,name:"Emirate Cars",rating:4.5,reviews:0,years:16,delivered:"-",description:"Мы занимаемся подбором и выкупом автомобилей с аукционов США под ключ.",directions:["США", "ОАЭ"],tags:["Под ключ", "Аукционы"],telegram:"",phone:"71502987269",site:"https://emirate-cars.com/",manager:"-",region:"Баку, Азербайджан (офис)",featured:false,avatar:"EMI",color:"av-gray",yandex:"https://yandex.ru/maps/org/emirate_cars/37214759498/",google:"",gis2:"",instagram:"https://www.instagram.com/ula_dubai",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"https://www.youtube.com/@ula_dubai",rutube:"",whatsapp:"",link:"https://emirate-cars.com/",egrulVerified:false,egrulYear:""},
   {id:80,name:"РОЛЬФ",rating:4.5,reviews:0,years:35,delivered:"-",description:"Рольф - крупнейший автодилер по продаже авто в России. Более 72 брендов новых и подержанных автомобилей. Специальные предложения и акции.",directions:["Не указано"],tags:["Импорт авто"],telegram:"rolf_official_bot",phone:"84556095311",site:"https://www.rolf.ru/",manager:"-",region:"Россия",featured:false,avatar:"РОЛ",color:"av-gray",yandex:"",google:"",gis2:"https://2gis.ru/moscow/firm/70000001055851271",instagram:"https://www.instagram.com/rolfcompany/",vk:"https://vk.com/rolfcompany",avito:"https://www.avito.ru/all/avtomobili?q=рольф",drom:"https://auto.drom.ru/rolf-himki/",autoru:"https://auto.ru/dealer-net/rolf/",max:"https://max.ru/rolf_company",youtube:"https://www.youtube.com/c/ROLFCompany",rutube:"",whatsapp:"",link:"https://www.rolf.ru/",egrulVerified:true,egrulYear:"2021"},
-  {id:81,name:"Прим Автодилер",rating:4.5,reviews:0,years:1,delivered:"-",description:"Заказ авто из Китая, Японии и Кореи ⚡️ Выгода от 300 тыс руб | Напрямую без посредников | Новые и б/у автомобили Японские, европейские, китайские авто под ключ с доставкой в ваш город 📍 Написать нам ⭢",directions:["Китай"],tags:["Под ключ", "Без посредников"],telegram:"prim_autodealer",phone:"-",site:"",manager:"-",region:"Россия",featured:false,avatar:"ПРИ",color:"av-gray",yandex:"https://yandex.ru/maps/org/prim_avtodiler/45762870314/reviews/",google:"",gis2:"https://2gis.ru/vladivostok/firm/70000001075315231/tab/info",instagram:"https://www.instagram.com/prim_autodealer/",vk:"https://vk.com/prim_autodealer",avito:"",drom:"",autoru:"",max:"",youtube:"https://youtube.com/@prim_autodealer_",rutube:"",whatsapp:"https://wa.me/79141724142",link:"https://t.me/prim_autodealer",egrulVerified:false,egrulYear:""},
-  {id:86,name:"ES Transit",rating:4.5,reviews:0,years:1,delivered:"-",description:"Telegram канал. estransit23@yandex.ru. Москва, Тюменский пр., 5, стр. 2, этаж 4, офис 416.Прозрачные условия и гарантия качества. Срок доставки — до 20 дней. YouTube канал @estransit · 173 тыс. подпис",directions:["Не указано"],tags:["Импорт авто"],telegram:"yandex",phone:"70000001040",site:"https://estransit-premium.ru/",manager:"-",region:"Россия",featured:false,avatar:"ES",color:"av-gray",yandex:"",google:"",gis2:"https://2gis.ru/vladivostok/firm/70000001040793207/tab/reviews",instagram:"",vk:"https://vk.com/estransit",avito:"https://www.avito.ru/brands/393576613b9fa793f7c6f50f3895e508/all?sellerId=50e291a02a8e8fb0096e861ad1213d8d",drom:"https://auto.drom.ru/dobro/page2/",autoru:"",max:"",youtube:"https://youtube.com/@estransit",rutube:"",whatsapp:"",link:"https://estransit-premium.ru/",egrulVerified:false,egrulYear:""}
+  {id:81,name:"Прим Автодилер",rating:4.5,reviews:0,years:1,delivered:"-",description:"Заказ авто из Китая, Японии и Кореи ⚡️ Выгода от 300 тыс руб | Напрямую без посредников | Новые и б/у автомобили Японские, европейские, китайские авто под ключ с доставкой в ваш город 📍 Написать нам ⭢",directions:["Китай"],tags:["Под ключ", "Без посредников"],telegram:"prim_autodealer",phone:"-",site:"",manager:"-",region:"Россия",featured:false,avatar:"ПРИ",color:"av-gray",yandex:"https://yandex.ru/maps/org/prim_avtodiler/45762870314/reviews/",google:"",gis2:"https://2gis.ru/vladivostok/firm/70000001075315231/tab/info",instagram:"https://www.instagram.com/prim_autodealer/",vk:"https://vk.com/prim_autodealer",avito:"",drom:"",autoru:"",max:"",youtube:"https://youtube.com/@prim_autodealer_",rutube:"",whatsapp:"https://wa.me/79141724142",link:"https://t.me/prim_autodealer",egrulVerified:false,egrulYear:""}
 ];
 
 function renderCompanies(list) {

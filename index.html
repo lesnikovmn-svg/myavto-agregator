@@ -273,6 +273,30 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .calc-price { font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; color: var(--accent); }
 .calc-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
+/* Массовая заявка по всем компаниям (задача #49) — CloudPayments пока не
+   подключён, поэтому это заглушка: форма реально собирает данные заявки
+   и отправляет её в Telegram-бот (тот же приём, что и submitForm() для
+   заявок на размещение), а не проводит настоящий платёж. См. комментарий
+   у cloudPaymentsCheckout() в JS — там ровно то место, куда позже
+   вставляется реальный виджет. */
+.mass-request { max-width: 960px; margin: 0 auto; padding: 0 24px 32px; }
+.mr-card { background: linear-gradient(135deg, var(--accent-light), var(--surface)); border: 1px solid var(--accent); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); }
+.mr-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 18px; }
+.mr-title { font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+.mr-sub { font-size: 14px; color: var(--muted); max-width: 560px; }
+.mr-price-badge { background: var(--accent); color: #fff; padding: 10px 18px; border-radius: var(--radius); text-align: center; flex-shrink: 0; }
+.mr-price-badge .mr-price { font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; line-height: 1; }
+.mr-price-badge .mr-price-note { font-size: 11px; opacity: 0.85; margin-top: 3px; }
+.mr-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mr-form input, .mr-form select, .mr-form textarea { padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; background: var(--surface); }
+.mr-form textarea { grid-column: 1 / -1; resize: vertical; min-height: 44px; }
+.mr-form .mr-full { grid-column: 1 / -1; }
+.mr-submit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.mr-submit-row button { background: var(--accent); color: #fff; border: none; padding: 12px 26px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; }
+.mr-note { font-size: 12px; color: var(--hint); }
+.mr-success { display: none; background: var(--accent-light); color: var(--accent); border-radius: 8px; padding: 12px 16px; font-size: 13px; margin-top: 14px; }
+@media (max-width: 720px) { .mr-form { grid-template-columns: 1fr; } }
+
 /* TG banner */
 .tg-section { background: linear-gradient(135deg, #0088cc15, #0088cc05); border: 1px solid #0088cc30; border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
 .tg-inner { display: flex; align-items: center; gap: 12px; }
@@ -381,6 +405,44 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   <div class="stat"><div class="stat-n">8</div><div class="stat-l">Направлений импорта</div></div>
   <div class="stat"><div class="stat-n">9 стран</div><div class="stat-l">Покрытие СНГ</div></div>
 </div>
+
+<!-- Массовая заявка по всем компаниям сразу (задача #49) -->
+<section class="mass-request">
+  <div class="mr-card">
+    <div class="mr-head">
+      <div>
+        <div class="mr-title">📨 Разослать запрос сразу всем компаниям</div>
+        <div class="mr-sub">Одна заявка вместо N звонков. Мы соберём и разошлём твой запрос всем проверенным компаниям подходящего направления — ответы придут тебе напрямую, без беготни по каталогу.</div>
+      </div>
+      <div class="mr-price-badge">
+        <div class="mr-price">990 ₽</div>
+        <div class="mr-price-note">за подбор и рассылку</div>
+      </div>
+    </div>
+    <form class="mr-form" onsubmit="return submitMassRequest(event)">
+      <input id="mr-name" type="text" placeholder="Имя" required />
+      <input id="mr-phone" type="text" placeholder="Телефон / Telegram" required />
+      <select id="mr-direction" required>
+        <option value="" disabled selected>Направление</option>
+        <option value="Китай">Китай</option>
+        <option value="Корея">Корея</option>
+        <option value="Япония">Япония</option>
+        <option value="США">США</option>
+        <option value="ОАЭ">ОАЭ</option>
+        <option value="Европа">Европа</option>
+        <option value="Канада">Канада</option>
+        <option value="Грузия">Грузия</option>
+      </select>
+      <input id="mr-budget" type="text" placeholder="Бюджет, например 3.5 млн ₽" />
+      <textarea id="mr-model" class="mr-full" placeholder="Какую машину ищешь (марка, модель, год, комплектация)"></textarea>
+      <div class="mr-submit-row">
+        <button type="submit">Оплатить и отправить запрос</button>
+        <span class="mr-note">Без разъездов по сайтам компаний. Не нашли подходящий вариант за 14 дней — деньги вернём.</span>
+      </div>
+    </form>
+    <div class="mr-success" id="mr-success">Заявка сформирована — сейчас откроется Telegram, отправь сообщение боту, и мы разошлём её по компаниям.</div>
+  </div>
+</section>
 
 <!-- Main -->
 <div class="main" id="catalog">
@@ -626,6 +688,53 @@ function submitForm() {
   window.open("https://t.me/My_Avto_Agregator?text=" + msg, "_blank");
   document.getElementById("form-success").style.display = "block";
   ["f-name","f-phone","f-directions","f-site","f-desc"].forEach(id => document.getElementById(id).value = "");
+}
+
+// --- Массовая заявка по всем компаниям (задача #49) ---
+// CloudPayments ещё не подключён (реквизиты/публичный ID появятся позже) —
+// это ЗАГЛУШКА: cloudPaymentsCheckout() ничего не списывает по-настоящему,
+// просто помечает заявку как "к оплате" и продолжает поток. Когда
+// CloudPayments будет готов, здесь нужно заменить тело функции на
+// настоящий вызов виджета, например:
+//
+//   const widget = new cp.CloudPayments();
+//   widget.charge({ publicId: 'pk_...', amount: amountRub, currency: 'RUB',
+//     description: 'Услуга подбора — рассылка запроса по компаниям',
+//     accountId: phone }, onSuccess, onFail);
+//
+// и вызывать onNext() только из onSuccess (сейчас onNext() вызывается
+// сразу, без реальной оплаты).
+function cloudPaymentsCheckout(amountRub, phone, onNext) {
+  console.log("[CloudPayments STUB] онлайн-оплата ещё не подключена, пропускаю шаг оплаты", { amountRub, phone });
+  onNext();
+}
+
+function submitMassRequest(event) {
+  event.preventDefault();
+  const name = document.getElementById("mr-name").value.trim();
+  const phone = document.getElementById("mr-phone").value.trim();
+  const direction = document.getElementById("mr-direction").value;
+  const budget = document.getElementById("mr-budget").value.trim();
+  const model = document.getElementById("mr-model").value.trim();
+  if (!name || !phone || !direction) {
+    alert("Заполните имя, телефон/Telegram и направление");
+    return false;
+  }
+  cloudPaymentsCheckout(990, phone, () => {
+    const msg = encodeURIComponent(
+      "Заявка на рассылку по всем компаниям (990 ₽, MyAvtoAgregator.ru)\n\n" +
+      "Имя: " + name + "\n" +
+      "Контакт: " + phone + "\n" +
+      "Направление: " + direction + "\n" +
+      (budget ? "Бюджет: " + budget + "\n" : "") +
+      (model ? "Что ищет: " + model : "")
+    );
+    window.open("https://t.me/My_Avto_Agregator?text=" + msg, "_blank");
+    document.getElementById("mr-success").style.display = "block";
+    ["mr-name","mr-phone","mr-budget","mr-model"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("mr-direction").value = "";
+  });
+  return false;
 }
 </script>
 

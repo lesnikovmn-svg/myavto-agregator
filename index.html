@@ -206,9 +206,10 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .filter-options { display: flex; flex-direction: column; gap: 4px; }
 .filter-opt { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; padding: 4px 0; }
 .filter-opt input { accent-color: var(--accent); }
+.filter-count { color: var(--hint); font-size: 12px; margin-left: auto; }
 
 .geo-list { display: flex; flex-direction: column; gap: 4px; }
-.geo-item { font-size: 13px; color: var(--muted); padding: 5px 8px; border-radius: 6px; cursor: pointer; transition: background 0.1s; }
+.geo-item { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 5px 8px; border-radius: 6px; cursor: pointer; transition: background 0.1s; }
 .geo-item:hover, .geo-item.active { background: var(--accent-light); color: var(--accent); }
 
 /* Companies list */
@@ -375,7 +376,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 
 <!-- Stats -->
 <div class="stats-bar">
-  <div class="stat"><div class="stat-n">70</div><div class="stat-l">Компаний в каталоге</div></div>
+  <div class="stat"><div class="stat-n">85</div><div class="stat-l">Компаний в каталоге</div></div>
   <div class="stat"><div class="stat-n">29 110</div><div class="stat-l">Отзывов в каталоге</div></div>
   <div class="stat"><div class="stat-n">8</div><div class="stat-l">Направлений импорта</div></div>
   <div class="stat"><div class="stat-n">9 стран</div><div class="stat-l">Покрытие СНГ</div></div>
@@ -389,28 +390,29 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
     <div class="sidebar-section">
       <div class="sidebar-title">Направление</div>
       <div class="filter-options">
-        <label class="filter-opt"><input type="checkbox" checked> 🇨🇳 Китай (89)</label>
-        <label class="filter-opt"><input type="checkbox" checked> 🇰🇷 Корея (76)</label>
-        <label class="filter-opt"><input type="checkbox" checked> 🇯🇵 Япония (54)</label>
-        <label class="filter-opt"><input type="checkbox" checked> 🇺🇸 США (38)</label>
-        <label class="filter-opt"><input type="checkbox" checked> 🇨🇦 Канада (12)</label>
-        <label class="filter-opt"><input type="checkbox" checked> 🇬🇪 Грузия (8)</label>
-        <label class="filter-opt"><input type="checkbox" checked> 🇦🇪 ОАЭ (31)</label>
-        <label class="filter-opt"><input type="checkbox" checked> 🇪🇺 Европа (42)</label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="china"> 🇨🇳 Китай <span class="filter-count" data-dir-count="china"></span></label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="korea"> 🇰🇷 Корея <span class="filter-count" data-dir-count="korea"></span></label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="japan"> 🇯🇵 Япония <span class="filter-count" data-dir-count="japan"></span></label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="usa"> 🇺🇸 США <span class="filter-count" data-dir-count="usa"></span></label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="canada"> 🇨🇦 Канада <span class="filter-count" data-dir-count="canada"></span></label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="georgia"> 🇬🇪 Грузия <span class="filter-count" data-dir-count="georgia"></span></label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="uae"> 🇦🇪 ОАЭ <span class="filter-count" data-dir-count="uae"></span></label>
+        <label class="filter-opt"><input type="checkbox" checked data-dir="europe"> 🇪🇺 Европа <span class="filter-count" data-dir-count="europe"></span></label>
       </div>
     </div>
 
     <div class="sidebar-section">
       <div class="sidebar-title">География СНГ</div>
       <div class="geo-list">
-        <div class="geo-item active">🇷🇺 Россия</div>
-        <div class="geo-item">🇰🇿 Казахстан</div>
-        <div class="geo-item">🇧🇾 Беларусь</div>
-        <div class="geo-item">🇺🇿 Узбекистан</div>
-        <div class="geo-item">🇦🇲 Армения</div>
-        <div class="geo-item">🇬🇪 Грузия</div>
-        <div class="geo-item">🇦🇿 Азербайджан</div>
-        <div class="geo-item">🇰🇬 Киргизия</div>
+        <div class="geo-item active" data-geo="">🌍 Все страны <span class="filter-count" data-geo-count=""></span></div>
+        <div class="geo-item" data-geo="Россия">🇷🇺 Россия <span class="filter-count" data-geo-count="Россия"></span></div>
+        <div class="geo-item" data-geo="Казахстан">🇰🇿 Казахстан <span class="filter-count" data-geo-count="Казахстан"></span></div>
+        <div class="geo-item" data-geo="Беларусь">🇧🇾 Беларусь <span class="filter-count" data-geo-count="Беларусь"></span></div>
+        <div class="geo-item" data-geo="Узбекистан">🇺🇿 Узбекистан <span class="filter-count" data-geo-count="Узбекистан"></span></div>
+        <div class="geo-item" data-geo="Армения">🇦🇲 Армения <span class="filter-count" data-geo-count="Армения"></span></div>
+        <div class="geo-item" data-geo="Грузия">🇬🇪 Грузия <span class="filter-count" data-geo-count="Грузия"></span></div>
+        <div class="geo-item" data-geo="Азербайджан">🇦🇿 Азербайджан <span class="filter-count" data-geo-count="Азербайджан"></span></div>
+        <div class="geo-item" data-geo="Киргизия">🇰🇬 Киргизия <span class="filter-count" data-geo-count="Киргизия"></span></div>
       </div>
     </div>
 
@@ -640,14 +642,15 @@ function submitForm() {
 </footer>
 
 <script>
-function filterDir(el, dir) {
-  document.querySelectorAll('.dir').forEach(d => d.classList.remove('active'));
-  el.classList.add('active');
-}
-
+// filterDir переопределяется ниже (после того как определены COMPANIES/
+// applyFilters/renderCompanies) — там же настоящая реализация с фильтрацией.
+// doSearch просто прокручивает к каталогу и вызывает тот же applyFilters,
+// что и живой поиск при вводе (было: alert-заглушка "в реальной версии
+// здесь будет фильтрация" — баг, из-за которого поиск по кнопке/Enter не
+// работал, хотя ввод текста уже фильтровал список; 10.08.2026).
 function doSearch() {
-  const v = document.getElementById('mainSearch').value.trim();
-  if (v) alert('Поиск: ' + v + '\n\nВ реальной версии здесь будет фильтрация каталога');
+  applyFilters();
+  document.getElementById('catalog')?.scrollIntoView({behavior: 'smooth'});
 }
 
 document.getElementById('mainSearch').addEventListener('keydown', e => {
@@ -671,13 +674,6 @@ function calcPrice() {
 function toggleFaq(el) {
   el.classList.toggle('open');
 }
-
-document.querySelectorAll('.geo-item').forEach(g => {
-  g.addEventListener('click', function() {
-    document.querySelectorAll('.geo-item').forEach(x => x.classList.remove('active'));
-    this.classList.add('active');
-  });
-});
 </script>
 
 <script>
@@ -751,7 +747,22 @@ const COMPANIES = [
   {id:73,name:"American Auto",rating:4.5,reviews:0,years:13,delivered:"-",description:"Премиальные автомобили из США, Европы и Кореи под заказ, в наличии и в пути. Подбор, расчёт стоимости, доставка, таможня и оформление. Автосалон в Москве.",directions:["США", "Европа", "Корея"],tags:["В наличии", "Под заказ"],telegram:"+vh2LRsR6Y4VjNzNi",phone:"+7 991 640-51-59",site:"https://americanauto.ru/",manager:"-",region:"Россия",featured:false,avatar:"AME",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"",vk:"https://vk.com/americanautomsk",avito:"",drom:"",autoru:"",max:"",youtube:"https://www.youtube.com/@americanauto_msk",rutube:"https://rutube.ru/channel/42939696/",whatsapp:"",link:"https://americanauto.ru/",egrulVerified:true,egrulYear:"2023"},
   {id:71,name:"https://aaajapan.com/",rating:4.5,reviews:0,years:1,delivered:"-",description:"Ниже представлены марки автомобилей, которые вы можете приобрести с аукциона в Японии. На этой странице подобраны все автоаукционы, с которых вы можете приобрести машину онлайн. Для просмотра информац",directions:["Япония"],tags:["Аукционы"],telegram:"",phone:"74655517563",site:"https://ru.aaajapan.com/auctions",manager:"-",region:"Россия",featured:false,avatar:"HTT",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"https://www.instagram.com/all_auto_auctions_japan",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://ru.aaajapan.com/auctions",egrulVerified:false,egrulYear:""},
   {id:72,name:"China.Sferacar",rating:4.5,reviews:0,years:1,delivered:"-",description:"Продажа Авто из Китая под заказ - Китайские автомобили - «СфераГрупп».Авто под заказ. В этом разделе вы можете ознакомиться с ассортиментом популярных моделей из Китая, а также количеством проданных в",directions:["Китай"],tags:["Импорт авто"],telegram:"",phone:"-",site:"https://china.sferacar.ru/",manager:"-",region:"Россия",featured:false,avatar:"CHI",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"https://www.instagram.com/sferacar.ru_china/",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://china.sferacar.ru/",egrulVerified:false,egrulYear:""},
-  {id:73,name:"СЕВЕР АВТО",rating:4.5,reviews:0,years:18,delivered:"-",description:"СЕВЕР АВТО Авто под заказ из Китая, Кореи и ЯпонииДоставка авто от 20 до 45 дней.Подписывайтесь на наш Telegram и MAX-канал. Будьте первыми, кто узнает о выгодных...",directions:["Не указано"],tags:["Импорт авто"],telegram:"",phone:"88006005095",site:"https://severdv.online/",manager:"-",region:"Россия",featured:false,avatar:"СЕВ",color:"av-gray",yandex:"",google:"",gis2:"https://2gis.ru/spb/firm/70000001066977769",instagram:"http://instagram.com/severdv.pro",vk:"https://vk.com/id517064194",avito:"https://www.avito.ru/brands/severdv.pro/all",drom:"https://auto.drom.ru/sever_dv/",autoru:"https://ptz-sever-auto.ru/",max:"https://max.ru/severdvpro",youtube:"",rutube:"https://rutube.ru/channel/30857495",whatsapp:"https://wa.me/79089734464",link:"https://severdv.online/",egrulVerified:true,egrulYear:"2015"}
+  {id:73,name:"СЕВЕР АВТО",rating:4.5,reviews:0,years:18,delivered:"-",description:"СЕВЕР АВТО Авто под заказ из Китая, Кореи и ЯпонииДоставка авто от 20 до 45 дней.Подписывайтесь на наш Telegram и MAX-канал. Будьте первыми, кто узнает о выгодных...",directions:["Не указано"],tags:["Импорт авто"],telegram:"",phone:"88006005095",site:"https://severdv.online/",manager:"-",region:"Россия",featured:false,avatar:"СЕВ",color:"av-gray",yandex:"",google:"",gis2:"https://2gis.ru/spb/firm/70000001066977769",instagram:"http://instagram.com/severdv.pro",vk:"https://vk.com/id517064194",avito:"https://www.avito.ru/brands/severdv.pro/all",drom:"https://auto.drom.ru/sever_dv/",autoru:"https://ptz-sever-auto.ru/",max:"https://max.ru/severdvpro",youtube:"",rutube:"https://rutube.ru/channel/30857495",whatsapp:"https://wa.me/79089734464",link:"https://severdv.online/",egrulVerified:true,egrulYear:"2015"},
+  {id:72,name:"Telegram – a new era of messaging",rating:4.5,reviews:0,years:1,delivered:"-",description:"Мы профессионально подбираем, проверяем и доставляем авто с европейских аукционов и автосалонов: - Прозрачная история - Полное сопровождение сделки - Гарантия юридической чистоты",directions:["Не указано"],tags:["Аукционы"],telegram:"s",phone:"-",site:"https://t.me/s/auto_import_cars_ru",manager:"-",region:"Россия",featured:false,avatar:"TEL",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://t.me/s/auto_import_cars_ru",egrulVerified:false,egrulYear:""},
+  {id:73,name:"Аукционы Японии Онлайн",rating:4.5,reviews:0,years:1,delivered:"-",description:"Онлайн аукционы автомобилей в Японии без регистрации на русском языке с ценами в рублях.",directions:["Не указано"],tags:["Аукционы"],telegram:"",phone:"-",site:"https://jpstar.ru/auktsiony/",manager:"-",region:"Россия",featured:false,avatar:"АУК",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"https://www.instagram.com/Japan_auction/",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://jpstar.ru/auktsiony/",egrulVerified:false,egrulYear:""},
+  {id:74,name:"JpAuc.ru",rating:4.5,reviews:0,years:5,delivered:"-",description:"Купить авто с аукциона Японии под заказ: живые лоты без регистрации, аукционные листы, марка, модель, кузов, оценка, цена и дата ближайших торгов. Доставка авто из Японии во Владивосток и по России.",directions:["Не указано"],tags:["Аукционы"],telegram:"",phone:"79089981010",site:"https://jpauc.ru/japan/",manager:"-",region:"Россия",featured:false,avatar:"JPA",color:"av-gray",yandex:"https://yandex.com/maps/org/jpauc/46610605484/reviews/",google:"",gis2:"https://2gis.ru/vladivostok/firm/70000001036219794/tab/reviews",instagram:"",vk:"https://vk.com/jpauc",avito:"",drom:"https://auto.drom.ru/dealer13773/",autoru:"",max:"",youtube:"https://youtube.com/channel/UCIQliPLC9z9P6wi-tnLEB9g",rutube:"",whatsapp:"https://wa.me/79089981010",link:"https://jpauc.ru/japan/",egrulVerified:true,egrulYear:"2018"},
+  {id:75,name:"Avtoban.Org",rating:4.5,reviews:0,years:1,delivered:"-",description:"Покупка автомобилей с аукционов Японии с доставкой в Москву, online аукционы с фото на русском, статистика японских аукционов. Работаем по договору, даём гарантию на авто, скидываем фотоотчёты.",directions:["Не указано"],tags:["Аукционы"],telegram:"",phone:"-",site:"https://avtoban.org/",manager:"-",region:"Россия",featured:false,avatar:"AVT",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"https://www.instagram.com/avtoban.ru/",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://avtoban.org/",egrulVerified:false,egrulYear:""},
+  {id:76,name:"Spb.Westmotors",rating:4.5,reviews:0,years:6,delivered:"-",description:"Привозим автомобили в Санкт-Петербург из США, Китая, Кореи, Европы и ОАЭ под ключ. ✓ Офис в Санкт-Петербурге ✓ Официальный договор ✓ Растаможка ✓ Без скрытых ...",directions:["США", "ОАЭ"],tags:["Под ключ", "Растаможка"],telegram:"",phone:"79819147027",site:"https://spb.westmotors.ru/",manager:"-",region:"Россия",featured:false,avatar:"SPB",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"https://www.instagram.com/westmotors.by",vk:"https://vk.com/westmotorsby",avito:"",drom:"",autoru:"",max:"https://max.ru/id5003140189_biz",youtube:"https://www.youtube.com/channel/UCvN6YPNUPxMsTH9q5xD55-g",rutube:"",whatsapp:"https://wa.me/79633027027",link:"https://spb.westmotors.ru/",egrulVerified:true,egrulYear:"2020"},
+  {id:77,name:"West-Motors.De",rating:4.5,reviews:0,years:1,delivered:"-",description:"Купить авто из США, Китая, Кореи, Европы и ОАЭ в Германию, Германию под ключ. ✓ Официальный договор ✓ Растаможка ✓ Доставка под заказ ✓ Без скрытых комиссий.",directions:["США", "ОАЭ"],tags:["Под ключ", "Растаможка"],telegram:"",phone:"-",site:"https://west-motors.de/",manager:"-",region:"Россия",featured:false,avatar:"WES",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://west-motors.de/",egrulVerified:false,egrulYear:""},
+  {id:78,name:"Emirate Cars",rating:4.5,reviews:0,years:16,delivered:"-",description:"Мы занимаемся подбором и выкупом автомобилей с аукционов США под ключ.",directions:["США", "ОАЭ"],tags:["Под ключ", "Аукционы"],telegram:"",phone:"71502987269",site:"https://emirate-cars.com/",manager:"-",region:"Россия",featured:false,avatar:"EMI",color:"av-gray",yandex:"https://yandex.ru/maps/org/emirate_cars/37214759498/",google:"",gis2:"",instagram:"https://www.instagram.com/ula_dubai",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"https://www.youtube.com/@ula_dubai",rutube:"",whatsapp:"",link:"https://emirate-cars.com/",egrulVerified:false,egrulYear:""},
+  {id:79,name:"IXBT.com",rating:4.5,reviews:0,years:29,delivered:"-",description:"Импорт новых легковых автомобилей в Россию резко вырос. В июле 2026 года в страну ввезли 44,4 тыс. машин возрастом до трех лет — на 57% больше, чем годом ранее. В июле 2025 года импорт составил 28,3 т",directions:["Япония"],tags:["Параллельный импорт"],telegram:"",phone:"72988576485",site:"https://www.ixbt.com/news/2026/08/09/427195-mazda-cx-5-glavnyi-avtomobil-parallelnogo-importa-v-rossiiu-nissan-qashqai-i-toyota-rav4-v-top-3.html",manager:"-",region:"Россия",featured:false,avatar:"IXB",color:"av-gray",yandex:"",google:"",gis2:"https://2gis.ru/moscow/firm/4504127908793474/tab/reviews",instagram:"https://www.instagram.com/ixbtcom/",vk:"https://vk.com/ixbt_official",avito:"",drom:"",autoru:"",max:"",youtube:"https://www.youtube.com/c/IxbtTV",rutube:"https://rutube.ru/channel/23474179",whatsapp:"",link:"https://www.ixbt.com/news/2026/08/09/427195-mazda-cx-5-glavnyi-avtomobil-parallelnogo-importa-v-rossiiu-nissan-qashqai-i-toyota-rav4-v-top-3.html",egrulVerified:false,egrulYear:""},
+  {id:80,name:"РОЛЬФ",rating:4.5,reviews:0,years:35,delivered:"-",description:"Рольф - крупнейший автодилер по продаже авто в России. Более 72 брендов новых и подержанных автомобилей. Специальные предложения и акции.",directions:["Не указано"],tags:["Импорт авто"],telegram:"rolf_official_bot",phone:"84556095311",site:"https://www.rolf.ru/",manager:"-",region:"Россия",featured:false,avatar:"РОЛ",color:"av-gray",yandex:"",google:"",gis2:"https://2gis.ru/moscow/firm/70000001055851271",instagram:"https://www.instagram.com/rolfcompany/",vk:"https://vk.com/rolfcompany",avito:"https://www.avito.ru/all/avtomobili?q=рольф",drom:"https://auto.drom.ru/rolf-himki/",autoru:"https://auto.ru/dealer-net/rolf/",max:"https://max.ru/rolf_company",youtube:"https://www.youtube.com/c/ROLFCompany",rutube:"",whatsapp:"",link:"https://www.rolf.ru/",egrulVerified:true,egrulYear:"2021"},
+  {id:81,name:"Прим Автодилер | Заказ авто",rating:4.5,reviews:0,years:1,delivered:"-",description:"Заказ авто из Китая, Японии и Кореи ⚡️ Выгода от 300 тыс руб | Напрямую без посредников | Новые и б/у автомобили Японские, европейские, китайские авто под ключ с доставкой в ваш город 📍 Написать нам ⭢",directions:["Китай"],tags:["Под ключ", "Без посредников"],telegram:"prim_autodealer",phone:"-",site:"https://telegram.me/prim_autodealer",manager:"-",region:"Россия",featured:false,avatar:"ПРИ",color:"av-gray",yandex:"https://yandex.ru/maps/org/prim_avtodiler/45762870314/reviews/",google:"",gis2:"https://2gis.ru/vladivostok/firm/70000001075315231/tab/info",instagram:"https://www.instagram.com/prim_autodealer/",vk:"https://vk.com/prim_autodealer",avito:"",drom:"",autoru:"",max:"",youtube:"https://youtube.com/@prim_autodealer_",rutube:"",whatsapp:"https://wa.me/79141724142",link:"https://telegram.me/prim_autodealer",egrulVerified:false,egrulYear:""},
+  {id:82,name:"Telegram каналы",rating:4.5,reviews:0,years:1,delivered:"-",description:"148K Самый крупный и активный канал Казани и РТ Главные новости и события Казани и Татарстана Предложить новость анонимно или обратиться по рекламе можно @region116_dtp_official_bot",directions:["Не указано"],tags:["Импорт авто"],telegram:"region116_dtp_official_bot",phone:"79139175757",site:"https://telno.ru/category/auto",manager:"-",region:"Россия",featured:false,avatar:"TEL",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"https://instagram.com/garage__54",vk:"https://vk.com/iamehanik",avito:"",drom:"",autoru:"",max:"",youtube:"https://www.youtube.com/channel/UCBByzLy3MGJT8UMVLYLScNg",rutube:"",whatsapp:"",link:"https://telno.ru/category/auto",egrulVerified:false,egrulYear:""},
+  {id:83,name:"Готовый бизнес: Telegram-бот для проверки истории авто / по VIN / по НОМЕРУ",rating:4.5,reviews:0,years:15,delivered:"-",description:"Готовый бизнес: Telegram-бот для проверки истории авто / по VIN / по НОМЕРУ · URL скрытЗапросить URLПубличный аукцион",directions:["Не указано"],tags:["Аукционы"],telegram:"",phone:"74349898116",site:"https://www.telderi.ru/ru/viewtelegrambot/1525",manager:"-",region:"Россия",featured:false,avatar:"ГОТ",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"",vk:"https://vk.com/telderi",avito:"",drom:"",autoru:"",max:"",youtube:"https://www.youtube.com/@TelderiChannel",rutube:"",whatsapp:"",link:"https://www.telderi.ru/ru/viewtelegrambot/1525",egrulVerified:false,egrulYear:""},
+  {id:84,name:"VagVin",rating:4.5,reviews:0,years:1,delivered:"-",description:"Узнайте всё об автомобиле перед покупкой: ДТП, реальный пробег, залоги, количество владельцев и комплектация. Для Audi, Volkswagen, Skoda, BMW, Mercedes, Porsche, Toyota, Kia и других марок. Теперь до",directions:["Корея", "Япония", "Европа"],tags:["Импорт авто"],telegram:"",phone:"7985-122-17-41",site:"https://vagvin.ru/promo",manager:"-",region:"Россия",featured:false,avatar:"VAG",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"",vk:"https://vk.com/vinvag_history",avito:"",drom:"",autoru:"",max:"https://max.ru/id344108952246_bot",youtube:"",rutube:"",whatsapp:"https://wa.me/996500014335",link:"https://vagvin.ru/promo",egrulVerified:false,egrulYear:""},
+  {id:85,name:"TELEGRAMCAT.BLOG",rating:4.5,reviews:0,years:1,delivered:"-",description:"December 6, 2025 - Проверяйте все данные онлайн с помощью Автотека. Просто добавьте бота в Telegram и начните использовать его функции прямо сейчас.",directions:["Не указано"],tags:["Импорт авто"],telegram:"",phone:"76923076923",site:"https://telegramcat.blog/telegramm-boty/bot-dlya-avtomobilya/proverka-avtomobilya-po-gosnomeru/",manager:"-",region:"Россия",featured:false,avatar:"TEL",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"https://www.instagram.com/lovetelegramcat/",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",link:"https://telegramcat.blog/telegramm-boty/bot-dlya-avtomobilya/proverka-avtomobilya-po-gosnomeru/",egrulVerified:false,egrulYear:""},
+  {id:86,name:"ES Transit",rating:4.5,reviews:0,years:1,delivered:"-",description:"Telegram канал. estransit23@yandex.ru. Москва, Тюменский пр., 5, стр. 2, этаж 4, офис 416.Прозрачные условия и гарантия качества. Срок доставки — до 20 дней. YouTube канал @estransit · 173 тыс. подпис",directions:["Не указано"],tags:["Импорт авто"],telegram:"yandex",phone:"70000001040",site:"https://estransit-premium.ru/",manager:"-",region:"Россия",featured:false,avatar:"ES",color:"av-gray",yandex:"",google:"",gis2:"https://2gis.ru/vladivostok/firm/70000001040793207/tab/reviews",instagram:"",vk:"https://vk.com/estransit",avito:"https://www.avito.ru/brands/393576613b9fa793f7c6f50f3895e508/all?sellerId=50e291a02a8e8fb0096e861ad1213d8d",drom:"https://auto.drom.ru/dobro/page2/",autoru:"",max:"",youtube:"https://youtube.com/@estransit",rutube:"",whatsapp:"",link:"https://estransit-premium.ru/",egrulVerified:false,egrulYear:""}
 ];
 
 function renderCompanies(list) {
@@ -821,7 +832,18 @@ function renderCompanies(list) {
   document.querySelector('.companies-title').textContent = `Компании в каталоге (${list.length})`;
 }
 
+// DIR_MAP — общий словарь ключ->название направления, используется и
+// шапкой (.dir чипы, одиночный выбор), и сайдбаром (чекбоксы, множественный
+// выбор). checkedDirs по умолчанию = все ключи (все чекбоксы отмечены =
+// сайдбар не сужает список, как и было визуально раньше) — но раньше
+// чекбоксы были просто картинкой, ни к чему не подключённой, с ВЫДУМАННЫМИ
+// цифрами вроде "Китай (89)" (реальных компаний с Китаем — на порядок
+// меньше). Теперь и подключены, и цифры настоящие, считаются из COMPANIES.
+const DIR_MAP = {china:'Китай',korea:'Корея',japan:'Япония',usa:'США',uae:'ОАЭ',europe:'Европа',canada:'Канада',georgia:'Грузия'};
 let activeDir = 'all';
+let activeGeo = 'all';
+let checkedDirs = new Set(Object.keys(DIR_MAP));
+
 function filterDir(el, dir) {
   document.querySelectorAll('.dir').forEach(d=>d.classList.remove('active'));
   el.classList.add('active');
@@ -830,9 +852,15 @@ function filterDir(el, dir) {
 }
 
 function applyFilters() {
-  const map = {china:'Китай',korea:'Корея',japan:'Япония',usa:'США',uae:'ОАЭ',europe:'Европа',canada:'Канада',georgia:'Грузия'};
   let list = COMPANIES;
-  if (activeDir !== 'all' && map[activeDir]) list = list.filter(c=>c.directions.includes(map[activeDir]));
+  if (activeDir !== 'all' && DIR_MAP[activeDir]) list = list.filter(c=>c.directions.includes(DIR_MAP[activeDir]));
+  if (checkedDirs.size < Object.keys(DIR_MAP).length) {
+    const allowed = [...checkedDirs].map(k=>DIR_MAP[k]);
+    list = list.filter(c=>c.directions.some(d=>allowed.includes(d)));
+  }
+  // c.region — свободный текст ("Москва, вся Россия", "Грузия, весь мир" и
+  // т.п.), поэтому сверяем подстрокой, а не точным совпадением.
+  if (activeGeo !== 'all') list = list.filter(c=>(c.region||'').includes(activeGeo));
   const q = document.getElementById('mainSearch')?.value.toLowerCase();
   if (q) list = list.filter(c=>c.name.toLowerCase().includes(q)||c.description.toLowerCase().includes(q)||c.directions.some(d=>d.toLowerCase().includes(q)));
   renderCompanies(list);
@@ -845,9 +873,44 @@ function revealPhone(btn) {
   btn.outerHTML = `<a href="tel:${phone.replace(/[^\d+]/g,'')}" class="phone-reveal phone-revealed">📞 ${phone}</a>`;
 }
 
+// Сайдбар "Направление" (чекбоксы) и "География СНГ" (geo-item) —
+// раньше были чисто декоративными: у чекбоксов не было ни одного
+// обработчика вообще (клик ничего не делал), а geo-item только
+// подсвечивал выбранную страну, не трогая список компаний. Пользователь
+// заметил это как баг ("галочку ставишь — фильтрация не происходит") —
+// 10.08.2026, подключено по-настоящему + счётчики теперь настоящие,
+// а не выдуманные.
+function initSidebarFilters() {
+  document.querySelectorAll('.filter-opt input[type=checkbox]').forEach(cb => {
+    const dir = cb.dataset.dir;
+    if (!dir) return;
+    const countEl = cb.closest('.filter-opt')?.querySelector('.filter-count');
+    if (countEl) countEl.textContent = '(' + COMPANIES.filter(c=>c.directions.includes(DIR_MAP[dir])).length + ')';
+    cb.addEventListener('change', () => {
+      if (cb.checked) checkedDirs.add(dir); else checkedDirs.delete(dir);
+      applyFilters();
+    });
+  });
+  document.querySelectorAll('.geo-item').forEach(item => {
+    const geo = item.dataset.geo || '';
+    const countEl = item.querySelector('.filter-count');
+    if (countEl) {
+      const count = geo ? COMPANIES.filter(c=>(c.region||'').includes(geo)).length : COMPANIES.length;
+      countEl.textContent = '(' + count + ')';
+    }
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.geo-item').forEach(i=>i.classList.remove('active'));
+      item.classList.add('active');
+      activeGeo = geo || 'all';
+      applyFilters();
+    });
+  });
+}
+
 document.getElementById('mainSearch')?.addEventListener('input', applyFilters);
 window.addEventListener('DOMContentLoaded', ()=>{
   renderCompanies(COMPANIES);
+  initSidebarFilters();
   document.getElementById('companies-list').addEventListener('click', function(e){
     var card = e.target.closest('.company-card');
     if(card){

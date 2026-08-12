@@ -321,6 +321,14 @@ def poll_loop():
                 r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25, proxies=PROXIES)
                 updates = r.json().get("result", [])
                 print(f"[bot] getUpdates ответил: status={r.status_code}, апдейтов={len(updates)}")
+                for u in updates:
+                    # 12.08.2026: печатаем СЫРОЙ апдейт целиком, даже если
+                    # это не обычное "message" (например, my_chat_member —
+                    # событие о том, что бота добавили/повысили в группе).
+                    # Раньше такие апдейты молча пропускались (if not msg:
+                    # continue) без единой строки в логе — не давало понять,
+                    # что вообще происходит в группе.
+                    print(f"[bot] сырой апдейт: {json.dumps(u, ensure_ascii=False)}")
             except Exception as e:
                 print(f"[bot] getUpdates ошибка: {e}")
                 time.sleep(5)

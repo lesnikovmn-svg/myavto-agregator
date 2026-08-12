@@ -1,5 +1,7 @@
 credentials.json
 agent_config.env
+bot_config.env
+bot_state.json
 __pycache__/
 *.pyc
 main

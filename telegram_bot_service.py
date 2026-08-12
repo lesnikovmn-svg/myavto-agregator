@@ -35,6 +35,7 @@
     BOT_USERNAME=<username бота без @>
     PROXY_URL=<опционально, см. ниже>
     ADMIN_CHAT_ID=<опционально, см. ниже>
+    ADMIN_GROUP_CHAT_ID=<опционально, см. ниже>
 
 PROXY_URL — обход блокировки api.telegram.org с российских VPS (см.
 PROJECT_STATE.md, раздел "Telegram-бот не достучаться до api.telegram.org
@@ -55,6 +56,13 @@ ADMIN_CHAT_ID — личный chat_id владельца в Telegram (12.08.202
 клиентом, онбординг компании, ответ компании клиенту) дублируется в
 личку владельцу через notify_admin(). Если не задан — уведомления просто
 не отправляются, остальной функционал не страдает.
+
+ADMIN_GROUP_CHAT_ID — то же самое, но в рабочую группу владельца вместо
+(или вместе с) личного чата — можно задать оба сразу, уйдёт в оба места.
+chat_id группы узнать через сам бот: написать любое сообщение (лучше
+команду вроде /start) в группу, где бот уже состоит участником, и
+посмотреть в `journalctl -u telegram-bot -f` строку "[bot] сообщение из
+chat_id=...", там же будет type=group/supergroup и title группы.
 
 Запуск (для разработки):
     python3 telegram_bot_service.py
@@ -119,11 +127,19 @@ PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
 # @userinfobot). Если не задан — уведомления просто не отправляются,
 # остальной функционал не страдает.
 ADMIN_CHAT_ID = BOT_CONFIG.get("ADMIN_CHAT_ID", "").strip()
+# 12.08.2026: владелец попросил дублировать переписку клиент<->компания
+# в свою рабочую группу (не общую с клиентами/компаниями — это отдельная
+# закрытая группа только для владельца, ссылка t.me/+QSlupk86OJBmYTky).
+# chat_id группы отрицательный (или -100... для супергрупп) — узнаётся
+# через диагностический print выше (написать что-нибудь в группу, глянуть
+# journalctl). Можно задать одновременно с ADMIN_CHAT_ID — уйдёт в оба.
+ADMIN_GROUP_CHAT_ID = BOT_CONFIG.get("ADMIN_GROUP_CHAT_ID", "").strip()
 
 
 def notify_admin(text):
-    if ADMIN_CHAT_ID:
-        tg_send(ADMIN_CHAT_ID, f"🔔 {text}")
+    for dest in (ADMIN_CHAT_ID, ADMIN_GROUP_CHAT_ID):
+        if dest:
+            tg_send(dest, f"🔔 {text}")
 
 SHEET_CONFIG = {}
 with open("agent_config.env") as f:
@@ -325,6 +341,12 @@ def poll_loop():
                     chat_id = msg["chat"]["id"]
                     username = msg["from"].get("username", "")
                     text = msg.get("text", "")
+                    # 12.08.2026: диагностика для поиска chat_id рабочей
+                    # группы (владелец хочет получать туда переписку
+                    # клиент<->компания) — печатаем тип/название чата для
+                    # КАЖДОГО входящего сообщения, не только обработанных.
+                    print(f"[bot] сообщение из chat_id={chat_id}, type={msg['chat'].get('type')}, "
+                          f"title={msg['chat'].get('title', '')}, from=@{username}, text={text!r}")
                     try:
                         if text.startswith("/start"):
                             parts = text.split(maxsplit=1)

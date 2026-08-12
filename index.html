@@ -720,7 +720,7 @@ function cloudPaymentsCheckout(amountRub, phone, email, onNext) {
 // есть fallback на старое поведение (диплинк с готовым текстом в общий
 // аккаунт), чтобы форма не ломалась до деплоя.
 const MASS_REQUEST_API = "https://myavto-agregator.ru/api/mass-request";
-const BOT_USERNAME = "My_Avto_Agregator"; // TODO: заменить на реальный username бота после создания через BotFather и деплоя backend'а
+const BOT_USERNAME = "MyAvtoAgregator_bot"; // реальный бот создан 12.08.2026, ждём деплоя backend'а на VPS (см. deploy/DEPLOY_BOT.md)
 
 function submitMassRequest(event) {
   event.preventDefault();

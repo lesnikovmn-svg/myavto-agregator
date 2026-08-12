@@ -718,26 +718,27 @@ JS шлёт POST на `/api/mass-request` → бэкенд создаёт зая
 рассылка → пересылка ответа → валидация) работает корректно.
 
 **Что нужно сделать пользователю, чтобы это заработало на проде:**
-1. Создать бота через @BotFather в Telegram, получить токен.
+1. ✅ Создать бота через @BotFather в Telegram, получить токен. Сделано
+   12.08.2026 — бот `@MyAvtoAgregator_bot`.
 2. На Маке создать `bot_config.env` рядом с остальными скриптами (шаблон
    уже лежит в репозитории, НЕ в git) — вписать `BOT_TOKEN` и
    `BOT_USERNAME`.
 3. Задеплоить `telegram_bot_service.py` на VPS (89.108.70.185, там уже
-   nginx для сайта): скопировать файл + `bot_config.env` +
-   `agent_config.env` + `credentials.json` на VPS, поставить
-   `pip install flask requests gspread google-auth`, запустить как
-   systemd-сервис (слушает `0.0.0.0:5055`), и добавить в nginx
-   reverse-proxy `location /api/ { proxy_pass http://127.0.0.1:5055; }`
-   для домена myavto-agregator.ru — попроси Claude помочь с конкретными
-   командами/конфигом, когда дойдёт до этого шага.
-4. В `index.html` заменить `BOT_USERNAME` (сейчас placeholder
-   "My_Avto_Agregator") на реальный username нового бота.
+   nginx для сайта) — пошаговая инструкция уже готова в
+   `deploy/DEPLOY_BOT.md` (+ `deploy/telegram-bot.service` systemd-юнит,
+   `deploy/nginx-api-snippet.conf` конфиг reverse-proxy). Коротко:
+   скопировать секреты (`bot_config.env`/`agent_config.env`/
+   `credentials.json`) на VPS вручную (в git не попадают), поставить
+   `pip install flask requests gspread google-auth`, поднять как
+   systemd-сервис, добавить `location /api/` в nginx.
+4. ✅ В `index.html` заменить `BOT_USERNAME` на реальный —
+   `MyAvtoAgregator_bot` (12.08.2026).
 5. Онбординг уже существующих компаний в каталоге — разослать им ссылку
-   на бота (t.me/<бот>) и попросить нажать /start ОДИН раз, иначе бот не
-   сможет им писать (ограничение самого Telegram: бот не может первым
-   написать тому, кто не нажимал /start).
+   на бота (t.me/MyAvtoAgregator_bot) и попросить нажать /start ОДИН раз,
+   иначе бот не сможет им писать (ограничение самого Telegram: бот не
+   может первым написать тому, кто не нажимал /start).
 
-Пока это не сделано — сайт работает по старому fallback (диплинк с
+Пока шаг 3 не сделан — сайт работает по старому fallback (диплинк с
 готовым текстом в общий аккаунт @My_Avto_Agregator), ничего не сломано.
 
 ## Ещё один прогон агента, ещё 18 новых проблемных строк (10.08.2026)

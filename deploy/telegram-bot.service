@@ -1,0 +1,17 @@
+[Unit]
+Description=MyAvtoAgregator Telegram bot backend (mass-request API + polling)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+# Скрипт сам читает bot_config.env/agent_config.env/credentials.json
+# по относительному пути из текущей директории — поэтому важно, чтобы
+# WorkingDirectory совпадала с местом, куда задеплоены эти файлы.
+WorkingDirectory=/var/www/myavto-agregator
+ExecStart=/usr/bin/python3 /var/www/myavto-agregator/telegram_bot_service.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

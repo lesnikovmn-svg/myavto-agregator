@@ -738,6 +738,15 @@ function submitMassRequest(event) {
     alert("Укажите email — на него онлайн-касса пришлёт электронный чек (требование 54-ФЗ)");
     return false;
   }
+  // Открываем вкладку СИНХРОННО, сразу по клику — это единственный момент,
+  // когда браузер считает window.open() "инициированным пользователем" и не
+  // блокирует его как всплывающее окно. Если открыть окно ПОСЛЕ ответа
+  // fetch() (как было раньше), к этому моменту контекст клика уже утерян и
+  // Safari/Chrome тихо блокируют окно — снаружи выглядит как "нажал
+  // отправить, ничего не произошло", хотя заявка на сервере создаётся
+  // успешно (баг найден 12.08.2026 через живой тест с пользователем).
+  // Адрес подставляем в него позже, когда узнаем request_id/fallback-текст.
+  const tgWindow = window.open("", "_blank");
   cloudPaymentsCheckout(990, phone, email, () => {
     fetch(MASS_REQUEST_API, {
       method: "POST",
@@ -746,7 +755,8 @@ function submitMassRequest(event) {
     })
       .then(r => { if (!r.ok) throw new Error("backend error"); return r.json(); })
       .then(data => {
-        window.open("https://t.me/" + (data.bot_username || BOT_USERNAME) + "?start=req_" + data.request_id, "_blank");
+        const url = "https://t.me/" + (data.bot_username || BOT_USERNAME) + "?start=req_" + data.request_id;
+        if (tgWindow) tgWindow.location.href = url; else window.open(url, "_blank");
       })
       .catch(() => {
         // Бэкенд ещё не задеплоен/недоступен — старое поведение как fallback,
@@ -760,7 +770,8 @@ function submitMassRequest(event) {
           (budget ? "Бюджет: " + budget + "\n" : "") +
           (model ? "Что ищет: " + model : "")
         );
-        window.open("https://t.me/My_Avto_Agregator?text=" + msg, "_blank");
+        const url = "https://t.me/My_Avto_Agregator?text=" + msg;
+        if (tgWindow) tgWindow.location.href = url; else window.open(url, "_blank");
       })
       .finally(() => {
         document.getElementById("mr-success").style.display = "block";

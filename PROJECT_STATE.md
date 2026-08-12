@@ -723,14 +723,20 @@ JS шлёт POST на `/api/mass-request` → бэкенд создаёт зая
 2. На Маке создать `bot_config.env` рядом с остальными скриптами (шаблон
    уже лежит в репозитории, НЕ в git) — вписать `BOT_TOKEN` и
    `BOT_USERNAME`.
-3. Задеплоить `telegram_bot_service.py` на VPS (89.108.70.185, там уже
-   nginx для сайта) — пошаговая инструкция уже готова в
-   `deploy/DEPLOY_BOT.md` (+ `deploy/telegram-bot.service` systemd-юнит,
-   `deploy/nginx-api-snippet.conf` конфиг reverse-proxy). Коротко:
-   скопировать секреты (`bot_config.env`/`agent_config.env`/
-   `credentials.json`) на VPS вручную (в git не попадают), поставить
-   `pip install flask requests gspread google-auth`, поднять как
-   systemd-сервис, добавить `location /api/` в nginx.
+3. ✅ Задеплоено на VPS (89.108.70.185) 12.08.2026: секреты
+   (`bot_config.env`/`agent_config.env`/`credentials.json`) скопированы
+   вручную через `scp`, зависимости поставлены (`pip3 install
+   --break-system-packages flask requests gspread google-auth` — на
+   Ubuntu 26.04 системный pip требует этот флаг), сервис поднят через
+   systemd (`deploy/telegram-bot.service` → `/etc/systemd/system/`,
+   `systemctl enable/start telegram-bot`, статус `active (running)`, в
+   логе `[bot] поллинг запущен` без ошибок). В nginx-конфиг
+   (`/etc/nginx/sites-enabled/myavto-agregator`) добавлен `location
+   /api/` → `proxy_pass http://127.0.0.1:5055/api/` (бэкап конфига
+   сохранён рядом как `.bak`). Проверено curl'ом на проде:
+   `POST https://myavto-agregator.ru/api/mass-request` возвращает
+   `{"bot_username":"MyAvtoAgregator_bot","request_id":"..."}` — бэкенд
+   реально работает.
 4. ✅ В `index.html` заменить `BOT_USERNAME` на реальный —
    `MyAvtoAgregator_bot` (12.08.2026).
 5. Онбординг уже существующих компаний в каталоге — разослать им ссылку
@@ -738,8 +744,13 @@ JS шлёт POST на `/api/mass-request` → бэкенд создаёт зая
    иначе бот не сможет им писать (ограничение самого Telegram: бот не
    может первым написать тому, кто не нажимал /start).
 
-Пока шаг 3 не сделан — сайт работает по старому fallback (диплинк с
-готовым текстом в общий аккаунт @My_Avto_Agregator), ничего не сломано.
+Шаги 1, 3, 4 сделаны (12.08.2026) — бэкенд реально работает на проде.
+Остался шаг 5 (онбординг компаний) и шаг 2 не отмечен явно, но
+`bot_config.env` пользователь заполнил на Маке ещё до деплоя. Fallback на
+диплинк в @My_Avto_Agregator теперь не должен срабатывать в обычной
+ситуации (только если `/api/` вдруг станет недоступен) — стоит один раз
+проверить на живом сайте, что форма реально открывает
+`t.me/MyAvtoAgregator_bot?start=req_...`, а не падает в fallback.
 
 ## Ещё один прогон агента, ещё 18 новых проблемных строк (10.08.2026)
 Пользователь спросил "добавились 15 компаний в каталог но все ли

@@ -34,6 +34,7 @@
     BOT_TOKEN=<токен от @BotFather>
     BOT_USERNAME=<username бота без @>
     PROXY_URL=<опционально, см. ниже>
+    ADMIN_CHAT_ID=<опционально, см. ниже>
 
 PROXY_URL — обход блокировки api.telegram.org с российских VPS (см.
 PROJECT_STATE.md, раздел "Telegram-бот не достучаться до api.telegram.org
@@ -46,6 +47,14 @@ getUpdates) идут через этот прокси вместо прямог�
 Для socks5:// на сервере дополнительно нужен пакет PySocks:
     pip3 install --break-system-packages "requests[socks]"
 Если PROXY_URL не задан — поведение как раньше (прямое соединение).
+
+ADMIN_CHAT_ID — личный chat_id владельца в Telegram (12.08.2026: без
+этого владелец вообще не видел, что происходит в боте — ни новых заявок,
+ни ответов компаний, только вручную через bot_state.json по SSH). Если
+задан — копия каждого ключевого события (новая заявка, подтверждение
+клиентом, онбординг компании, ответ компании клиенту) дублируется в
+личку владельцу через notify_admin(). Если не задан — уведомления просто
+не отправляются, остальной функционал не страдает.
 
 Запуск (для разработки):
     python3 telegram_bot_service.py
@@ -100,6 +109,21 @@ API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 # к Telegram API идут через него.
 PROXY_URL = BOT_CONFIG.get("PROXY_URL", "").strip()
 PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
+
+# 12.08.2026: у владельца не было НИКАКОЙ видимости происходящего в боте
+# — ни новых заявок, ни того, кто с кем связался, ни ответов компаний,
+# только ручной просмотр bot_state.json по SSH. ADMIN_CHAT_ID (опционально,
+# в bot_config.env) — личный chat_id владельца в Telegram, куда дублируются
+# копии ключевых событий. Получить свой chat_id просто: написать боту
+# что угодно, потом посмотреть в getUpdates поле message.from.id (или
+# @userinfobot). Если не задан — уведомления просто не отправляются,
+# остальной функционал не страдает.
+ADMIN_CHAT_ID = BOT_CONFIG.get("ADMIN_CHAT_ID", "").strip()
+
+
+def notify_admin(text):
+    if ADMIN_CHAT_ID:
+        tg_send(ADMIN_CHAT_ID, f"🔔 {text}")
 
 SHEET_CONFIG = {}
 with open("agent_config.env") as f:
@@ -184,6 +208,13 @@ def mass_request():
             "created_at": time.time(),
         }
         save_state(state)
+    notify_admin(
+        f"Новая заявка #{request_id}\nИмя: {name}\nКонтакт: {phone}\nEmail: {email}\n"
+        f"Направление: {direction}\n" +
+        (f"Бюджет: {budget}\n" if budget else "") +
+        (f"Что ищет: {model}\n" if model else "") +
+        "(ещё не подтверждена — клиент должен открыть бота и нажать Старт)"
+    )
     return jsonify({"request_id": request_id, "bot_username": BOT_USERNAME})
 
 
@@ -217,6 +248,11 @@ def handle_start(chat_id, username, payload, state):
             tg_send(chat_id, f"Заявка отправлена {len(matched)} компаниям.")
         else:
             tg_send(chat_id, "Пока не нашлось онбордившихся компаний по этому направлению — свяжемся с тобой вручную.")
+        notify_admin(
+            f"Заявка #{req_id} подтверждена клиентом (chat_id={chat_id}), "
+            f"направление \"{req['direction']}\" — разослана {len(matched)} компаниям"
+            + (f": {', '.join(c['telegram'] for c in matched)}" if matched else " (никому, нет онбордившихся)")
+        )
         return
 
     # Не заявка клиента — пробуем онбординг компании по совпадению username
@@ -226,6 +262,7 @@ def handle_start(chat_id, username, payload, state):
         if match:
             state["companies"][match["telegram"]] = chat_id
             tg_send(chat_id, f"Готово, {match['name']}! Теперь новые заявки по вашим направлениям будут приходить сюда.")
+            notify_admin(f"Компания онбордилась: {match['name']} (@{match['telegram']}, chat_id={chat_id})")
             return
 
     tg_send(chat_id, "Привет! Это бот MyAvtoAgregator.ru. Если ты клиент — оформи заявку на сайте, ссылка придёт сюда автоматически.")
@@ -239,6 +276,7 @@ def handle_reply(chat_id, text, state):
     if not req or not req.get("client_chat_id"):
         return
     tg_send(req["client_chat_id"], f"Ответ от компании:\n\n{text}")
+    notify_admin(f"Компания (chat_id={chat_id}) ответила по заявке #{last_req} клиенту {req['name']}:\n\n{text}")
 
 
 def poll_loop():

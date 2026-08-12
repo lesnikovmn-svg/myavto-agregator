@@ -236,37 +236,67 @@ def handle_reply(chat_id, text, state):
 def poll_loop():
     print("[bot] поллинг запущен")
     while True:
-        with _state_lock:
-            state = load_state()
-            offset = state.get("last_update_id", 0) + 1
+        # 12.08.2026: раньше исключение из handle_start()/handle_reply()
+        # (например, сбой похода в Google Sheets внутри handle_start —
+        # это ОТДЕЛЬНЫЙ от Telegram-прокси сетевой вызов) не ловилось
+        # нигде и тихо убивало весь фоновый поток навсегда — снаружи это
+        # выглядело как "бот не отвечает", БЕЗ единой строки в логе,
+        # потому что except был только вокруг самого запроса getUpdates.
+        # Живой кейс: 7 подряд /start от пользователей за несколько
+        # часов провисели неподтверждёнными в очереди Telegram, поток
+        # не забирал вообще ничего — поймано через ручной curl
+        # getUpdates мимо сервиса, в самом логе не было ни строки.
+        # Теперь: try/except вокруг ВСЕГО тела цикла (а не только
+        # getUpdates) + отдельно вокруг обработки каждого сообщения —
+        # одно упавшее сообщение больше не должно уносить с собой весь
+        # поллинг, и любая ошибка теперь печатается в лог.
         try:
-            r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25, proxies=PROXIES)
-            updates = r.json().get("result", [])
+            with _state_lock:
+                state = load_state()
+                offset = state.get("last_update_id", 0) + 1
+            try:
+                r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25, proxies=PROXIES)
+                updates = r.json().get("result", [])
+            except Exception as e:
+                print(f"[bot] getUpdates ошибка: {e}")
+                time.sleep(5)
+                continue
+
+            if not updates:
+                continue
+
+            print(f"[bot] получено апдейтов: {len(updates)}")
+
+            with _state_lock:
+                state = load_state()
+                for u in updates:
+                    state["last_update_id"] = u["update_id"]
+                    msg = u.get("message")
+                    if not msg:
+                        continue
+                    chat_id = msg["chat"]["id"]
+                    username = msg["from"].get("username", "")
+                    text = msg.get("text", "")
+                    try:
+                        if text.startswith("/start"):
+                            parts = text.split(maxsplit=1)
+                            payload = parts[1] if len(parts) > 1 else ""
+                            handle_start(chat_id, username, payload, state)
+                        else:
+                            handle_reply(chat_id, text, state)
+                    except Exception as e:
+                        # Не даём одному сбойному сообщению убить весь
+                        # поллинг — двигаем offset дальше (уже сделано
+                        # выше, state["last_update_id"] обновлён) и просто
+                        # логируем, чтобы было видно в journalctl.
+                        print(f"[bot] ошибка обработки апдейта {u.get('update_id')} от chat_id={chat_id}: {e}")
+                save_state(state)
         except Exception as e:
-            print(f"[bot] getUpdates ошибка: {e}")
+            # Последний рубеж — если упало что-то совсем неожиданное
+            # (например, сама блокировка/файл состояния), цикл всё равно
+            # не должен умирать молча.
+            print(f"[bot] неожиданная ошибка в poll_loop: {e}")
             time.sleep(5)
-            continue
-
-        if not updates:
-            continue
-
-        with _state_lock:
-            state = load_state()
-            for u in updates:
-                state["last_update_id"] = u["update_id"]
-                msg = u.get("message")
-                if not msg:
-                    continue
-                chat_id = msg["chat"]["id"]
-                username = msg["from"].get("username", "")
-                text = msg.get("text", "")
-                if text.startswith("/start"):
-                    parts = text.split(maxsplit=1)
-                    payload = parts[1] if len(parts) > 1 else ""
-                    handle_start(chat_id, username, payload, state)
-                else:
-                    handle_reply(chat_id, text, state)
-            save_state(state)
 
 
 if __name__ == "__main__":

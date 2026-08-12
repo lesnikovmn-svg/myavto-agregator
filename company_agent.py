@@ -234,6 +234,23 @@ def domain_of(url):
     m = re.search(r"https?://(?:www\.)?([^/]+)", url or "")
     return m.group(1).lower() if m else ""
 
+def base_domain(url):
+    """
+    domain_of(), но дополнительно схлопывает поддомены до "базового"
+    домена (последние 2 части) — иначе городской/региональный поддомен
+    уже известного сайта считается НОВОЙ компанией. Баг найден 10.08.2026:
+    "spb.westmotors.ru" (питерский поддомен уже существующего Westmotors,
+    сайт которого westmotors.ru) прошёл дедуп как новая компания —
+    domain_of() сравнивает домены буквально, без учёта поддоменов.
+    Используем только для ДЕДУПА (не для is_real_profile_url и т.п.,
+    где поддомен может быть значимым, например у 2ГИС/Дром).
+    """
+    d = domain_of(url)
+    if not d:
+        return ""
+    parts = d.split(".")
+    return ".".join(parts[-2:]) if len(parts) > 2 else d
+
 def extract_years_experience(text):
     """
     Если у компании нет ИНН (или его проверка не даёт года регистрации),
@@ -1043,7 +1060,7 @@ def get_existing(ws):
             # компаниями (баг 09.08.2026: одна фирма добавилась дважды из
             # разных подстраниц одного сайта в разных поисковых запросах).
             if len(row) > 11 and row[11]:
-                d = domain_of(row[11])
+                d = base_domain(row[11])
                 if d:
                     ex.add(d)
         return ex
@@ -1091,7 +1108,21 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # попал в таблицу как "компания" из-за одной конкретной новостной
     # статьи, а не из-за того, что автопортал — компания-импортёр.
     "telegram.menu","telegram-dialogs.ru","tele-finder.com","tgramlink.com",
-    "otzovik.com","autonews.ru"]
+    "otzovik.com","autonews.ru",
+    # Найдено 10.08.2026 (следующий прогон после dryrun-отчёта, ~18 новых
+    # строк, пользователь разбирал вручную): та же болезнь ещё раз, с
+    # новыми конкретными площадками. "telno.ru" — ещё один каталог
+    # telegram-каналов ("Telegram каналы", категория "auto"). "telderi.ru"
+    # — маркетплейс продажи готового бизнеса/каналов/ботов (попал листинг
+    # "Готовый бизнес: Telegram-бот для проверки истории авто" — это
+    # ПРОДАЖА бота, а не сама компания-импортёр). "telegramcat.blog" —
+    # блог-каталог про telegram-боты для проверки авто. "ixbt.com" —
+    # крупный технический новостной портал (попала обычная новостная
+    # статья про параллельный импорт — тот же класс бага, что и с
+    # autonews.ru). "vagvin.ru" — известный самостоятельный сервис
+    # расшифровки VIN (не импортёр, is_vin_check_service его не поймал —
+    # лексикон у vagvin другой: "расшифровка VIN", а не "пробив авто").
+    "telno.ru","telderi.ru","telegramcat.blog","ixbt.com","vagvin.ru"]
 
 # Продающие фразы ниши — собраны 09.08.2026 по реальным сайтам/TG-каналам
 # компаний-импортёров авто (WESTMOTORS, Япония Транзит, KoreaBlizko, ASIA
@@ -1226,13 +1257,16 @@ def run_agent():
                 continue
             domain = re.search(r"https?://(?:www\.)?([^/]+)", link)
             domain_name = domain.group(1).replace(".ru","").replace(".com","").title() if domain else ""
-            dom = domain_of(link)
+            dom = base_domain(link)
             # Дедуп по домену, а не только по имени/точной ссылке — без
             # этого одна и та же компания под разными подстраницами сайта
             # (japantransit.ru vs japantransit.ru/japan/auctions) в разных
             # поисковых запросах добавлялась дважды под двумя разными
-            # (оба неверными) названиями. Проверяем ДО похода на сайт, чтобы
-            # не тратить запрос впустую.
+            # (оба неверными) названиями. base_domain (не domain_of) —
+            # чтобы городской поддомен уже известного сайта (spb.westmotors.ru
+            # при уже существующем westmotors.ru) тоже ловился как дубль,
+            # см. баг 10.08.2026 у Westmotors/Spb.Westmotors. Проверяем ДО
+            # похода на сайт, чтобы не тратить запрос впустую.
             if dom and dom in existing:
                 skipped += 1
                 continue
@@ -1317,7 +1351,17 @@ def run_agent():
             avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
             extra = extract_extra_contacts_from_text(text + " " + site_text)
             maxm, youtube, rutube, whatsapp = extra["max"], extra["youtube"], extra["rutube"], extra["whatsapp"]
-            site = link if link.startswith("http") else ""
+            # Баг найден 10.08.2026: link тут может оказаться ссылкой на
+            # t.me/telegram.me (DDG иногда отдаёт превью-страницу канала
+            # как "сайт" в выдаче, отдельно от ветки с t.me в начале блока
+            # — например когда домен НЕ t.me/telegram.me, но сам текст
+            # содержит telegram-ссылку, которую DDG вернул как основной
+            # link). Без проверки такая ссылка попадала в site — поле
+            # "сайт" не должно дублировать telegram (у telegram уже есть
+            # своя колонка). Нашли на реальном примере: "Прим Автодилер",
+            # site оказался telegram.me/prim_autodealer.
+            link_domain = domain_of(link)
+            site = link if link.startswith("http") and link_domain not in ("t.me", "telegram.me") else ""
             # Собственный сайт компании (уже загружен как site_text выше) —
             # тоже источник для маркетплейсов, если ссылки на них есть в
             # футере сайта (переиспользуем уже загруженный текст, не грузим

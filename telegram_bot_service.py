@@ -69,6 +69,7 @@ getUpdates) идут через этот прокси вместо прямог�
 import json
 import os
 import re
+import sys
 import threading
 import time
 
@@ -76,6 +77,13 @@ import gspread
 import requests
 from flask import Flask, jsonify, request
 from google.oauth2.service_account import Credentials
+
+# 12.08.2026: под systemd stdout не подключён к терминалу, поэтому Python
+# по умолчанию блочно буферизует print() — сообщения могут подолгу не
+# доходить до journalctl, из-за чего живая диагностика вводила в
+# заблуждение (казалось, что поток вообще ничего не делает). Включаем
+# построчную буферизацию, чтобы print() был виден в логе сразу же.
+sys.stdout.reconfigure(line_buffering=True)
 
 BOT_CONFIG = {}
 with open("bot_config.env") as f:
@@ -254,9 +262,11 @@ def poll_loop():
             with _state_lock:
                 state = load_state()
                 offset = state.get("last_update_id", 0) + 1
+            print(f"[bot] запрашиваю getUpdates, offset={offset}, proxies={PROXIES}")
             try:
                 r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25, proxies=PROXIES)
                 updates = r.json().get("result", [])
+                print(f"[bot] getUpdates ответил: status={r.status_code}, апдейтов={len(updates)}")
             except Exception as e:
                 print(f"[bot] getUpdates ошибка: {e}")
                 time.sleep(5)

@@ -33,6 +33,19 @@
 Настройка (bot_config.env, тоже НЕ в git, создать вручную рядом):
     BOT_TOKEN=<токен от @BotFather>
     BOT_USERNAME=<username бота без @>
+    PROXY_URL=<опционально, см. ниже>
+
+PROXY_URL — обход блокировки api.telegram.org с российских VPS (см.
+PROJECT_STATE.md, раздел "Telegram-бот не достучаться до api.telegram.org
+с VPS", 12.08.2026: curl -4 и -6 до api.telegram.org с VPS оба висли до
+таймаута). Если задан — все запросы к Telegram Bot API (sendMessage,
+getUpdates) идут через этот прокси вместо прямого соединения. Формат —
+полный URL с логином/паролем, если есть:
+    http://user:pass@host:port
+    socks5://user:pass@host:port
+Для socks5:// на сервере дополнительно нужен пакет PySocks:
+    pip3 install --break-system-packages "requests[socks]"
+Если PROXY_URL не задан — поведение как раньше (прямое соединение).
 
 Запуск (для разработки):
     python3 telegram_bot_service.py
@@ -74,6 +87,12 @@ BOT_TOKEN = BOT_CONFIG["BOT_TOKEN"]
 BOT_USERNAME = BOT_CONFIG["BOT_USERNAME"]
 API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# Обход блокировки api.telegram.org с VPS (см. docstring выше и
+# PROJECT_STATE.md) — если PROXY_URL задан в bot_config.env, все запросы
+# к Telegram API идут через него.
+PROXY_URL = BOT_CONFIG.get("PROXY_URL", "").strip()
+PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
+
 SHEET_CONFIG = {}
 with open("agent_config.env") as f:
     for line in f:
@@ -102,7 +121,7 @@ def save_state(state):
 
 def tg_send(chat_id, text):
     try:
-        requests.post(f"{API}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=10)
+        requests.post(f"{API}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=10, proxies=PROXIES)
     except Exception as e:
         print(f"[bot] не удалось отправить сообщение {chat_id}: {e}")
 
@@ -221,7 +240,7 @@ def poll_loop():
             state = load_state()
             offset = state.get("last_update_id", 0) + 1
         try:
-            r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25)
+            r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25, proxies=PROXIES)
             updates = r.json().get("result", [])
         except Exception as e:
             print(f"[bot] getUpdates ошибка: {e}")

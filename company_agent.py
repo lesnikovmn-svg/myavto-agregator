@@ -947,6 +947,26 @@ def is_vin_check_service(text):
          "введите vin", "госномер", "автокриминалист"])
     return has_bot_or_service and has_check_lexicon
 
+def is_customs_broker(text):
+    """
+    Отсекаем таможенных брокеров/представителей (оформление ЛЮБЫХ грузов,
+    не именно покупка/доставка авто) — 13.08.2026, пользователь открыл на
+    сайте отдельное направление "Таможенные брокеры" (каталог наполняется
+    вручную, см. секцию #customs в index.html) и попросил не смешивать
+    его с каталогом импортёров авто. Такие компании часто упоминают
+    "авто"/"автомобили" как один из видов грузов и формально проходят
+    has_auto, но сами себя называют не "импортёр"/"пригон", а
+    "таможенный брокер"/"таможенный представитель"/"декларант" — это
+    отдельная ниша. Сигнал узкий и специфичный: обычные компании по
+    пригону авто себя так не называют, даже если растаможка — часть их
+    услуги.
+    """
+    t = text.lower()
+    return any(w in t for w in
+        ["таможенный брокер", "таможенный представитель", "таможенного представителя",
+         "таможенным представителем", "декларант", "услуги по таможенному оформлению",
+         "склад временного хранения", " свх "])
+
 def get_directions(text):
     t = text.lower()
     dm = {"Китай":["китай","china","byd","haval","geely","chery","далянь"],"Корея":["корея","korea","kia","hyundai","genesis"],"Япония":["япония","japan","toyota","lexus","honda","nissan","mazda"],"США":["сша","usa","america","tesla","ford","cadillac"],"ОАЭ":["оаэ","uae","dubai","эмираты"],"Европа":["европа","europe","bmw","mercedes","audi","volkswagen"],"Канада":["канада","canada"],"Грузия":["грузия","georgia"],"Армения":["армения","armenia"]}
@@ -1205,7 +1225,7 @@ def run_agent():
             continue
         text = info["description"]
         has_auto = any(w in text.lower() for w in ["авто","машин","импорт","корея","китай","япония","пригон"])
-        if not has_auto or mentions_ukraine(text) or is_vin_check_service(text):
+        if not has_auto or mentions_ukraine(text) or is_vin_check_service(text) or is_customs_broker(text):
             skipped += 1
             continue
         years = extract_years_experience(text)
@@ -1279,6 +1299,7 @@ def run_agent():
             tg = extract_telegram(text)
             phone = extract_phone(text)
             if (not has_auto or mentions_ukraine(text) or is_vin_check_service(text)
+                    or is_customs_broker(text)
                     or (not tg and phone == "-" and not link.startswith("http"))):
                 skipped += 1
                 continue

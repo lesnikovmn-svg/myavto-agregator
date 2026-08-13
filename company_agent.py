@@ -16,6 +16,17 @@ with open("agent_config.env") as f:
 
 SHEET_ID = config["SHEET_ID"]
 
+# 13.08.2026: перенос агента на VPS показал, что t.me с VPS напрямую не
+# открывается (тот же блок, что раньше ловили с api.telegram.org) —
+# curl без прокси вернул 000, через прокси — 200. tgstat.ru при этом
+# 403-ит и с прокси, и без — это не сетевой блок, а анти-бот фильтр
+# самого tgstat (видимо, поэтому и на Маке в логах бывают дни с
+# "0 каналов" по всем запросам), прокси тут не поможет, чинить отдельно.
+# PROXY_URL опционален — если не задан в agent_config.env, работаем
+# как раньше, напрямую.
+PROXY_URL = config.get("PROXY_URL", "").strip()
+PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
+
 def connect_sheets():
     scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
@@ -1006,7 +1017,7 @@ def fetch_telegram_preview(username):
     его не знает.
     """
     try:
-        r = requests.get(f"https://t.me/{username}", timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(f"https://t.me/{username}", timeout=8, headers={"User-Agent": "Mozilla/5.0"}, proxies=PROXIES)
         if r.status_code != 200:
             return None
         html = r.text

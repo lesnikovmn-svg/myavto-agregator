@@ -984,10 +984,48 @@ const COMPANIES = [
   {id:98,name:"Tiger Cars",rating:4.5,reviews:0,years:18,delivered:"-",description:"Всем привет! Меня зовут Тигран.Подбираю и доставляю автомобили из Европы, США, Кореи и Китая 🚗 ️Авто под ключ — под ваш бюджет и задачи. Прозрачность на каждом этапе, цены ниже рынка РФ 💼📞 +7 904 065-",directions:["США"],tags:["Под ключ"],telegram:"TJ_cars",phone:"7 904 065-81-16",site:"",manager:"-",region:"Россия",featured:false,avatar:"ТЕЛ",color:"av-gray",yandex:"",google:"",gis2:"",instagram:"",vk:"",avito:"",drom:"",autoru:"",max:"",youtube:"",rutube:"",whatsapp:"",tgcontact:"mistr_tigar",link:"https://t.me/mistr_tigar",egrulVerified:false,egrulYear:""}
 ];
 
+// Ранжирование карточек — 14.08.2026, по запросу пользователя (раньше
+// порядок = порядок строк в Google Таблице, featured влиял только на
+// бейдж, но не на позицию). Приоритет по убыванию:
+// 1. featured (ручной буст, ставится точечно, например для новых/особо
+//    проверенных компаний) — единственная всегда-featured сейчас MY Avto
+//    (собственная компания владельца), поэтому она и остаётся первой.
+// 2. онбордилась ли компания в Telegram-боте (нажала /start) — прямой
+//    стимул для компаний: активнее в боте -> выше в каталоге, не только
+//    приоритет в заявках.
+// 3. подтверждена ли компания в ЕГРЮЛ (egrulVerified) — честный сигнал
+//    доверия для покупателя.
+// 4. "активность" — сколько площадок у компании реально заполнено (сайт,
+//    соцсети, маркетплейсы, карты, наличие отзывов) — чем полнее профиль,
+//    тем выше. Рейтинг (rating/reviews) сознательно НЕ используется как
+//    сигнал сам по себе — у большинства компаний это ещё не проверенная
+//    вручную заглушка 4.5/0, сортировка по нему была бы нечестной.
+// Внутри одного уровня порядок стабилен (Array.sort в всех современных
+// браузерах stable) — то есть без разницы по всем 4 пунктам компании
+// остаются в том порядке, что и в таблице, как раньше.
+function activityScore(c) {
+  const site = c.site ? 1 : 0;
+  const social = [c.telegram, c.tgcontact, c.whatsapp, c.vk, c.instagram].filter(Boolean).length;
+  const marketplaces = [c.avito, c.drom, c.autoru].filter(Boolean).length;
+  const maps = [c.yandex, c.google, c.gis2].filter(Boolean).length;
+  const reviews = c.reviews > 0 ? 1 : 0;
+  return site + social + marketplaces + maps + reviews;
+}
+function compareCompanies(a, b) {
+  const af = a.featured ? 1 : 0, bf = b.featured ? 1 : 0;
+  if (af !== bf) return bf - af;
+  const ao = a.onboarded ? 1 : 0, bo = b.onboarded ? 1 : 0;
+  if (ao !== bo) return bo - ao;
+  const ae = a.egrulVerified ? 1 : 0, be = b.egrulVerified ? 1 : 0;
+  if (ae !== be) return be - ae;
+  return activityScore(b) - activityScore(a);
+}
+
 function renderCompanies(list) {
   const el = document.getElementById('companies-list');
   if (!el) return;
-  el.innerHTML = list.map(c => {
+  const sorted = [...list].sort(compareCompanies);
+  el.innerHTML = sorted.map(c => {
     const isTop = c.featured;
     const tags = c.directions.slice(0,3).map(d=>`<span class="tag">🌍 ${d}</span>`).join('') +
                  c.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('');

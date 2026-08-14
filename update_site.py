@@ -54,7 +54,14 @@ for row in all_rows:
         # для переписки, если найден (см. fix_telegram_contact_check.py).
         # Кнопка "Написать в TG" на сайте использует именно tgcontact, а не
         # telegram — у канала нет чата, писать в него нельзя.
-        tgcontact=val(30))
+        tgcontact=val(30),
+        # Добавлено 14.08.2026 для ранжирования компаний на сайте (см.
+        # PROJECT_STATE.md, "Ранжирование компаний"): онбордилась ли
+        # компания в Telegram-боте (нажала /start). Само значение
+        # приходит не отсюда, а из bot_state.json на VPS — колонка 33
+        # (AG) синхронизируется отдельным sync_onboarded_to_sheet.py,
+        # update_site.py её только читает.
+        onboarded=val(32))
     if company['name']:
         companies.append(company)
 
@@ -120,6 +127,7 @@ for c in companies:
              c['instagram'] or c['vk'] or c['max'] or c['youtube'] or
              c['rutube'] or c['whatsapp'] or '#')
     egrul_verified = 'true' if c['egrul_year'] else 'false'
+    onboarded = 'true' if c['onboarded'].upper() == 'TRUE' else 'false'
     js += (f'  {{id:{cid},name:"{c["name"]}",rating:{c["rating"]},reviews:{crev},years:{cyrs},'
            f'delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},'
            f'telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",'
@@ -128,7 +136,7 @@ for c in companies:
            f'instagram:"{c["instagram"]}",vk:"{c["vk"]}",'
            f'avito:"{c["avito"]}",drom:"{c["drom"]}",autoru:"{c["autoru"]}",'
            f'max:"{c["max"]}",youtube:"{c["youtube"]}",rutube:"{c["rutube"]}",whatsapp:"{c["whatsapp"]}",'
-           f'tgcontact:"{c["tgcontact"]}",'
+           f'tgcontact:"{c["tgcontact"]}",onboarded:{onboarded},'
            f'link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}"}},\n')
 js = js.rstrip(',\n') + '\n];'
 

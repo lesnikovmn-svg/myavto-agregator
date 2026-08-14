@@ -63,12 +63,24 @@ def extract_telegram(text):
 #   компании их не имеет в виду как реальный контакт.
 EMAIL_JUNK_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp", "tiff", "avif", "css", "js"}
 EMAIL_JUNK_DOMAINS = [
-    "example.com", "example.org", "example.net", "test.com", "domain.com", "domain.ru",
+    "example.com", "example.org", "example.net", "example.ru", "test.com", "domain.com", "domain.ru",
     "yourdomain.com", "yourdomain.ru", "yoursite.com",
     "sentry.io", "sentry-next.io", "wixpress.com", "wix.com", "schema.org", "w3.org",
     "w3schools.com", "godaddy.com", "gstatic.com", "cloudflare.com", "jquery.com",
     "google.com", "googleapis.com", "google-analytics.com", "recaptcha.net",
     "bem.info", "vk.com", "yastatic.net",
+    # Найдено 14.08.2026 на реальном прогоне fix_backfill_emails.py: когда
+    # источником служит карточка компании на 2ГИС/Яндекс.Картах, на самой
+    # странице рядом с данными компании часто есть СОБСТВЕННЫЙ служебный
+    # email площадки (ссылка "Написать в поддержку" и т.п.) — старый
+    # extract_email() брал его как "первый похожий на email в тексте", не
+    # различая "это контакт самой компании" от "это контакт площадки,
+    # на которой размещена карточка". help@2gis.ru встретился так у ~12
+    # разных компаний подряд, support@maps.yandex.ru — у ~5. "vk-portal.net"
+    # — технический хешированный адрес инфраструктуры ВКонтакте (виджеты/
+    # пиксели), не человеческий контакт — тот же класс проблемы, что и с
+    # "vk.com/rtrg"/"max.ru/u" (см. раздел про виджет-артефакты выше).
+    "2gis.ru", "maps.yandex.ru", "vk-portal.net",
 ]
 EMAIL_JUNK_LOCAL_PREFIXES = {"noreply", "no-reply", "donotreply", "do-not-reply", "postmaster", "mailer-daemon", "abuse"}
 

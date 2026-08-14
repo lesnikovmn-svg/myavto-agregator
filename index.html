@@ -372,21 +372,31 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   .nav-rate, .nav-tg { padding: 6px 12px; font-size: 12px; }
 
   /* Поиск в шапке каталога (сегодняшняя правка) — на узком экране
-     занимает всю ширину под заголовком, а не сжимается рядом с ним. */
+     занимает всю ширину под заголовком, а не сжимается рядом с ним.
+     14.08.2026, найдено живым скриншотом на проде: .companies-header
+     сама стала колонкой, но .companies-header-right (search+sort) внутри
+     оставалась строкой и вылезала за экран горизонтально (sort уезжал
+     вправо за пределы viewport) — теперь тоже колонка, во всю ширину. */
   .companies-header { flex-direction: column; align-items: stretch; gap: 8px; }
-  .companies-header-right { width: 100%; margin-left: 0; justify-content: space-between; }
+  .companies-header-right { flex-direction: column; align-items: stretch; width: 100%; margin-left: 0; gap: 8px; }
   .search-wrap { flex: 1; }
   .search-wrap input { width: 100%; }
   .search-wrap input:focus { width: 100%; }
 
   /* Карточка компании — шапка (аватар+имя+кнопка отзыва) и подвал
      (мета+кнопка написать) были нерастягиваемыми flex-рядами, на узком
-     экране текст/кнопки налезали друг на друга вместо переноса строки. */
+     экране текст/кнопки налезали друг на друга вместо переноса строки.
+     14.08.2026, найдено тем же скриншотом: .card-actions (иконки
+     соцсетей+карт + кнопка "Написать в TG") тоже не переносилась и
+     вылезала за правый край карточки/страницы — добавлен перенос и
+     туда, и в сам ряд иконок .review-links. */
   .card-header { flex-wrap: wrap; }
   .card-right { text-align: left; width: 100%; margin-top: 8px; }
   .card-top { flex-wrap: wrap; row-gap: 4px; }
   .card-footer { flex-wrap: wrap; gap: 10px; }
   .card-meta { flex-wrap: wrap; row-gap: 4px; }
+  .card-actions { flex-wrap: wrap; width: 100%; }
+  .review-links { flex-wrap: wrap; }
 }
 </style>
 <!-- Yandex.Metrika counter -->

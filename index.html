@@ -397,6 +397,14 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   .card-meta { flex-wrap: wrap; row-gap: 4px; }
   .card-actions { flex-wrap: wrap; width: 100%; }
   .review-links { flex-wrap: wrap; }
+
+  /* Секция "Связаться с нами" (#contact) — найдено тем же живым JS-тестом
+     на overflow: это 3-колоночная grid-сетка (форма + Контакты + Условия
+     размещения), написанная инлайн-стилями (style="..."), без вообще
+     никакой мобильной обработки. Инлайн-стиль побеждает по specificity
+     обычный класс/id-селектор, поэтому здесь нужен !important, чтобы
+     реально переопределить grid-template-columns на мобильном. */
+  #contact > div { grid-template-columns: 1fr !important; }
 }
 </style>
 <!-- Yandex.Metrika counter -->

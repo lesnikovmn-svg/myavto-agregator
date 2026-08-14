@@ -61,10 +61,32 @@ def fetch_tg_page(handle):
         return None
 
 
-def classify(html):
-    """Возвращает 'channel', 'group' или 'contact' (личный/бот — messageable)."""
+def classify(html, handle=""):
+    """
+    Возвращает 'channel', 'group' или 'contact' (личный/бот — messageable).
+
+    Обновлено 14.08.2026 по результатам ручной проверки нескольких
+    компаний (ТамСямAUTO и др.): у Telegram есть более прямой и надёжный
+    сигнал, чем присутствие "subscribers"/"members" — сам заголовок
+    страницы. Для личных аккаунтов/ботов title дословно "Telegram: Contact
+    @<handle>" (проверено на t.me/TamSyamAUTO — реальный личный контакт
+    владельца), для каналов/групп — "Telegram: View @<handle>". Это
+    проверяется ПЕРВЫМ, subscribers/members остаются запасным сигналом на
+    случай, если разметка title вдруг изменится. Хэндлы, оканчивающиеся на
+    "bot" (найдено на arnoldauto_bot, china_sferacar_web_bot), считаются
+    contact без похода на страницу — боты, принимающие сообщения, Telegram
+    иногда тоже размечает через "View" в title, а не "Contact".
+    """
+    if handle.lower().endswith("bot"):
+        return "contact"
     if not html:
         return "unknown"
+    if re.search(r"Telegram:\s*Contact\s+@", html, re.IGNORECASE):
+        return "contact"
+    if re.search(r"Telegram:\s*View\s+@", html, re.IGNORECASE):
+        if re.search(r"[\d\s]+\s*members", html):
+            return "group"
+        return "channel"
     if re.search(r"[\d\s]+\s*subscribers", html):
         return "channel"
     if re.search(r"[\d\s]+\s*members", html):
@@ -101,7 +123,7 @@ for i, row in enumerate(all_values[1:], start=2):
 
     html = fetch_tg_page(handle)
     time.sleep(1)
-    kind = classify(html)
+    kind = classify(html, handle)
 
     if kind == "contact":
         ws.update_cell(i, TG_CONTACT_COL, handle)
@@ -118,7 +140,7 @@ for i, row in enumerate(all_values[1:], start=2):
     if alt:
         alt_html = fetch_tg_page(alt)
         time.sleep(1)
-        alt_kind = classify(alt_html)
+        alt_kind = classify(alt_html, alt)
         if alt_kind == "contact":
             ws.update_cell(i, TG_CONTACT_COL, alt)
             print(f"[{i}] {name}: {kind} @{handle}, канал остаётся как есть, личный контакт @{alt} записан в AE")

@@ -48,6 +48,53 @@ def extract_telegram(text):
     m = re.search(r"@([A-Za-z0-9_]{3,32})", text)
     return m.group(1) if m else ""
 
+# Email — добавлено 14.08.2026 для будущей email-рассылки при онбординге
+# компаний (см. onboarding_companies.xlsx). Ищем прямо в HTML/тексте
+# сайта/карточки, тем же путём, что телефон/ИНН — не отдельным запросом.
+#
+# Известные источники ложных совпадений простого email-регэкспа (по
+# аналогии с уже пойманными багами в этом файле — antibot-заглушки,
+# vk.com/js-виджеты и т.п. — тот же класс проблемы "технический
+# артефакт похож по форме на настоящий контакт"):
+# - retina-картинки вида "logo@2x.png" — по форме неотличимы от email
+#   (локальная часть + @ + "домен" с точкой), фильтруем по расширению.
+# - служебные адреса аналитики/конструкторов сайтов (Wix, Sentry и т.п.),
+#   плейсхолдеры из шаблонов ("example.com", "yourdomain.ru") — сайт
+#   компании их не имеет в виду как реальный контакт.
+EMAIL_JUNK_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp", "tiff", "avif", "css", "js"}
+EMAIL_JUNK_DOMAINS = [
+    "example.com", "example.org", "example.net", "test.com", "domain.com", "domain.ru",
+    "yourdomain.com", "yourdomain.ru", "yoursite.com",
+    "sentry.io", "sentry-next.io", "wixpress.com", "wix.com", "schema.org", "w3.org",
+    "w3schools.com", "godaddy.com", "gstatic.com", "cloudflare.com", "jquery.com",
+    "google.com", "googleapis.com", "google-analytics.com", "recaptcha.net",
+    "bem.info", "vk.com", "yastatic.net",
+]
+EMAIL_JUNK_LOCAL_PREFIXES = {"noreply", "no-reply", "donotreply", "do-not-reply", "postmaster", "mailer-daemon", "abuse"}
+
+def extract_email(text):
+    """
+    Первый похожий на реальный контактный email в тексте. Возвращает ""
+    если ничего подходящего не нашлось — вызывающий код просто оставляет
+    поле пустым, ничего не выдумываем (тот же принцип, что и у остальных
+    extract_*/find_* в этом файле).
+    """
+    if not text:
+        return ""
+    for m in re.finditer(r"[A-Za-z0-9][A-Za-z0-9._%+\-]*@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", text):
+        candidate = m.group(0)
+        local, _, domain = candidate.partition("@")
+        domain_l = domain.lower()
+        ext = domain_l.rsplit(".", 1)[-1]
+        if ext in EMAIL_JUNK_EXTENSIONS:
+            continue
+        if any(j in domain_l for j in EMAIL_JUNK_DOMAINS):
+            continue
+        if local.lower() in EMAIL_JUNK_LOCAL_PREFIXES:
+            continue
+        return candidate
+    return ""
+
 def is_probably_tagline(text):
     """
     Отличаем настоящее название компании от рекламного слогана/заголовка
@@ -379,7 +426,12 @@ DIRECT_CONTACT_PATTERNS = {
     "max": r"https?://(?:www\.)?max\.ru/[A-Za-z0-9_.\-]+",
     "youtube": r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+",
     "rutube": r"https?://(?:www\.)?rutube\.ru/(?:channel|u)/[A-Za-z0-9_.\-]+",
-    "whatsapp": r"https?://(?:chat\.whatsapp\.com/[A-Za-z0-9]+|wa\.me/\d+)",
+    # api.whatsapp.com/send?phone=... добавлено 14.08.2026 — реальный
+    # пробел, найденный при ручной проверке China.Sferacar и Wanna-Car
+    # (оба используют именно этот формат вместо короткого wa.me/, старый
+    # регэксп его вообще не ловил, WhatsApp этих компаний был бы пропущен
+    # даже несмотря на явное присутствие на сайте).
+    "whatsapp": r"https?://(?:chat\.whatsapp\.com/[A-Za-z0-9]+|wa\.me/\d+|api\.whatsapp\.com/send\?phone=\d+[^\"'\s]*)",
     "yandex": r"https?://(?:www\.)?yandex\.\w+/maps/org/[A-Za-z0-9_\-]+/\d+",
     "gis2": r"https?://(?:www\.)?2gis\.\w+/[a-z\-]+/firm/\d+",
 }
@@ -399,6 +451,18 @@ def _account_handle(url):
     KNOWN_PLATFORM_OWN_ACCOUNTS без привязки к схеме/query-строке."""
     m = re.search(r"https?://(?:www\.)?([^/]+/[^/?#]+)", url or "")
     return m.group(1).lower().rstrip("/") if m else ""
+
+def normalize_whatsapp_link(url):
+    """
+    WhatsApp-ссылки встречаются в двух рабочих форматах на сайтах компаний:
+    короткий "wa.me/<телефон>" и полный
+    "api.whatsapp.com/send?phone=<телефон>&text=...". Оба одинаково рабочие,
+    но полный обычно тащит за собой закодированный текст сообщения в query
+    — хранить такое в таблице некрасиво и не нужно. Приводим оба варианта
+    к единому чистому виду "https://wa.me/<цифры>".
+    """
+    m = re.search(r"(?:wa\.me/|whatsapp\.com/send\?phone=)(\d+)", url)
+    return f"https://wa.me/{m.group(1)}" if m else url
 
 def extract_direct_contacts(html):
     """
@@ -420,9 +484,54 @@ def extract_direct_contacts(html):
                 continue
             if _account_handle(cl) in KNOWN_PLATFORM_OWN_ACCOUNTS:
                 continue
-            result[kind] = cand
+            result[kind] = normalize_whatsapp_link(cand) if kind == "whatsapp" else cand
             break
     return result
+
+# Найдено 14.08.2026 при ручной проверке нескольких компаний (ТамСямAUTO,
+# Wanna-Car, Arnold-Auto, China.Sferacar, Jplife): у всех на собственном
+# сайте была ссылка на t.me/<handle>, отдельная от Telegram-КАНАЛА — и
+# каждый раз сайт сам явно её подписывал как контакт для переписки, не
+# просто "наш канал". Универсальный принцип, не привязанный к нише авто —
+# должен работать и для будущих направлений агента (см. обсуждение с
+# пользователем 14.08.2026 про использование агента в других направлениях):
+# ЛЮБАЯ компания, что бы она ни продавала, обычно различает у себя на
+# сайте "подписывайтесь на канал" и "напишите нам" одинаково явно.
+TG_CONTACT_LABEL_HINTS = ["написать", "message", "написать в telegram", "написать в тг", "написать менеджеру"]
+
+def extract_site_tg_contact(html):
+    """
+    Пытается найти на сайте компании личный/бот Telegram-контакт (не
+    канал/группу) среди прямых ссылок на t.me — по двум независимым
+    сигналам, оба найдены на реальных примерах 14.08.2026:
+    1. Хэндл заканчивается на "bot" — практически всегда бот, принимающий
+       сообщения (arnoldauto_bot, china_sferacar_web_bot — оба подтверждены
+       вручную как messageable).
+    2. Рядом со ссылкой (атрибут title/aria-label или видимый текст внутри
+       <a>) есть слово из TG_CONTACT_LABEL_HINTS — сайты сами подписывают
+       такие ссылки как "Написать в Telegram" (Wanna-Car: title="Написать в
+       Telegram" у ссылки на WannaCarSales), в отличие от каналов, которые
+       обычно подписаны "Подписывайтесь"/"Наш канал"/"Новости".
+
+    Это ТОЛЬКО эвристика по разметке сайта, без похода на сам t.me (в
+    отличие от fix_telegram_contact_check.py, который дополнительно
+    проверяет subscribers/members) — вызывающий код может при желании
+    дополнительно подтвердить находку отдельным запросом. Не нашли ни
+    одного сигнала — возвращаем "", считаем все найденные t.me-ссылки
+    каналами, добираем личный контакт другими путями (backfill/fix-скрипты).
+    """
+    if not html:
+        return ""
+    for m in re.finditer(
+            r'<a\s+([^>]*)href=["\']https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)["\']([^>]*)>(.*?)</a>',
+            html, re.IGNORECASE | re.DOTALL):
+        attrs_before, handle, attrs_after, inner = m.groups()
+        if handle.lower().endswith("bot"):
+            return handle
+        surrounding = (attrs_before + " " + attrs_after + " " + re.sub(r"<[^>]+>", " ", inner)).lower()
+        if any(hint in surrounding for hint in TG_CONTACT_LABEL_HINTS):
+            return handle
+    return ""
 
 def is_real_profile_url(link_lower):
     """
@@ -650,6 +759,14 @@ def extract_extra_contacts_from_text(text):
         for cand in re.findall(r"https?://wa\.me/\d+", text):
             result["whatsapp"] = cand
             break
+    if not result["whatsapp"]:
+        # api.whatsapp.com/send?phone=... — добавлено 14.08.2026, см.
+        # normalize_whatsapp_link (тот же пробел, что чинили в
+        # DIRECT_CONTACT_PATTERNS: реальные сайты China.Sferacar/Wanna-Car
+        # используют именно этот формат, короткий wa.me/ у них не было).
+        for cand in re.findall(r"https?://api\.whatsapp\.com/send\?phone=\d+[^\"'\s]*", text):
+            result["whatsapp"] = normalize_whatsapp_link(cand)
+            break
     return result
 
 def find_social_links(name, text="", phone=""):
@@ -759,6 +876,8 @@ def extract_contacts_from_2gis(html):
             m = re.search(r"t\.me/([A-Za-z0-9_]+)", target, re.IGNORECASE)
             if m:
                 result["telegram"] = m.group(1)
+        elif kind == "whatsapp":
+            result[kind] = normalize_whatsapp_link(target)
         else:
             result[kind] = target
 
@@ -1176,7 +1295,13 @@ def add_company(ws, data, row_num):
     # заполняется только вручную/скриптом fix_telegram_contact_check.py.
     # Поле telegram при этом больше НЕ трогаем/не затираем — оно остаётся
     # полезным само по себе (иконка "подписаться на канал" на сайте).
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp",""),data.get("telegram_contact","")]
+    # Колонка 32 (AF) добавлена 14.08.2026 для email-рассылки при онбординге
+    # компаний (см. onboarding_companies.xlsx, extract_email() выше) — как и
+    # с telegram_contact, колонку нужно создать один раз (add_email_column.py)
+    # ДО первого запуска с новым кодом, иначе email просто уедет в никуда
+    # (append_row всё равно допишет по table_range='A1', колонка появится,
+    # но БЕЗ заголовка, если её не завести заранее).
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp",""),data.get("telegram_contact",""),data.get("email","")]
     # ВАЖНО: без table_range='A1' append_row без явного якоря может "уехать"
     # вправо — Sheets API ищет "таблицу" по всему листу и в редких случаях
     # (09.08.2026, найдено при разборе бага с 52 vs 82 строк) начинает
@@ -1328,6 +1453,7 @@ def run_agent():
             continue
         years = extract_years_experience(text)
         phone = extract_phone(text)
+        email = extract_email(text)
         # Настоящее название канала (не @username), если tgstat его отдал —
         # иначе fallback на username, отформатированный чуть приличнее сырого
         # нижнего регистра с подчёркиваниями.
@@ -1368,8 +1494,16 @@ def run_agent():
         # подтверждения нигде не нашлось — для ручного контроля.
         if not (maps_verified or social_verified or market_verified):
             print(f"    ⚠️ {name}: подтвердилось только в Telegram, добавляю как есть")
+        # См. ту же проверку в DDG-ветке ниже (найдено 14.08.2026,
+        # ТамСямAUTO) — здесь site обычно ещё не найден на этом этапе,
+        # поэтому tgcontact не вычисляется, но принцип тот же: если
+        # WhatsApp/VK тоже нет, а показать нечего кроме Instagram, кнопка
+        # "Написать" на сайте ненадёжна.
+        if insta and not whatsapp and not vk:
+            print(f"    ⚠️ {name}: единственный контакт для кнопки \"Написать\" — Instagram "
+                  f"(ненадёжно, требует входа в приложение), стоит доискать WhatsApp/личный TG вручную")
         next_id += 1
-        add_company(ws, {"name":name,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":phone,"site":site,"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp}, next_id)
+        add_company(ws, {"name":name,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":phone,"site":site,"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp,"email":email}, next_id)
         existing.add(name.lower())
         existing.add(username.lower())
         found += 1
@@ -1527,6 +1661,10 @@ def run_agent():
             # в тексте, update_site.py на этапе рендера сам подставит
             # возраст по ЕГРЮЛ как более честный fallback, чем "1".
             years = extract_years_experience(text + " " + site_text)
+            # Email — из сниппета выдачи и уже загруженного текста сайта
+            # (включая догруженные "Контакты"/"О нас"), запрос повторно не
+            # делаем. Добавлено 14.08.2026 для email-рассылки при онбординге.
+            email = extract_email(text + " " + site_text)
             yandex, google, gis2, maps_verified = find_map_links(name, phone)
             insta, vk, social_verified = find_social_links(name, text + " " + site_text, phone)
             avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
@@ -1547,11 +1685,20 @@ def run_agent():
             # тоже источник для маркетплейсов, если ссылки на них есть в
             # футере сайта (переиспользуем уже загруженный текст, не грузим
             # сайт повторно).
+            # Личный/бот Telegram-контакт (не канал) — ищем прямо на сайте
+            # компании эвристикой extract_site_tg_contact (см. выше, найдено
+            # 14.08.2026 на реальных примерах). Раньше эта колонка (AE)
+            # заполнялась ТОЛЬКО отдельным скриптом fix_telegram_contact_check.py
+            # уже после добавления компании — теперь агент пробует найти её
+            # сразу при первом прогоне, скрипт остаётся как дозаполнение для
+            # случаев, которые эвристика на сайте не поймала.
+            telegram_contact = extract_site_tg_contact(site_text) if site_text else ""
             if site_text:
                 site_direct = extract_direct_contacts(site_text)
                 avito = avito or site_direct.get("avito", "")
                 drom = drom or site_direct.get("drom", "")
                 autoru = autoru or site_direct.get("autoru", "")
+                whatsapp = whatsapp or site_direct.get("whatsapp", "")
             # Карточки на площадках (2ГИС, Яндекс.Карты — если нашлись и
             # подтвердились) сами по себе часто содержат сайт/соцсети/
             # мессенджеры компании — дозаполняем то, что выше не нашли
@@ -1583,8 +1730,19 @@ def run_agent():
             # — для ручного контроля, не блокирует публикацию.
             if not (inn or maps_verified or social_verified or market_verified):
                 print(f"    ⚠️ {name}: подтвердилось только по исходному источнику, добавляю как есть")
+            # Найдено 14.08.2026 (живой отчёт пользователя про ТамСямAUTO):
+            # если единственный контакт для кнопки "Написать" на сайте — это
+            # Instagram (telegram_contact/whatsapp/vk все пустые), кнопка
+            # ненадёжна — Instagram не даёт написать без входа в приложение,
+            # а на живом сайте это уже приводило к "ссылка не работает".
+            # Печатаем предупреждение сразу при добавлении, а не только
+            # постфактум при ручной проверке — та же логика применима к
+            # будущим направлениям агента, не только авто.
+            if insta and not (telegram_contact or whatsapp or vk):
+                print(f"    ⚠️ {name}: единственный контакт для кнопки \"Написать\" — Instagram "
+                      f"(ненадёжно, требует входа в приложение), стоит доискать WhatsApp/личный TG вручную")
             next_id += 1
-            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":site,"inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp}, next_id)
+            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":site,"inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp,"email":email,"telegram_contact":telegram_contact}, next_id)
             existing.add(name.lower())
             if link: existing.add(link.lower())
             if dom: existing.add(dom)

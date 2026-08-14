@@ -75,13 +75,21 @@ chat_id=...", там же будет type=group/supergroup и title группы
   Значит компании нужно один раз онбордить (прислать им ссылку на бота
   и попросить нажать Старт) ДО того как первая заявка на их направление
   придёт — иначе они её не получат, просто выпадут из рассылки молча.
-- Ответ компании клиенту роутится по "последняя заявка, о которой этой
-  компании сообщили" — если компания ведёт 2+ параллельные заявки,
-  возможна путаница. Для реального объёма это нужно дорабатывать
-  (например, просить компанию отвечать реплаем на исходное сообщение
-  и парсить message_id).
 - Rate limits Telegram Bot API не обрабатываются (send с retry) — на
   небольшом объёме заявок не критично, добавить позже при росте.
+
+Точная маршрутизация ответов компаний -> клиентам (14.08.2026, было
+исправлено — раньше роутилось только по "последняя заявка для этого
+chat_id", что путалось при 2+ параллельных заявках у одной компании).
+Теперь: при рассылке заявки компании в тексте сообщения прямо просим её
+отвечать РЕПЛАЕМ на это сообщение; message_id сохраняется в
+state["message_routes"][f"{chat_id}:{message_id}"] -> {request_id,
+company_name}; если компания действительно ответила реплаем — маршрут
+однозначный. Если ответила обычным сообщением (без реплая) — используется
+запасной вариант "последняя известная заявка" (как раньше), а самой
+компании отдельно уходит предупреждение, что в следующий раз лучше
+отвечать реплаем. Клиенту в любом случае видно ИМЯ компании в тексте
+пересланного ответа (раньше было безлико "Ответ от компании").
 """
 import json
 import os
@@ -168,10 +176,17 @@ def save_state(state):
 
 
 def tg_send(chat_id, text):
+    # 14.08.2026: раньше результат send всегда отбрасывался. Теперь
+    # возвращаем распарсенный ответ Telegram API (или None при ошибке) —
+    # нужен message_id отправленного сообщения, чтобы потом уметь понять,
+    # на какое именно сообщение компания ответила реплаем (см. handle_reply
+    # и раздел "Точная маршрутизация ответов компаний" в PROJECT_STATE.md).
     try:
-        requests.post(f"{API}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=10, proxies=PROXIES)
+        r = requests.post(f"{API}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=10, proxies=PROXIES)
+        return r.json()
     except Exception as e:
         print(f"[bot] не удалось отправить сообщение {chat_id}: {e}")
+        return None
 
 
 def get_companies():
@@ -242,7 +257,9 @@ def handle_start(chat_id, username, payload, state):
             tg_send(chat_id, "Не нашёл эту заявку — возможно, ссылка устарела. Заполни форму на сайте ещё раз.")
             return
         req["client_chat_id"] = chat_id
-        tg_send(chat_id, "Заявка принята! Ищу подходящие компании по направлению \"" + req["direction"] + "\" и рассылаю им запрос — ответы придут сюда же.")
+        tg_send(chat_id, "Заявка принята! Ищу подходящие компании по направлению \"" + req["direction"] +
+                "\" и рассылаю им запрос — ответы придут сюда же, каждый раз с указанием, какая именно "
+                "компания ответила (если откликнется несколько — увидишь их по отдельности).")
 
         matched = [c for c in get_companies()
                    if req["direction"] in c["directions"] and c["telegram"] in state["companies"]]
@@ -253,12 +270,39 @@ def handle_start(chat_id, username, payload, state):
                     f"Направление: {req['direction']}\n" +
                     (f"Бюджет: {req['budget']}\n" if req["budget"] else "") +
                     (f"Что ищет: {req['model']}\n" if req["model"] else "") +
-                    "\nОтветь сюда же — сообщение перешлём клиенту.")
-            tg_send(company_chat_id, text)
+                    "\n❗️Отвечай РЕПЛАЕМ (в Telegram: зажать это сообщение и "
+                    "выбрать \"Ответить\") именно на ЭТО сообщение — так бот "
+                    "точно поймёт, к какой заявке относится твой ответ, даже "
+                    "если у тебя параллельно несколько заявок.")
+            resp = tg_send(company_chat_id, text)
+
             req["companies_notified"].append(c["telegram"])
-            # для MVP-роутинга ответа компании -> клиенту (см. docstring)
+
+            # 14.08.2026: точная маршрутизация ответа компании -> клиента.
+            # Раньше был только "запомнить последнюю заявку для этого
+            # chat_id" — если компании прилетало 2+ заявки подряд до того,
+            # как она ответила на первую, вторая перезаписывала первую и
+            # ответ компании мог уйти не тому клиенту. Теперь для каждого
+            # отправленного сообщения запоминаем его message_id -> заявка,
+            # и если компания отвечает РЕПЛАЕМ именно на него — маршрут
+            # однозначный, независимо от того, сколько у неё заявок сразу.
+            sent_msg_id = None
+            if resp and resp.get("ok"):
+                sent_msg_id = resp.get("result", {}).get("message_id")
+            if sent_msg_id:
+                state["message_routes"] = state.get("message_routes", {})
+                state["message_routes"][f"{company_chat_id}:{sent_msg_id}"] = {
+                    "request_id": req_id, "company_name": c["name"],
+                }
+
+            # Запасной вариант (если компания всё же ответит НЕ реплаем,
+            # а обычным сообщением) — та же логика "последняя заявка", что
+            # и раньше, но теперь с именем компании, чтобы клиент видел,
+            # кто именно ответил, а не безликое "Ответ от компании".
             state["companies_last_request"] = state.get("companies_last_request", {})
-            state["companies_last_request"][str(company_chat_id)] = req_id
+            state["companies_last_request"][str(company_chat_id)] = {
+                "request_id": req_id, "company_name": c["name"],
+            }
 
         if matched:
             tg_send(chat_id, f"Заявка отправлена {len(matched)} компаниям.")
@@ -284,15 +328,55 @@ def handle_start(chat_id, username, payload, state):
     tg_send(chat_id, "Привет! Это бот MyAvtoAgregator.ru. Если ты клиент — оформи заявку на сайте, ссылка придёт сюда автоматически.")
 
 
-def handle_reply(chat_id, text, state):
-    last_req = state.get("companies_last_request", {}).get(str(chat_id))
-    if not last_req:
+def handle_reply(chat_id, text, state, reply_to_message_id=None):
+    """
+    Пересылает сообщение компании клиенту. Два способа понять, к какой
+    заявке относится ответ (14.08.2026, см. "Точная маршрутизация ответов
+    компаний" в PROJECT_STATE.md):
+    1. ТОЧНЫЙ: компания ответила РЕПЛАЕМ на сообщение с конкретной заявкой
+       — по message_routes однозначно находим нужную заявку, даже если у
+       компании сейчас несколько параллельных заявок.
+    2. ЗАПАСНОЙ: компания ответила обычным сообщением (без реплая) —
+       берём "последнюю заявку, о которой ей сообщали", как раньше. Может
+       ошибиться, если заявок несколько подряд — в этом случае дополнительно
+       предупреждаем САМУ КОМПАНИЮ, чтобы в следующий раз использовала реплай.
+    """
+    request_id, company_name, matched_by_reply = None, "", False
+
+    if reply_to_message_id:
+        route = state.get("message_routes", {}).get(f"{chat_id}:{reply_to_message_id}")
+        if route:
+            request_id = route.get("request_id")
+            company_name = route.get("company_name", "")
+            matched_by_reply = True
+
+    if not request_id:
+        last = state.get("companies_last_request", {}).get(str(chat_id))
+        if isinstance(last, dict):
+            request_id = last.get("request_id")
+            company_name = last.get("company_name", "")
+        elif isinstance(last, str):
+            # Старый формат записи (до 14.08.2026, без имени компании) —
+            # поддержан для совместимости с уже накопленным bot_state.json.
+            request_id = last
+
+    if not request_id:
         return
-    req = state["requests"].get(last_req)
+    req = state["requests"].get(request_id)
     if not req or not req.get("client_chat_id"):
         return
-    tg_send(req["client_chat_id"], f"Ответ от компании:\n\n{text}")
-    notify_admin(f"Компания (chat_id={chat_id}) ответила по заявке #{last_req} клиенту {req['name']}:\n\n{text}")
+
+    label = f"«{company_name}»" if company_name else "компании"
+    tg_send(req["client_chat_id"], f"Ответ от {label}:\n\n{text}")
+
+    if not matched_by_reply:
+        tg_send(chat_id, "⚠️ Не понял точно, к какой заявке относится это сообщение (это не был "
+                          "реплай на заявку) — переслал клиенту как ответ на последнюю известную "
+                          "заявку. Если ведёшь несколько заявок одновременно, в следующий раз "
+                          "отвечай РЕПЛАЕМ прямо на сообщение с нужной заявкой, чтобы не перепутать.")
+
+    notify_admin(f"Компания {label} (chat_id={chat_id}) ответила по заявке #{request_id} "
+                 f"клиенту {req['name']}:\n\n{text}")
 
 
 def poll_loop():
@@ -361,7 +445,13 @@ def poll_loop():
                             payload = parts[1] if len(parts) > 1 else ""
                             handle_start(chat_id, username, payload, state)
                         else:
-                            handle_reply(chat_id, text, state)
+                            # reply_to_message есть только если пользователь
+                            # реально ответил реплаем на конкретное сообщение
+                            # — это и нужно для точной маршрутизации (см.
+                            # handle_reply). Если реплая нет, будет None и
+                            # сработает запасной вариант внутри handle_reply.
+                            reply_to = msg.get("reply_to_message") or {}
+                            handle_reply(chat_id, text, state, reply_to.get("message_id"))
                     except Exception as e:
                         # Не даём одному сбойному сообщению убить весь
                         # поллинг — двигаем offset дальше (уже сделано

@@ -209,7 +209,7 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 
 /* Sidebar */
 .sidebar { }
-.sidebar-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.sidebar-section { background: rgba(255,255,255,0.78); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .sidebar-title { font-size: 11px; font-weight: 600; color: var(--hint); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
 .filter-group { margin-bottom: 14px; }
 .filter-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
@@ -235,10 +235,26 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    читаемости (текста на карточках больше и мельче, чем в промо-блоках,
    поэтому оверлей светлее и плотнее — 0.82/0.9 вместо 0.55/0.75), контент
    карточки — поверх всего через z-index. */
-.company-card.card-video-bg { position: relative; overflow: hidden; background: rgba(255,255,255,0.75); }
-.card-bg-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
-.card-bg-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.72), rgba(255,255,255,0.82)); z-index: 1; }
-.card-video-bg .card-header, .card-video-bg .card-footer { position: relative; z-index: 2; }
+/* 14.08.2026: раньше у каждой из первых двух карточек было своё видео
+   внутри — по запросу пользователя переделано на ОДНО общее видео на
+   высоту обеих карточек сразу, во всю ширину экрана (см. ниже
+   .companies-video-wrap) — сами карточки теперь просто полупрозрачные,
+   без собственного <video> внутри. */
+.company-card.card-video-bg { background: rgba(255,255,255,0.78); position: relative; z-index: 2; }
+/* .companies-video-wrap — обёртка общего видео-фона для 1-й/2-й карточки.
+   Карточки лежат глубоко внутри .main (grid, max-width:960px, padding:32px
+   24px) — чтобы видео было "во всю ширину экрана", а не только в рамках
+   этой колонки, используем приём "full-bleed": отрицательные отступы,
+   равные паддингу .main, растягивают обёртку до полной ширины страницы
+   (на мобильном, где сайдбар скрыт, это и есть вся ширина экрана; на
+   десктопе — до полной ширины .main). 100vw сознательно не используем —
+   он включает ширину скроллбара и уже создавал горизонтальную прокрутку
+   в этом проекте (см. PROJECT_STATE.md), отрицательные margin безопаснее. */
+.companies-video-wrap { position: relative; overflow: hidden; margin: 0 -24px 12px; padding: 20px 24px; }
+.companies-bg-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.companies-bg-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.35)); z-index: 1; }
+.companies-video-content { position: relative; z-index: 2; }
+.companies-video-content .company-card:last-child { margin-bottom: 0; }
 .card-header { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
 .card-avatar { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 800; flex-shrink: 0; }
 .av-green { background: var(--accent-light); color: var(--accent); }
@@ -349,7 +365,7 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 @media (max-width: 720px) { .mr-form { grid-template-columns: 1fr; } }
 
 /* TG banner */
-.tg-section { background: linear-gradient(135deg, #0088cc15, #0088cc05); border: 1px solid #0088cc30; border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.tg-section { background: linear-gradient(135deg, rgba(0,136,204,0.16), rgba(255,255,255,0.78)); border: 1px solid #0088cc30; border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
 .tg-inner { display: flex; align-items: center; gap: 12px; }
 .tg-ico { width: 40px; height: 40px; background: #0088cc; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .tg-ico svg { fill: #fff; width: 22px; height: 22px; }
@@ -1168,17 +1184,8 @@ function renderCompanies(list) {
   const el = document.getElementById('companies-list');
   if (!el) return;
   const sorted = [...list].sort(compareCompanies);
-  el.innerHTML = sorted.map((c, idx) => {
+  const cardsHtml = sorted.map((c, idx) => {
     const isTop = c.featured;
-    // Видео-фон за 1-й и 2-й карточкой каталога — 14.08.2026, по запросу
-    // пользователя, из присланного фото сделан зацикленный видео-Ken-Burns
-    // (см. videos/card-bg.mp4). Именно ПЕРВЫЕ ДВЕ карточки по текущей
-    // сортировке (сейчас это рекомендуемые/топовые компании) — если
-    // порядок сортировки сменится, эффект переедет вместе с топ-2, а не
-    // останется приклеенным к конкретным компаниям.
-    const videoBg = idx < 2
-      ? `<video class="card-bg-video" autoplay muted loop playsinline preload="metadata"><source src="/videos/card-bg.mp4" type="video/mp4"></video><div class="card-bg-overlay"></div>`
-      : '';
     const tags = c.directions.slice(0,3).map(d=>`<span class="tag">🌍 ${d}</span>`).join('') +
                  c.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('');
     // Приоритет кнопки "написать" — 14.08.2026, по прямому указанию
@@ -1229,7 +1236,6 @@ function renderCompanies(list) {
     ].join('');
     return `
     <article class="company-card ${isTop?'top':''} ${idx<2?'card-video-bg':''}" data-link="${c.link||'#'}" style="cursor:${c.link&&c.link!=='#'?'pointer':'default'}">
-      ${videoBg}
       <div class="card-header">
         <div class="card-avatar ${c.color}">${c.avatar}</div>
         <div class="card-info">
@@ -1274,7 +1280,24 @@ function renderCompanies(list) {
         </div>
       </div>
     </article>`;
-  }).join('');
+  });
+  // Видео-фон за 1-й/2-й карточкой — 14.08.2026, по запросу пользователя:
+  // ОДНО видео на высоту обеих карточек вместе, во всю ширину экрана (как
+  // видео-фон у Калькулятора/Разослать запрос выше), а не два отдельных
+  // видео по одному на карточку. Первые 2 карточки (по текущей сортировке
+  // — сейчас топ/рекомендуемые) оборачиваются в .companies-video-wrap с
+  // общим <video>, остальные карточки идут после как обычно.
+  const videoCards = cardsHtml.slice(0, 2).join('');
+  const restCards = cardsHtml.slice(2).join('');
+  const videoBlock = videoCards ? `
+    <div class="companies-video-wrap">
+      <video class="companies-bg-video" autoplay muted loop playsinline preload="metadata">
+        <source src="/videos/card-bg.mp4" type="video/mp4">
+      </video>
+      <div class="companies-bg-overlay"></div>
+      <div class="companies-video-content">${videoCards}</div>
+    </div>` : '';
+  el.innerHTML = videoBlock + restCards;
   document.querySelector('.companies-title').textContent = `Компании в каталоге (${list.length})`;
 }
 

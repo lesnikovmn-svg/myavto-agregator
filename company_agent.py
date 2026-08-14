@@ -1167,7 +1167,16 @@ def get_existing(ws):
         return set()
 
 def add_company(ws, data, row_num):
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp","")]
+    # Колонка 31 (AE) добавлена 14.08.2026 по просьбе пользователя: поле
+    # "telegram" (колонка 10) — это КАНАЛ/ГРУППА компании (то, что находит
+    # tgstat/поиск), у канала нет чата, написать в него нельзя. Новая колонка
+    # "telegram_contact" — личный аккаунт/бот для переписки, если он вообще
+    # известен. Агент пока не умеет сам искать личный контакт при добавлении
+    # новой компании (это отдельная, более сложная задача) — колонка
+    # заполняется только вручную/скриптом fix_telegram_contact_check.py.
+    # Поле telegram при этом больше НЕ трогаем/не затираем — оно остаётся
+    # полезным само по себе (иконка "подписаться на канал" на сайте).
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp",""),data.get("telegram_contact","")]
     # ВАЖНО: без table_range='A1' append_row без явного якоря может "уехать"
     # вправо — Sheets API ищет "таблицу" по всему листу и в редких случаях
     # (09.08.2026, найдено при разборе бага с 52 vs 82 строк) начинает

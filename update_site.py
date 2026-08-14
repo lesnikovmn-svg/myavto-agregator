@@ -48,7 +48,13 @@ for row in all_rows:
         avito=val(23),drom=val(24),autoru=val(25),
         # Добавлено 09.08.2026 для правила приоритета клика по карточке
         # (см. clink ниже): мессенджер MAX, YouTube, RuTube, WhatsApp.
-        max=val(26),youtube=val(27),rutube=val(28),whatsapp=val(29))
+        max=val(26),youtube=val(27),rutube=val(28),whatsapp=val(29),
+        # Добавлено 14.08.2026: telegram (val(9)) — это канал/группа
+        # компании, tgcontact (val(30), колонка AE) — личный аккаунт/бот
+        # для переписки, если найден (см. fix_telegram_contact_check.py).
+        # Кнопка "Написать в TG" на сайте использует именно tgcontact, а не
+        # telegram — у канала нет чата, писать в него нельзя.
+        tgcontact=val(30))
     if company['name']:
         companies.append(company)
 
@@ -105,8 +111,12 @@ for c in companies:
     # site -> telegram -> '#', теперь полная цепочка по просьбе
     # пользователя, который нашёл несколько компаний без сайта, но с
     # соцсетями через карточку 2ГИС).
+    # 14.08.2026: для клика по карточке используем tgcontact (личный/бот),
+    # если он есть, иначе telegram (канал) — переход на канал лучше, чем
+    # никуда, просто это не то же самое, что "написать".
+    tg_for_link = c['tgcontact'] or c['telegram']
     clink = (c['site'] or
-             (('https://t.me/' + c['telegram']) if c['telegram'] else '') or
+             (('https://t.me/' + tg_for_link) if tg_for_link else '') or
              c['instagram'] or c['vk'] or c['max'] or c['youtube'] or
              c['rutube'] or c['whatsapp'] or '#')
     egrul_verified = 'true' if c['egrul_year'] else 'false'
@@ -118,6 +128,7 @@ for c in companies:
            f'instagram:"{c["instagram"]}",vk:"{c["vk"]}",'
            f'avito:"{c["avito"]}",drom:"{c["drom"]}",autoru:"{c["autoru"]}",'
            f'max:"{c["max"]}",youtube:"{c["youtube"]}",rutube:"{c["rutube"]}",whatsapp:"{c["whatsapp"]}",'
+           f'tgcontact:"{c["tgcontact"]}",'
            f'link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}"}},\n')
 js = js.rstrip(',\n') + '\n];'
 

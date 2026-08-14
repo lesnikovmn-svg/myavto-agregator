@@ -1,37 +1,42 @@
 """
-Проверка Telegram-контактов компаний — 14.08.2026, по просьбе пользователя:
-кнопка "Написать в TG" на сайте использует поле telegram как есть, но
-агент часто находит именно КАНАЛ компании (tgstat специально ищет
-каналы) — у канала нет чата, написать напрямую нельзя. Кнопка на сайте
-уже поправлена (приоритет WhatsApp > Telegram > сайт > телефон), но сами
-данные в таблице это не чинит — если единственный контакт компании это
-канал, кнопки "написать" всё равно не будет ни у кого, кроме WhatsApp.
+Заполнение колонки "Telegram (личный/бот)" — переписано 14.08.2026.
 
-Что делает скрипт для каждой компании с непустым telegram:
+Была версия, которая при обнаружении канала/группы ЗАТИРАЛА поле telegram
+(если не находила альтернативу) или ПОДМЕНЯЛА его найденным личным контактом.
+По итогам обсуждения с пользователем решили иначе: поле telegram (колонка J,
+10) — это канал/группа компании, само по себе полезно (человек может на него
+подписаться), трогать его не нужно. Вместо этого используем отдельную
+колонку 31 (AE, "Telegram (личный/бот)", см. add_tg_contact_column.py) —
+именно её кнопка "Написать в TG" на сайте использует для отправки сообщения.
+Эту колонку нужно создать один раз ДО первого запуска этого скрипта.
+
+Что делает скрипт для каждой компании с непустым telegram (колонка J):
 1. Идёт на https://t.me/<handle> (публичная превью-страница, без токена).
 2. Смотрит, есть ли в тексте "N subscribers" (канал) или "N members"
    (группа) — если ни того ни другого нет, это, вероятнее всего, личный
-   аккаунт или бот, то есть УЖЕ messageable — ничего не трогаем.
+   аккаунт или бот, то есть УЖЕ messageable. В этом случае просто копируем
+   тот же handle и в колонку "личный/бот" — кнопка сайта сможет им
+   пользоваться напрямую.
 3. Если это канал/группа — ищет в og:description ДРУГОЙ @юзернейм
    (не сам канал), который часто указывают в описании как контакт для
    связи ("по вопросам: @ivan_avto"). Если находит — идёт и на НЕГО тоже,
-   проверяет, что это НЕ ещё один канал/группа (чтобы не подменить один
-   непрямой контакт на другой), и если подтвердилось — заменяет telegram
-   на этот новый юзернейм.
-4. Если альтернативного контакта не нашлось — ОЧИЩАЕТ поле telegram
-   (пусто). Это осознанное решение: лучше честно откатиться на
-   WhatsApp/сайт/телефон (уже реализовано в кнопке на сайте), чем вести
-   посетителя в канал, где написать нельзя.
+   проверяет, что это НЕ ещё один канал/группа, и если подтвердилось —
+   записывает его в колонку "личный/бот".
+4. Если альтернативного контакта не нашлось — колонку "личный/бот" НЕ
+   трогаем (оставляем пустой). Кнопка на сайте в этом случае сама
+   откатится на WhatsApp/VK/Instagram/сайт/телефон — canal-поле при этом
+   остаётся на месте как есть.
 
-Ограничения (важно): эвристика не идеальна — часть личных Telegram-
-аккаунтов тоже НЕ показывает "subscribers"/"members" сразу (это нормально,
-считаем messageable), но часть каналов может не попасть под регулярку по
-другой причине и остаться нетронутой. Результат стоит один раз проглядеть
-глазами по логу перед тем, как запускать рассылку.
+Ограничения: эвристика не идеальна — часть личных Telegram-аккаунтов тоже
+НЕ показывает "subscribers"/"members" сразу (это нормально, считаем
+messageable), но часть каналов может не попасть под регулярку и остаться
+без личного контакта, хотя он в описании и есть в другом виде. Результат
+стоит один раз проглядеть глазами по логу перед тем, как запускать
+рассылку.
 
 Делает паузы между запросами (1 сек), чтобы не долбить t.me слишком часто.
 
-Запуск: python3 fix_telegram_contact_check.py
+Запуск (после add_tg_contact_column.py): python3 fix_telegram_contact_check.py
 После — python3 update_site.py.
 """
 import re
@@ -40,6 +45,7 @@ import requests
 from company_agent import connect_sheets
 
 TELEGRAM_COL = 10
+TG_CONTACT_COL = 31
 NAME_COL = 2
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -78,12 +84,19 @@ def find_alt_contact(html, own_handle):
 ws = connect_sheets()
 all_values = ws.get_all_values()
 
-kept, replaced, cleared, unknown = 0, 0, 0, 0
+header = ws.cell(1, TG_CONTACT_COL).value
+if not header:
+    print(f"Колонка {TG_CONTACT_COL} (AE) ещё не создана — сначала запусти "
+          f"python3 add_tg_contact_column.py")
+    raise SystemExit(1)
+
+already_contact, found_alt, no_alt, unknown = 0, 0, 0, 0
 
 for i, row in enumerate(all_values[1:], start=2):
     handle = row[TELEGRAM_COL - 1].strip() if len(row) >= TELEGRAM_COL else ""
     name = row[NAME_COL - 1].strip() if len(row) >= NAME_COL else ""
-    if not handle:
+    existing_contact = row[TG_CONTACT_COL - 1].strip() if len(row) >= TG_CONTACT_COL else ""
+    if not handle or existing_contact:
         continue
 
     html = fetch_tg_page(handle)
@@ -91,31 +104,35 @@ for i, row in enumerate(all_values[1:], start=2):
     kind = classify(html)
 
     if kind == "contact":
-        kept += 1
+        ws.update_cell(i, TG_CONTACT_COL, handle)
+        print(f"[{i}] {name} (@{handle}): уже личный контакт/бот — скопировал в колонку AE")
+        already_contact += 1
         continue
     if kind == "unknown":
-        print(f"[{i}] {name} (@{handle}): не удалось загрузить превью, оставляю как есть")
+        print(f"[{i}] {name} (@{handle}): не удалось загрузить превью, пропускаю")
         unknown += 1
         continue
 
-    # channel/group — ищем альтернативу
+    # channel/group — ищем альтернативу, поле telegram НЕ трогаем
     alt = find_alt_contact(html, handle)
     if alt:
         alt_html = fetch_tg_page(alt)
         time.sleep(1)
         alt_kind = classify(alt_html)
         if alt_kind == "contact":
-            ws.update_cell(i, TELEGRAM_COL, alt)
-            print(f"[{i}] {name}: {kind} @{handle} -> найден личный контакт @{alt}, заменил")
-            replaced += 1
+            ws.update_cell(i, TG_CONTACT_COL, alt)
+            print(f"[{i}] {name}: {kind} @{handle}, канал остаётся как есть, личный контакт @{alt} записан в AE")
+            found_alt += 1
             continue
         else:
             print(f"[{i}] {name}: {kind} @{handle}, альтернатива @{alt} тоже оказалась {alt_kind} — не годится")
 
-    ws.update_cell(i, TELEGRAM_COL, "")
-    print(f"[{i}] {name}: {kind} @{handle}, альтернативы не нашлось — очистил поле (сайт откатится на WhatsApp/сайт/телефон)")
-    cleared += 1
+    print(f"[{i}] {name}: {kind} @{handle}, личного контакта не нашлось — колонка AE остаётся пустой, "
+          f"кнопка сайта откатится на WhatsApp/VK/Instagram/сайт/телефон")
+    no_alt += 1
 
-print(f"\nИтого: оставлено как есть (уже контакт) — {kept}, заменено на личный контакт — {replaced}, "
-      f"очищено (был канал/группа без альтернативы) — {cleared}, не удалось проверить — {unknown}")
+print(f"\nИтого: уже был личный контакт (скопировано в AE) — {already_contact}, "
+      f"найден альтернативный контакт — {found_alt}, "
+      f"личного контакта не нашлось (AE пусто, канал не тронут) — {no_alt}, "
+      f"не удалось проверить — {unknown}")
 print("\nТеперь прогони python3 update_site.py.")

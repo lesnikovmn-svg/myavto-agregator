@@ -4,6 +4,8 @@ bot_config.env
 bot_config.env.save
 *.env.save
 bot_state.json
+mail_config.env
+onboarding_emails_log.json
 __pycache__/
 *.pyc
 main

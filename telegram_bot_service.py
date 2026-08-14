@@ -94,9 +94,11 @@ company_name}; если компания действительно ответи
 import json
 import os
 import re
+import smtplib
 import sys
 import threading
 import time
+from email.mime.text import MIMEText
 
 import gspread
 import requests
@@ -143,11 +145,51 @@ ADMIN_CHAT_ID = BOT_CONFIG.get("ADMIN_CHAT_ID", "").strip()
 # journalctl). Можно задать одновременно с ADMIN_CHAT_ID — уйдёт в оба.
 ADMIN_GROUP_CHAT_ID = BOT_CONFIG.get("ADMIN_GROUP_CHAT_ID", "").strip()
 
+# 14.08.2026: помимо Telegram-уведомлений (ADMIN_CHAT_ID/ADMIN_GROUP_CHAT_ID
+# выше), владелец попросил дублировать те же события на почту — на случай,
+# если не смотрит в телефон, а почта проверяется чаще/есть уведомления на
+# рабочем месте. Переиспользуем тот же mail_config.env, что уже настроен
+# для send_onboarding_emails.py (тот же SMTP-аккаунт, дополнительно не
+# нужно ничего заводить) — просто нужно скопировать этот файл на VPS
+# рядом с bot_config.env (он в .gitignore, через git не попадёт). Если
+# mail_config.env на VPS нет — email-уведомления просто не отправляются,
+# Telegram-уведомления и весь остальной функционал бота не страдают
+# (тот же принцип отказоустойчивости, что и у ADMIN_CHAT_ID).
+MAIL_CONFIG = {}
+if os.path.exists("mail_config.env"):
+    with open("mail_config.env") as f:
+        for line in f:
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                MAIL_CONFIG[k.strip()] = v.strip()
+
+
+def send_admin_email(subject, body):
+    if not MAIL_CONFIG:
+        return
+    try:
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = subject
+        from_addr = MAIL_CONFIG["SMTP_USER"]
+        to_addr = MAIL_CONFIG.get("ADMIN_EMAIL", "").strip() or from_addr
+        msg["From"] = f"{MAIL_CONFIG.get('FROM_NAME', from_addr)} <{from_addr}>"
+        msg["To"] = to_addr
+        with smtplib.SMTP(MAIL_CONFIG["SMTP_HOST"], int(MAIL_CONFIG["SMTP_PORT"]), timeout=10) as server:
+            server.starttls()
+            server.login(from_addr, MAIL_CONFIG["SMTP_PASSWORD"])
+            server.sendmail(from_addr, [to_addr], msg.as_string())
+    except Exception as e:
+        # Сбой почты никогда не должен ронять сам бот — та же осторожность,
+        # что и у tg_send() (try/except вокруг сетевого похода).
+        print(f"[bot] не удалось отправить email-уведомление: {e}")
+
 
 def notify_admin(text):
     for dest in (ADMIN_CHAT_ID, ADMIN_GROUP_CHAT_ID):
         if dest:
             tg_send(dest, f"🔔 {text}")
+    send_admin_email("MyAvtoAgregator — уведомление", text)
 
 SHEET_CONFIG = {}
 with open("agent_config.env") as f:

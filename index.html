@@ -183,12 +183,21 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .dir:hover, .dir.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* Search */
-.search-wrap { max-width: 580px; margin: 0 auto 12px; display: flex; gap: 8px; }
+.search-wrap { max-width: 580px; margin: 0 auto 12px; display: flex; gap: 8px; position: relative; }
 .search-wrap input { flex: 1; padding: 14px 18px; border-radius: var(--radius); border: 1.5px solid var(--border); background: var(--surface); font-size: 15px; color: var(--text); outline: none; font-family: 'Inter', sans-serif; transition: border-color 0.15s; box-shadow: var(--shadow); }
 .search-wrap input:focus { border-color: var(--accent); }
 .search-wrap input::placeholder { color: var(--hint); }
 .search-wrap button { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 14px 24px; font-size: 15px; font-weight: 500; cursor: pointer; font-family: 'Inter', sans-serif; white-space: nowrap; }
 .search-hint { text-align: center; font-size: 12px; color: var(--hint); }
+/* Автоподсказки поиска — 14.08.2026, по запросу пользователя (поиск по
+   названию/хэштегу/цифрам с выпадающей подсказкой). Позиционируется под
+   полем ввода внутри .search-wrap (у него position:relative). */
+.search-suggestions { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 84px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 20; max-height: 320px; overflow-y: auto; text-align: left; }
+.search-suggestion-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; font-size: 14px; }
+.search-suggestion-item:hover { background: var(--bg); }
+.search-suggestion-item + .search-suggestion-item { border-top: 1px solid var(--border); }
+.sugg-name { font-weight: 500; color: var(--text); }
+.sugg-meta { font-size: 12px; color: var(--hint); white-space: nowrap; }
 
 /* Stats bar */
 .stats-bar { background: var(--text); color: #fff; padding: 20px 24px; display: flex; justify-content: center; gap: 48px; }
@@ -396,8 +405,9 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
     <span class="dir" onclick="filterDir(this,'europe')">🇪🇺 Европа</span>
   </div>
   <div class="search-wrap">
-    <input type="text" id="mainSearch" placeholder="Введи модель авто, страну или бюджет..." />
+    <input type="text" id="mainSearch" placeholder="Введи модель авто, страну или бюджет..." autocomplete="off" />
     <button onclick="doSearch()">Найти компанию</button>
+    <div id="searchSuggestions" class="search-suggestions"></div>
   </div>
   <p class="search-hint">Например: Toyota RAV4 из Кореи, бюджет 3.5 млн ₽</p>
 </section>
@@ -1139,10 +1149,66 @@ function applyFilters() {
     const allowed = [...checkedDirs].map(k=>DIR_MAP[k]);
     list = list.filter(c=>c.directions.some(d=>allowed.includes(d)));
   }
-  const q = document.getElementById('mainSearch')?.value.toLowerCase();
-  if (q) list = list.filter(c=>c.name.toLowerCase().includes(q)||c.description.toLowerCase().includes(q)||c.directions.some(d=>d.toLowerCase().includes(q)));
+  // Поиск — 14.08.2026, расширен по запросу пользователя: раньше искал
+  // только по названию/описанию/направлению, теперь ещё и по тегам
+  // ("хэштегам" вроде "Под ключ", "Без посредников"). Работает для любых
+  // букв/цифр (кириллица/латиница/цифры вперемешку) "из коробки" — это
+  // обычный регистронезависимый substring-поиск через .includes(), в
+  // JS toLowerCase()/includes() не завязаны на конкретный алфавит.
+  const q = document.getElementById('mainSearch')?.value.toLowerCase().trim();
+  if (q) list = list.filter(c=>c.name.toLowerCase().includes(q)||c.description.toLowerCase().includes(q)||
+    c.directions.some(d=>d.toLowerCase().includes(q))||c.tags.some(t=>t.toLowerCase().includes(q)));
   renderCompanies(list);
 }
+
+// Автоподсказки под полем поиска — 14.08.2026, по запросу пользователя
+// ("автоматическая подсказка на выбор"). Ищет по тому же набору полей,
+// что и сам поиск (имя/теги/направления), показывает до 8 совпадений,
+// клик по подсказке подставляет точное название в поле, применяет фильтр
+// и прокручивает к каталогу — не нужно листать весь отфильтрованный
+// список руками, чтобы найти конкретную компанию по имени.
+function updateSearchSuggestions(rawQuery) {
+  const box = document.getElementById('searchSuggestions');
+  if (!box) return;
+  const q = rawQuery.toLowerCase().trim();
+  if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const matches = COMPANIES.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    c.tags.some(t => t.toLowerCase().includes(q)) ||
+    c.directions.some(d => d.toLowerCase().includes(q))
+  ).slice(0, 8);
+  if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = matches.map(c => {
+    const meta = c.directions[0] ? `🌍 ${c.directions[0]}` : (c.tags[0] || '');
+    return `<div class="search-suggestion-item" data-name="${c.name.replace(/"/g,'&quot;')}">` +
+      `<span class="sugg-name">${c.name}</span><span class="sugg-meta">${meta}</span></div>`;
+  }).join('');
+  box.style.display = 'block';
+}
+
+document.getElementById('searchSuggestions')?.addEventListener('click', e => {
+  const item = e.target.closest('.search-suggestion-item');
+  if (!item) return;
+  const input = document.getElementById('mainSearch');
+  input.value = item.dataset.name;
+  applyFilters();
+  document.getElementById('searchSuggestions').style.display = 'none';
+  document.getElementById('catalog')?.scrollIntoView({behavior: 'smooth'});
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) {
+    const box = document.getElementById('searchSuggestions');
+    if (box) box.style.display = 'none';
+  }
+});
+
+document.getElementById('mainSearch')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const box = document.getElementById('searchSuggestions');
+    if (box) box.style.display = 'none';
+  }
+});
 
 function revealPhone(btn) {
   // Номер не палим в открытую в тексте страницы — только по явному клику.
@@ -1171,7 +1237,10 @@ function initSidebarFilters() {
   });
 }
 
-document.getElementById('mainSearch')?.addEventListener('input', applyFilters);
+document.getElementById('mainSearch')?.addEventListener('input', e => {
+  applyFilters();
+  updateSearchSuggestions(e.target.value);
+});
 window.addEventListener('DOMContentLoaded', ()=>{
   renderCompanies(COMPANIES);
   initSidebarFilters();

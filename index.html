@@ -989,11 +989,23 @@ function renderCompanies(list) {
     const isTop = c.featured;
     const tags = c.directions.slice(0,3).map(d=>`<span class="tag">🌍 ${d}</span>`).join('') +
                  c.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('');
-    const contact = c.telegram
+    // Приоритет кнопки "написать" — 14.08.2026: WhatsApp-ссылка (wa.me/…)
+    // всегда открывает реальный чат, это на 100% messageable-контакт.
+    // Telegram-юзернейм, который знает агент, часто оказывается КАНАЛОМ
+    // компании (агент их и ищет через tgstat) — у канала нет чата,
+    // написать напрямую нельзя, кнопка "Написать в TG" вела в пустоту.
+    // Поэтому WhatsApp теперь приоритетнее Telegram, если есть оба.
+    // "Связаться" без ссылки (мёртвая кнопка) убрана — вместо неё честный
+    // fallback на телефон (если есть) или явная пометка, что контактов нет.
+    const contact = c.whatsapp
+      ? `<a href="${c.whatsapp}" target="_blank"><button class="btn-primary">Написать в WhatsApp</button></a>`
+      : c.telegram
       ? `<a href="https://t.me/${c.telegram}" target="_blank"><button class="btn-primary">Написать в TG</button></a>`
       : c.site
       ? `<a href="${c.site}" target="_blank"><button class="btn-primary">Перейти на сайт</button></a>`
-      : `<button class="btn-primary">Связаться</button>`;
+      : (c.phone && c.phone !== '-')
+      ? `<button type="button" class="btn-primary phone-reveal" data-phone="${c.phone}" onclick="revealPhone(this)">📞 Показать номер</button>`
+      : `<button class="btn-primary" disabled style="opacity:.5;cursor:default;">Контакты уточняются</button>`;
     const phone = (c.phone && c.phone !== '-')
       ? `<div class="meta-item"><button type="button" class="phone-reveal" data-phone="${c.phone}" onclick="revealPhone(this)">📞 Показать номер</button></div>`
       : '';

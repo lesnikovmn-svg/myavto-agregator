@@ -277,6 +277,18 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    вне сайдбара (см. комментарий у HTML-блока), просто центрирует и
    ограничивает ширину карточки, сама карточка (.calc-section и внутренности)
    не менялась. */
+/* Видео-фон за калькулятором и формой массовой заявки — 14.08.2026.
+   .promo-video заполняет весь .promo-video-wrap (object-fit:cover —
+   обрезается по центру под контейнер, исходное видео портретное
+   448x672, поэтому cover обязателен, растягивать без обрезки было бы
+   криво). Оверлей — полупрозрачный градиент в фирменных цветах, чтобы
+   видео не спорило по контрасту с белыми карточками поверх него.
+   .promo-video-content — обычный поток (position:relative + z-index),
+   сами секции calc-standalone/mass-request внутри не менялись. */
+.promo-video-wrap { position: relative; overflow: hidden; padding: 40px 0; }
+.promo-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; z-index: 0; }
+.promo-video-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(26,107,60,0.55), rgba(15,79,138,0.45)); z-index: 1; }
+.promo-video-content { position: relative; z-index: 2; }
 .calc-standalone { max-width: 480px; margin: 0 auto 32px; padding: 0 24px; }
 .calc-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .calc-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
@@ -484,6 +496,20 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   <div class="stat"><div class="stat-n">9 стран</div><div class="stat-l">Покрытие СНГ</div></div>
 </div>
 
+<!-- Видео-фон за калькулятором и формой массовой заявки — 14.08.2026,
+     по запросу пользователя. <video> лежит первым и растянут на весь
+     .promo-video-wrap через position:absolute+object-fit:cover, поверх
+     — полупрозрачный градиент-оверлей для читаемости, поверх него уже
+     сами секции (без изменений внутри) в .promo-video-content. autoplay
+     обязательно требует muted (иначе браузеры блокируют автовоспроизведение),
+     playsinline — чтобы на iOS не разворачивалось в полноэкранный плеер. -->
+<div class="promo-video-wrap">
+  <video class="promo-video" autoplay muted loop playsinline preload="metadata">
+    <source src="/videos/promo-bg.mp4" type="video/mp4">
+  </video>
+  <div class="promo-video-overlay"></div>
+  <div class="promo-video-content">
+
 <!-- Калькулятор — 14.08.2026: вынесен из сайдбара в отдельную секцию.
      Раньше жил внутри <aside class="sidebar">, который на мобильных
      (max-width:680px) скрывается целиком (.sidebar{display:none}) —
@@ -563,6 +589,9 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
     <div class="mr-success" id="mr-success">Заявка сформирована — сейчас откроется Telegram, отправь сообщение боту, и мы разошлём её по компаниям.</div>
   </div>
 </section>
+
+  </div>
+</div>
 
 <!-- Main -->
 <div class="main" id="catalog">

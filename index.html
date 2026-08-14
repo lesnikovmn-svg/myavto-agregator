@@ -309,7 +309,12 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    всю ширину колонки без явного width (в отличие от десктопных браузеров,
    где стрейч по умолчанию работает и для форм-элементов). Это была
    единственная секция на странице с "голыми" полями формы прямо в Grid. */
-.mr-form input, .mr-form select, .mr-form textarea { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; background: var(--surface); }
+.mr-form input:not([type="checkbox"]), .mr-form select, .mr-form textarea { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; background: var(--surface); }
+/* 14.08.2026: width:100% выше по ошибке задевал и чекбокс согласия
+   (input type=checkbox — тоже .mr-form input) — растягивал его на всю
+   ширину строки и отталкивал текст согласия далеко вправо. Явно
+   фиксируем чекбоксу нормальный маленький размер и запрет на сжатие. */
+.mr-consent input[type="checkbox"] { width: auto; flex-shrink: 0; margin-top: 2px; }
 .mr-form textarea { grid-column: 1 / -1; resize: vertical; min-height: 44px; }
 .mr-form .mr-full { grid-column: 1 / -1; }
 .mr-submit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }

@@ -231,10 +231,26 @@ def tg_send(chat_id, text):
         return None
 
 
+# 14.08.2026: без кэша каждый /start клиента заново ходил в Google Sheets
+# (см. PROJECT_STATE.md, раздел про нагрузку при всплеске заявок) — при
+# нескольких одновременных клиентах это сериализовало обработку в
+# poll_loop() (все под одним _state_lock) и копило задержку. Кэш на 90
+# секунд — компании обновляются в таблице не поминутно, свежесть не
+# критична, а нагрузка на Sheets API и время ответа сильно падают.
+_companies_cache = {"data": None, "ts": 0}
+_companies_cache_lock = threading.Lock()
+COMPANIES_CACHE_TTL = 90
+
+
 def get_companies():
     """Читаем telegram/directions компаний прямо из Google Sheets —
     та же таблица, что использует company_agent.py/update_site.py, тут
-    отдельной копии данных не держим."""
+    отдельной копии данных не держим. Результат кэшируется на
+    COMPANIES_CACHE_TTL секунд (см. комментарий выше)."""
+    with _companies_cache_lock:
+        if _companies_cache["data"] is not None and time.time() - _companies_cache["ts"] < COMPANIES_CACHE_TTL:
+            return _companies_cache["data"]
+
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
     client = gspread.authorize(creds)
@@ -251,6 +267,10 @@ def get_companies():
                 "telegram": telegram.lstrip("@").lower(),
                 "directions": [d.strip() for d in directions.split(",") if d.strip()],
             })
+
+    with _companies_cache_lock:
+        _companies_cache["data"] = companies
+        _companies_cache["ts"] = time.time()
     return companies
 
 
@@ -511,4 +531,10 @@ def poll_loop():
 
 if __name__ == "__main__":
     threading.Thread(target=poll_loop, daemon=True).start()
-    app.run(host="0.0.0.0", port=5055)
+    # 14.08.2026: threaded=True — раньше Flask dev-сервер обрабатывал HTTP
+    # запросы к /api/mass-request строго по одному (см. PROJECT_STATE.md,
+    # нагрузка при всплеске заявок). При нескольких клиентах, отправляющих
+    # заявку почти одновременно, это создавало очередь. Каждый запрос и
+    # так короткий (запись в JSON + один Telegram-send + одно письмо), но
+    # с threaded=True они больше не блокируют друг друга.
+    app.run(host="0.0.0.0", port=5055, threaded=True)

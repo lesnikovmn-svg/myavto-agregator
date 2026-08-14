@@ -229,6 +229,16 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .company-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; box-shadow: var(--shadow); transition: box-shadow 0.15s; }
 .company-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
 .company-card.top { border-left: 3px solid var(--accent); }
+/* Видео-фон за 1-й/2-й карточкой каталога — 14.08.2026. Та же схема, что
+   у промо-блоков выше: видео абсолютно позиционировано на всю карточку
+   (object-fit:cover), поверх — полупрозрачный белый оверлей для
+   читаемости (текста на карточках больше и мельче, чем в промо-блоках,
+   поэтому оверлей светлее и плотнее — 0.82/0.9 вместо 0.55/0.75), контент
+   карточки — поверх всего через z-index. */
+.company-card.card-video-bg { position: relative; overflow: hidden; background: rgba(255,255,255,0.85); }
+.card-bg-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.card-bg-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.82), rgba(255,255,255,0.92)); z-index: 1; }
+.card-video-bg .card-header, .card-video-bg .card-footer { position: relative; z-index: 2; }
 .card-header { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
 .card-avatar { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 800; flex-shrink: 0; }
 .av-green { background: var(--accent-light); color: var(--accent); }
@@ -289,7 +299,7 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .promo-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; z-index: 0; }
 .promo-video-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(26,107,60,0.55), rgba(15,79,138,0.45)); z-index: 1; }
 .promo-video-content { position: relative; z-index: 2; }
-.calc-standalone { max-width: 480px; margin: 0 auto 32px; padding: 0 24px; }
+.calc-standalone { max-width: 480px; margin: 0 auto 32px; padding: 0; }
 .calc-section { background: rgba(255,255,255,0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .calc-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
 .calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -305,7 +315,7 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    заявок на размещение), а не проводит настоящий платёж. См. комментарий
    у cloudPaymentsCheckout() в JS — там ровно то место, куда позже
    вставляется реальный виджет. */
-.mass-request { max-width: 960px; margin: 0 auto; padding: 0 24px 32px; }
+.mass-request { max-width: 960px; margin: 0 auto; padding: 0 0 32px; }
 .mr-card { background: linear-gradient(135deg, rgba(232,245,238,0.8), rgba(255,255,255,0.8)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--accent); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); }
 .mr-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 18px; }
 .mr-title { font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 6px; }
@@ -382,7 +392,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   .stats-bar { gap: 20px; }
   .about-inner { grid-template-columns: 1fr; }
   .calc-row { grid-template-columns: 1fr; }
-  .calc-standalone { padding: 0 16px; }
+  .calc-standalone { padding: 0; }
 
   /* Нав — 14.08.2026: раньше это была одна нерастягиваемая строка из
      логотипа + 8 текстовых ссылок + 2 кнопок-пилюль, на ширине iPhone
@@ -1158,8 +1168,17 @@ function renderCompanies(list) {
   const el = document.getElementById('companies-list');
   if (!el) return;
   const sorted = [...list].sort(compareCompanies);
-  el.innerHTML = sorted.map(c => {
+  el.innerHTML = sorted.map((c, idx) => {
     const isTop = c.featured;
+    // Видео-фон за 1-й и 2-й карточкой каталога — 14.08.2026, по запросу
+    // пользователя, из присланного фото сделан зацикленный видео-Ken-Burns
+    // (см. videos/card-bg.mp4). Именно ПЕРВЫЕ ДВЕ карточки по текущей
+    // сортировке (сейчас это рекомендуемые/топовые компании) — если
+    // порядок сортировки сменится, эффект переедет вместе с топ-2, а не
+    // останется приклеенным к конкретным компаниям.
+    const videoBg = idx < 2
+      ? `<video class="card-bg-video" autoplay muted loop playsinline preload="metadata"><source src="/videos/card-bg.mp4" type="video/mp4"></video><div class="card-bg-overlay"></div>`
+      : '';
     const tags = c.directions.slice(0,3).map(d=>`<span class="tag">🌍 ${d}</span>`).join('') +
                  c.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('');
     // Приоритет кнопки "написать" — 14.08.2026, по прямому указанию
@@ -1209,7 +1228,8 @@ function renderCompanies(list) {
       c.autoru ? `<a href="${c.autoru}" target="_blank" class="review-icon-btn review-autoru" title="Авто.ру"><svg width="26" height="26" viewBox="0 0 64.125 64.125" xmlns="http://www.w3.org/2000/svg" style="border-radius:6px;"><path fill="#FF1700" d="M0 0h64.125v64.125H0z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M18.184 22.822c-.587 0-1.147.25-1.54.687l-5.062 5.63v6.24c0 1.143.928 2.07 2.072 2.07h.209a5.628 5.628 0 0 1 11.043 0H38.89a5.628 5.628 0 0 1 11.043 0h1.007a2.072 2.072 0 0 0 2.071-2.07v-3.33a.797.797 0 0 0-.612-.775l-8.82-2.106-8.773-5.985a2.071 2.071 0 0 0-1.168-.36H18.185zm6.282 18.133H39.33a5.627 5.627 0 0 0 10.163 0h1.447a5.577 5.577 0 0 0 5.577-5.577v-3.33a4.302 4.302 0 0 0-3.304-4.184l-8.192-1.956-8.24-5.621a5.577 5.577 0 0 0-3.143-.97H18.185c-1.582 0-3.09.671-4.148 1.848l-5.256 5.847a2.746 2.746 0 0 0-.704 1.836v6.53a5.577 5.577 0 0 0 5.577 5.577h.65a5.627 5.627 0 0 0 10.162 0zm19.946-4.54a2.121 2.121 0 1 0 0 4.242 2.121 2.121 0 0 0 0-4.242zm-27.148 2.12a2.121 2.121 0 1 1 4.242.001 2.121 2.121 0 0 1-4.242 0z" fill="#fff"/></svg></a>` : ''
     ].join('');
     return `
-    <article class="company-card ${isTop?'top':''}" data-link="${c.link||'#'}" style="cursor:${c.link&&c.link!=='#'?'pointer':'default'}">
+    <article class="company-card ${isTop?'top':''} ${idx<2?'card-video-bg':''}" data-link="${c.link||'#'}" style="cursor:${c.link&&c.link!=='#'?'pointer':'default'}">
+      ${videoBg}
       <div class="card-header">
         <div class="card-avatar ${c.color}">${c.avatar}</div>
         <div class="card-info">

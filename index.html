@@ -273,7 +273,11 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 8px 18px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; font-size: 13px; cursor: pointer; }
 
-/* Calc */
+/* Calc — .calc-standalone — 14.08.2026: обёртка для секции калькулятора
+   вне сайдбара (см. комментарий у HTML-блока), просто центрирует и
+   ограничивает ширину карточки, сама карточка (.calc-section и внутренности)
+   не менялась. */
+.calc-standalone { max-width: 480px; margin: 0 auto 32px; padding: 0 24px; }
 .calc-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .calc-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
 .calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -348,11 +352,41 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 
 @media (max-width: 680px) {
   .hero h1 { font-size: 28px; }
+  .hero { padding: 32px 16px 28px; }
   .main { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .stats-bar { gap: 20px; }
   .about-inner { grid-template-columns: 1fr; }
   .calc-row { grid-template-columns: 1fr; }
+  .calc-standalone { padding: 0 16px; }
+
+  /* Нав — 14.08.2026: раньше это была одна нерастягиваемая строка из
+     логотипа + 8 текстовых ссылок + 2 кнопок-пилюль, на ширине iPhone
+     (~375-430px) она либо вылезала за экран, либо сплющивалась —
+     пользователь заметил как "кривая разметка". Теперь переносится на
+     вторую строку и сжимается, а не ломается. */
+  nav { flex-wrap: wrap; row-gap: 8px; padding: 10px 16px; }
+  .logo-mark { height: 40px; }
+  .nav-links { flex-wrap: wrap; justify-content: center; gap: 8px 12px; width: 100%; }
+  .nav-links a { font-size: 12px; }
+  .nav-rate, .nav-tg { padding: 6px 12px; font-size: 12px; }
+
+  /* Поиск в шапке каталога (сегодняшняя правка) — на узком экране
+     занимает всю ширину под заголовком, а не сжимается рядом с ним. */
+  .companies-header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .companies-header-right { width: 100%; margin-left: 0; justify-content: space-between; }
+  .search-wrap { flex: 1; }
+  .search-wrap input { width: 100%; }
+  .search-wrap input:focus { width: 100%; }
+
+  /* Карточка компании — шапка (аватар+имя+кнопка отзыва) и подвал
+     (мета+кнопка написать) были нерастягиваемыми flex-рядами, на узком
+     экране текст/кнопки налезали друг на друга вместо переноса строки. */
+  .card-header { flex-wrap: wrap; }
+  .card-right { text-align: left; width: 100%; margin-top: 8px; }
+  .card-top { flex-wrap: wrap; row-gap: 4px; }
+  .card-footer { flex-wrap: wrap; gap: 10px; }
+  .card-meta { flex-wrap: wrap; row-gap: 4px; }
 }
 </style>
 <!-- Yandex.Metrika counter -->
@@ -420,6 +454,38 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   <div class="stat"><div class="stat-n">9 стран</div><div class="stat-l">Покрытие СНГ</div></div>
 </div>
 
+<!-- Калькулятор — 14.08.2026: вынесен из сайдбара в отдельную секцию.
+     Раньше жил внутри <aside class="sidebar">, который на мобильных
+     (max-width:680px) скрывается целиком (.sidebar{display:none}) —
+     из-за этого ссылка "Калькулятор" в шапке вела в пустоту на телефоне.
+     Теперь виден на всех разрешениях. -->
+<section class="calc-standalone" id="calc">
+  <div class="calc-section">
+    <div class="calc-title">Калькулятор пригона</div>
+    <div class="calc-row">
+      <select id="calcCountry" onchange="calcPrice()">
+        <option value="korea">Корея</option>
+        <option value="china">Китай</option>
+        <option value="japan">Япония</option>
+        <option value="usa">США</option>
+        <option value="uae">ОАЭ</option>
+        <option value="europe">Европа</option>
+      </select>
+      <select id="calcBudget" onchange="calcPrice()">
+        <option value="1">до 1.5 млн ₽</option>
+        <option value="2">1.5–3 млн ₽</option>
+        <option value="3">3–5 млн ₽</option>
+        <option value="4">от 5 млн ₽</option>
+      </select>
+    </div>
+    <div class="calc-result">
+      <div class="calc-label">Доставка + растаможка</div>
+      <div class="calc-price" id="calcResult">от 180 000 ₽</div>
+      <div class="calc-note">включая утильсбор и СБКТС</div>
+    </div>
+  </div>
+</section>
+
 <!-- Массовая заявка по всем компаниям сразу (задача #49) -->
 <section class="mass-request" id="mass-request">
   <div class="mr-card">
@@ -479,32 +545,6 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
         <label class="filter-opt"><input type="checkbox" checked data-dir="georgia"> 🇬🇪 Грузия <span class="filter-count" data-dir-count="georgia"></span></label>
         <label class="filter-opt"><input type="checkbox" checked data-dir="uae"> 🇦🇪 ОАЭ <span class="filter-count" data-dir-count="uae"></span></label>
         <label class="filter-opt"><input type="checkbox" checked data-dir="europe"> 🇪🇺 Европа <span class="filter-count" data-dir-count="europe"></span></label>
-      </div>
-    </div>
-
-    <!-- Калькулятор в сайдбаре -->
-    <div class="calc-section" id="calc">
-      <div class="calc-title">Калькулятор пригона</div>
-      <div class="calc-row">
-        <select id="calcCountry" onchange="calcPrice()">
-          <option value="korea">Корея</option>
-          <option value="china">Китай</option>
-          <option value="japan">Япония</option>
-          <option value="usa">США</option>
-          <option value="uae">ОАЭ</option>
-          <option value="europe">Европа</option>
-        </select>
-        <select id="calcBudget" onchange="calcPrice()">
-          <option value="1">до 1.5 млн ₽</option>
-          <option value="2">1.5–3 млн ₽</option>
-          <option value="3">3–5 млн ₽</option>
-          <option value="4">от 5 млн ₽</option>
-        </select>
-      </div>
-      <div class="calc-result">
-        <div class="calc-label">Доставка + растаможка</div>
-        <div class="calc-price" id="calcResult">от 180 000 ₽</div>
-        <div class="calc-note">включая утильсбор и СБКТС</div>
       </div>
     </div>
 

@@ -944,7 +944,12 @@ def is_vin_check_service(text):
     has_check_lexicon = any(w in t for w in
         ["пробив авто", "пробив по vin", "пробить авто", "проверка vin",
          "проверить vin", "vin-check", "vin check", "по vin или",
-         "введите vin", "госномер", "автокриминалист"])
+         "введите vin", "госномер", "автокриминалист",
+         # 13.08.2026: auto-praktis.vercel.app — статья "как бесплатно
+         # проверить историю автомобиля через Telegram-боты: от VIN-кода
+         # до штрафов" формально проходила старый список (ни одна фраза не
+         # совпадала буквально).
+         "vin-кода", "vin-код", "историю автомобиля"])
     return has_bot_or_service and has_check_lexicon
 
 def is_customs_broker(text):
@@ -1052,6 +1057,69 @@ def fetch_telegram_preview(username):
         return {"subscribers": subs, "description": desc, "title": clean_channel_title(title)}
     except Exception:
         return None
+
+def fetch_url_og_title(url, use_proxy=False):
+    """
+    Универсальная выборка og:title с произвольной страницы (VK, Instagram,
+    любой сайт) — 14.08.2026, для сверки имени компании сразу по нескольким
+    источникам, а не по одному сайту (см. verify_company_name). og:title
+    обычно рендерится на сервере, доступен даже на страницах, тяжёлых на
+    JS (VK/Instagram/2ГИС) — та же логика, что уже используется в
+    fetch_page_signal_text.
+    """
+    try:
+        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"},
+                          proxies=PROXIES if use_proxy else None)
+        if r.status_code != 200:
+            return ""
+        m = re.search(r'<meta property="og:title" content="([^"]*)"', r.text)
+        return clean_name_from_title(m.group(1)) if m else ""
+    except Exception:
+        return ""
+
+def _name_key_words(name):
+    return {w for w in re.findall(r"[a-zа-я0-9]+", name.lower()) if len(w) >= 3}
+
+def verify_company_name(name, tg="", vk="", instagram=""):
+    """
+    Сверяем выбранное имя компании по независимым источникам, прежде чем
+    вносить в каталог — 14.08.2026, по просьбе пользователя после разбора
+    карточек TGLand.ru/Zenstat/Free Telegram Groups/Телепот: во всех
+    случаях `site` оказывался ЧУЖОЙ площадкой-каталогом (Telegram/Дзен-
+    зеркалом), и og:site_name с неё называл каталог, а не саму компанию.
+    Эти конкретные площадки теперь в BLACKLIST, но сама болезнь общая —
+    любой будущий каталог-зеркало, ещё не попавший в BLACKLIST, наступит
+    на те же грабли.
+
+    Источники сверки — собственная страница компании на других площадках
+    (Telegram-канал, VK, Instagram), если они уже известны на этот момент.
+    Если хотя бы один источник даёт название БЕЗ общих слов с текущим
+    (расхождение) и само по себе не похоже на рекламный слоган — считаем
+    его более надёжным (это страница о САМОЙ компании, не о площадке,
+    через которую её нашли) и подменяем имя. Если источников для сверки
+    нет или все совпадают — оставляем как было.
+
+    Не является железной гарантией (например, если у площадки-зеркала
+    случайно нет ни телеграма, ни VK/Instagram в найденных полях — сверить
+    не с чем), поэтому предупреждение "имя взято из домена" в вызывающем
+    коде оставлено как есть — это доп. страховка, а не замена.
+    """
+    own_key = _name_key_words(name)
+    checks = []
+    if tg:
+        checks.append(("telegram", fetch_url_og_title(f"https://t.me/{tg}", use_proxy=True)))
+    if vk:
+        checks.append(("vk", fetch_url_og_title(vk)))
+    if instagram:
+        checks.append(("instagram", fetch_url_og_title(instagram)))
+    for source, cand_name in checks:
+        if not cand_name or is_probably_tagline(cand_name):
+            continue
+        cand_key = _name_key_words(cand_name)
+        if cand_key and not (cand_key & own_key):
+            print(f"    ⚠️ имя разошлось с {source} ('{cand_name}' vs '{name}') — беру {source} как более надёжный источник (это страница самой компании)")
+            return cand_name
+    return name
 
 def clean_channel_title(title):
     """Название телеграм-канала часто обвешано эмодзи и уточнением в
@@ -1161,7 +1229,28 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # "агрегатор", "Telegram-бот") и добавил "vc.ru" как компанию с
     # meta-description статьи вместо описания и мусорным телефоном.
     # vc.ru — крупная медиаплатформа, не импортёр, в чёрный список.
-    "vc.ru"]
+    "vc.ru",
+    # Найдено 14.08.2026 (ревизия каталога по просьбе пользователя, после
+    # добавления вертикали "Таможенные брокеры"): ещё четыре площадки той
+    # же болезни, что tgstat/tenchat/telagon/telderi/telno/telepot —
+    # каталоги-зеркала Telegram- и Дзен-каналов, попадающие в таблицу как
+    # "сайт компании" вместо реального сайта/канала владельца.
+    # "tgland.ru" — каталог Telegram-каналов (попал как "TGLand.ru",
+    # реальный канал — "Авто Заказ", @auto_zakazz25). "zenstat.ru" —
+    # аналитика Дзен-каналов (попал как "Zenstat", реальный канал —
+    # "Растаможка Авто Под Ключ"). "freetelegramgroups.com" — каталог
+    # Telegram-групп (попал как "Free Telegram Groups", реальный канал —
+    # "AUTOCOM"). "telepot.ru" — ещё один каталог Telegram-каналов (попал
+    # как "Телеграмм канал Tiger Cars...", реальный канал — "Tiger Cars",
+    # @TJ_cars).
+    "tgland.ru", "zenstat.ru", "freetelegramgroups.com", "telepot.ru",
+    # "aaajapan.com" — аукционная площадка (не компания-импортёр/посредник,
+    # см. auction_sites.md — отдельная база на будущее, в каталог
+    # импортёров не идёт). "auto-praktis.vercel.app" — блог со статьёй про
+    # проверку авто по VIN через Telegram-боты (тот же класс, что и
+    # is_vin_check_service, просто другая формулировка — см. фикс лексикона
+    # там же).
+    "aaajapan.com", "auto-praktis.vercel.app"]
 
 # Продающие фразы ниши — собраны 09.08.2026 по реальным сайтам/TG-каналам
 # компаний-импортёров авто (WESTMOTORS, Япония Транзит, KoreaBlizko, ASIA
@@ -1329,11 +1418,42 @@ def run_agent():
                 # для t.me НЕ доверяем clean_name_from_title(title) вообще —
                 # идём напрямую на превью-страницу канала за og:title, как
                 # уже делаем в fetch_telegram_preview()/add_specific_channel.py.
+                # 13.08.2026: для ссылки "https://t.me/s" регулярка ловила
+                # "s" как будто это юзернейм канала — но "/s/" это служебный
+                # путь Telegram (server-side превью, обычно t.me/s/<канал>),
+                # не название. В каталог попала "Telegram – a new era of
+                # messaging" (заголовок общей страницы t.me, а не канала).
+                # Настоящие юзернеймы Telegram — от 5 символов, фильтруем
+                # короткие/служебные совпадения ("s", "k", "iv" и т.п.).
                 handle_m = re.search(r"(?:t|telegram)\.me/([A-Za-z0-9_]+)", link, re.IGNORECASE)
-                if handle_m and not tg:
+                if handle_m and not tg and len(handle_m.group(1)) >= 5:
                     tg = handle_m.group(1)
+                if not tg:
+                    # Ни @упоминания в тексте, ни валидного юзернейма из
+                    # ссылки — карточку без способа связаться через Telegram
+                    # добавлять бессмысленно (и рискованно, см. случай "s").
+                    skipped += 1
+                    continue
                 preview = fetch_telegram_preview(tg) if tg else None
                 name = (preview["title"] if preview and preview.get("title") else "") or tg or domain_name
+                site_text = ""
+            elif domain and domain.group(1).lower() in ("vk.com", "vk.ru", "instagram.com"):
+                # 14.08.2026, по просьбе пользователя: если у кандидата нет
+                # собственного сайта и единственная найденная ссылка — его
+                # страница VK/Instagram, берём имя оттуда (og:title), а не
+                # с домена площадки ("Vk"/"Instagram" — бесполезно как имя,
+                # та же болезнь, что раньше была с "T.Me"). Ссылки на
+                # поиск/стену/пост (не сам профиль) отсекаем — как источник
+                # имени они не годятся, is_real_profile_url это уже умеет
+                # отличать (см. её докстринг).
+                if not is_real_profile_url(link.lower()):
+                    skipped += 1
+                    continue
+                soc_title = fetch_url_og_title(link)
+                if not soc_title or is_probably_tagline(soc_title):
+                    skipped += 1
+                    continue
+                name = soc_title
                 site_text = ""
             else:
                 # Идём на сайт ДО выбора имени (а не только потом за ИНН) —
@@ -1357,6 +1477,10 @@ def run_agent():
                     print(f"    имя со страницы сайта (og:site_name): '{brand_name}' (в выдаче было: '{title[:50]}')")
                 elif not title_name and not brand_name:
                     print(f"    ⚠️ имя взято из домена ({name}) — стоит проверить вручную")
+                # Сверка имени по независимым источникам (телеграм/VK/
+                # Instagram компании) — см. verify_company_name, 14.08.2026.
+                insta_check, vk_check = extract_social_from_text(site_text) if site_text else ("", "")
+                name = verify_company_name(name, tg=tg, vk=vk_check, instagram=insta_check)
                 # Если с главной не хватает ИНН и телефона — пробуем
                 # догрузить "Контакты"/"О нас" (см. find_subpage_urls,
                 # 10.08.2026: auto-asia25.ru — телефон/ИНН/правильный

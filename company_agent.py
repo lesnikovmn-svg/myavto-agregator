@@ -1301,7 +1301,12 @@ def add_company(ws, data, row_num):
     # ДО первого запуска с новым кодом, иначе email просто уедет в никуда
     # (append_row всё равно допишет по table_range='A1', колонка появится,
     # но БЕЗ заголовка, если её не завести заранее).
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-","Россия","FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp",""),data.get("telegram_contact",""),data.get("email","")]
+    # region раньше был жёстко "Россия" — не подходит для компаний из других
+    # стран СНГ (найдено 14.08.2026 на примере ElectroCar, Минск, Беларусь).
+    # Каталог задуман как "импорт авто в СНГ", не только Россия, так что
+    # region теперь берётся из data, с "Россия" как дефолтом для обратной
+    # совместимости (у большинства уже добавленных компаний он не указан).
+    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-",data.get("region","Россия"),"FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp",""),data.get("telegram_contact",""),data.get("email","")]
     # ВАЖНО: без table_range='A1' append_row без явного якоря может "уехать"
     # вправо — Sheets API ищет "таблицу" по всему листу и в редких случаях
     # (09.08.2026, найдено при разборе бага с 52 vs 82 строк) начинает

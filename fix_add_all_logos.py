@@ -42,9 +42,33 @@ worldcar.ru — это десятки тысяч слов каталога ле�
 Запуск: python3 fix_add_all_logos.py
 После — python3 update_site.py.
 """
+import time
 from urllib.parse import urlparse
 
 from company_agent import connect_sheets
+
+
+def safe_update_cell(ws, row, col, value, retries=5):
+    """
+    Найдено 17.08.2026 на реальном прогоне: ~90 update_cell подряд без пауз
+    упираются в лимит Google Sheets API 'Write requests per minute per
+    user' (429), скрипт падал необработанным исключением на середине
+    таблицы. Пауза 1.2с между записями (безопасно держит нас под ~50
+    запросов/мин) + ретрай с более долгой паузой конкретно на 429, если
+    квота всё же исчерпалась (например, из-за других скриптов, работающих
+    параллельно с той же таблицей).
+    """
+    for attempt in range(retries):
+        try:
+            ws.update_cell(row, col, value)
+            return
+        except Exception as e:
+            if "429" in str(e) and attempt < retries - 1:
+                wait = 15 * (attempt + 1)
+                print(f"    (лимit Google Sheets API, жду {wait}с и пробую снова...)")
+                time.sleep(wait)
+            else:
+                raise
 
 NAME_COL = 2
 TELEGRAM_COL = 10
@@ -106,15 +130,17 @@ for i, row in enumerate(rows, start=2):
         continue
 
     if name in KNOWN_GOOD_LOGOS:
-        ws.update_cell(i, AVATAR_COL, KNOWN_GOOD_LOGOS[name])
+        safe_update_cell(ws, i, AVATAR_COL, KNOWN_GOOD_LOGOS[name])
         print(f"[{i}] {name}: логотип с сайта (проверено вживую) -> {KNOWN_GOOD_LOGOS[name][:70]}...")
         updated_known += 1
+        time.sleep(1.2)
         continue
 
     if name in TELEGRAM_LOGOS:
-        ws.update_cell(i, AVATAR_COL, TELEGRAM_LOGOS[name])
+        safe_update_cell(ws, i, AVATAR_COL, TELEGRAM_LOGOS[name])
         print(f"[{i}] {name}: аватар Telegram-канала -> {TELEGRAM_LOGOS[name][:70]}...")
         updated_tg += 1
+        time.sleep(1.2)
         continue
 
     site = val(SITE_COL)
@@ -129,9 +155,10 @@ for i, row in enumerate(rows, start=2):
         continue
 
     favicon_url = f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
-    ws.update_cell(i, AVATAR_COL, favicon_url)
+    safe_update_cell(ws, i, AVATAR_COL, favicon_url)
     print(f"[{i}] {name}: favicon ({domain}) -> {favicon_url}")
     updated_favicon += 1
+    time.sleep(1.2)
 
 print(f"\nИтого: логотипы с сайта — {updated_known}, аватарки TG-каналов — {updated_tg}, "
       f"favicon — {updated_favicon}, уже был логотип — {skipped_has_logo}, "

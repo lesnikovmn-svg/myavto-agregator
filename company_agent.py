@@ -33,6 +33,33 @@ def connect_sheets():
     client = gspread.authorize(creds)
     return client.open_by_key(SHEET_ID).sheet1
 
+# 17.08.2026: нативные отзывы на сайте (задача пользователя — заменить
+# кнопку "Оставить отзыв", которая вела на сторонние площадки, на реальную
+# форму отзыва прямо на нашем сайте). Отзывы храним в отдельной вкладке
+# "Отзывы" той же Google Таблицы (не в bot_state.json — это durable-данные,
+# а не оперативное состояние бота, см. PROJECT_STATE.md про разделение
+# durable/оперативных данных). Поток: форма на карточке компании -> POST
+# /api/review (telegram_bot_service.py) -> сюда со статусом "pending" ->
+# владелец модерирует через moderate_reviews.py -> "approved"/"rejected" ->
+# update_site.py подтягивает только approved-отзывы в карточки на сайте.
+REVIEWS_SHEET_TITLE = "Отзывы"
+REVIEWS_HEADER = ["id", "company_id", "company_name", "author_name", "rating", "text", "status", "created_at", "contact"]
+
+
+def connect_reviews_sheet():
+    """Возвращает вкладку "Отзывы" — создаёт её с заголовком, если это
+    первый запуск и вкладки ещё нет."""
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+    client = gspread.authorize(creds)
+    sh = client.open_by_key(SHEET_ID)
+    try:
+        ws = sh.worksheet(REVIEWS_SHEET_TITLE)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title=REVIEWS_SHEET_TITLE, rows=500, cols=len(REVIEWS_HEADER))
+        ws.append_row(REVIEWS_HEADER)
+    return ws
+
 def check_site(url):
     try:
         r = requests.get(url, timeout=5, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})

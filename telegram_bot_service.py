@@ -311,6 +311,56 @@ def mass_request():
     return jsonify({"request_id": request_id, "bot_username": BOT_USERNAME})
 
 
+# 17.08.2026: нативные отзывы на сайте — задача пользователя: кнопка
+# "Оставить отзыв" раньше вела на сторонние площадки (Яндекс.Карты, 2ГИС,
+# Google), теперь отзыв создаётся прямо у нас. Хранение — отдельная вкладка
+# "Отзывы" той же Google Таблицы (connect_reviews_sheet() в company_agent.py,
+# та же таблица/креды, что уже использует get_companies() выше — новых
+# credentials заводить не нужно). Модерация обязательна (решение
+# пользователя: "с модерацией, рекомендую") — сюда пишем только статус
+# "pending", публикуются на сайте только "approved"-строки, которые
+# update_site.py подтягивает в карточки при следующей синхронизации.
+from company_agent import connect_reviews_sheet
+
+_reviews_lock = threading.Lock()
+
+
+@app.route("/api/review", methods=["POST"])
+def submit_review():
+    data = request.get_json(force=True) or {}
+    company_id = str(data.get("company_id") or "").strip()
+    company_name = (data.get("company_name") or "").strip()
+    author_name = (data.get("author_name") or "").strip()
+    text = (data.get("text") or "").strip()
+    contact = (data.get("contact") or "").strip()
+    try:
+        rating = int(data.get("rating"))
+    except (TypeError, ValueError):
+        rating = 0
+
+    if not company_name or not author_name or not text or rating < 1 or rating > 5:
+        return jsonify({"error": "missing or invalid fields"}), 400
+    # Минимальная защита от пустого/спам-текста — тот же принцип, что и в
+    # mass_request() (простая валидация полей, без внешних антиспам-сервисов).
+    if len(text) < 10:
+        return jsonify({"error": "text too short"}), 400
+    if len(text) > 2000:
+        text = text[:2000]
+
+    review_id = str(int(time.time() * 1000))
+    created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    with _reviews_lock:
+        ws = connect_reviews_sheet()
+        ws.append_row([review_id, company_id, company_name, author_name, str(rating), text, "pending", created_at, contact])
+
+    notify_admin(
+        f"Новый отзыв #{review_id} на модерацию\nКомпания: {company_name}\n"
+        f"Автор: {author_name}\nОценка: {rating}/5\nТекст: {text}\n"
+        "Модерация: python3 moderate_reviews.py на сервере."
+    )
+    return jsonify({"status": "ok", "id": review_id})
+
+
 def handle_start(chat_id, username, payload, state):
     if payload.startswith("req_"):
         req_id = payload[len("req_"):]

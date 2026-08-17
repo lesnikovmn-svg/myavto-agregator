@@ -5,6 +5,7 @@ import os
 import gspread
 from google.oauth2.service_account import Credentials
 import verify_egrul
+from company_agent import connect_reviews_sheet, REVIEWS_HEADER
 
 # Раньше данные читались через публичный gviz/tq JSON-эндпоинт Google
 # Sheets. У него есть собственный серверный кэш (не наш HTTP-кэш, повлиять
@@ -85,6 +86,36 @@ for c in companies:
         elif info and info.get('registered_year') and not info.get('active'):
             print(f'  ЕГРЮЛ: {c["name"]} — юрлицо найдено, но деятельность прекращена, бейдж не ставим')
 
+# 17.08.2026: нативные отзывы на сайте — подтягиваем в карточки только
+# отзывы со статусом "approved" из вкладки "Отзывы" (модерация — через
+# moderate_reviews.py, см. company_agent.py/connect_reviews_sheet).
+# Матчим по НАЗВАНИЮ компании (не по id — в основной таблице встречаются
+# дублирующиеся id, см. PROJECT_STATE.md), поэтому регистронезависимое
+# совпадение по имени. Сбой чтения вкладки не должен ронять всю
+# синхронизацию сайта — просто отзывы в этот раз не подтянутся.
+reviews_by_company = {}
+try:
+    rws = connect_reviews_sheet()
+    review_rows = rws.get_all_values()[1:]
+    idx = {name: i for i, name in enumerate(REVIEWS_HEADER)}
+    for r in review_rows:
+        def rv(col):
+            i = idx[col]
+            return r[i].strip() if i < len(r) and r[i] else ''
+        if rv('status').lower() != 'approved':
+            continue
+        cname = rv('company_name')
+        if not cname:
+            continue
+        reviews_by_company.setdefault(cname.lower(), []).append({
+            'author': rv('author_name'), 'rating': rv('rating'),
+            'text': rv('text'), 'date': rv('created_at'),
+        })
+    approved_total = sum(len(v) for v in reviews_by_company.values())
+    print(f'Одобренных отзывов на сайте: {approved_total}')
+except Exception as e:
+    print(f'  Не удалось загрузить отзывы (пропущено): {e}')
+
 print(f'Подтверждено по ЕГРЮЛ: {verified_count} из {len(companies)}')
 
 js = 'const COMPANIES = [\n'
@@ -128,6 +159,8 @@ for c in companies:
              c['rutube'] or c['whatsapp'] or '#')
     egrul_verified = 'true' if c['egrul_year'] else 'false'
     onboarded = 'true' if c['onboarded'].upper() == 'TRUE' else 'false'
+    c_reviews = reviews_by_company.get(c['name'].strip().lower(), [])
+    reviews_list_json = json.dumps(c_reviews, ensure_ascii=False)
     js += (f'  {{id:{cid},name:"{c["name"]}",rating:{c["rating"]},reviews:{crev},years:{cyrs},'
            f'delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},'
            f'telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",'
@@ -137,7 +170,8 @@ for c in companies:
            f'avito:"{c["avito"]}",drom:"{c["drom"]}",autoru:"{c["autoru"]}",'
            f'max:"{c["max"]}",youtube:"{c["youtube"]}",rutube:"{c["rutube"]}",whatsapp:"{c["whatsapp"]}",'
            f'tgcontact:"{c["tgcontact"]}",onboarded:{onboarded},'
-           f'link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}"}},\n')
+           f'link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}",'
+           f'reviewsList:{reviews_list_json}}},\n')
 js = js.rstrip(',\n') + '\n];'
 
 html = open('index.html').read()

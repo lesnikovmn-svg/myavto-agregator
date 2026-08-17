@@ -291,8 +291,36 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .rating { font-size: 20px; font-weight: 700; color: var(--text); font-family: 'Manrope', sans-serif; }
 .stars { color: #f5a623; font-size: 13px; }
 .reviews { font-size: 11px; color: var(--hint); margin-top: 2px; }
-.leave-review-btn { display: inline-block; padding: 7px 14px; border-radius: var(--radius); border: 1.5px solid var(--accent); color: var(--accent); font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: background .15s, color .15s; }
+.leave-review-btn { display: inline-block; padding: 7px 14px; border-radius: var(--radius); border: 1.5px solid var(--accent); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; font-family: inherit; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
 .leave-review-btn:hover { background: var(--accent); color: #fff; }
+
+/* Модалка отзывов — 17.08.2026, нативные отзывы вместо редиректа на
+   сторонние площадки (задача пользователя). Один общий оверлей на все
+   карточки, JS заполняет содержимое под конкретную компанию при открытии. */
+.review-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+.review-modal-overlay.open { display: flex; }
+.review-modal { background: var(--surface); border-radius: var(--radius); max-width: 480px; width: 100%; padding: 24px; position: relative; box-shadow: var(--shadow); }
+.review-modal-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--hint); line-height: 1; padding: 4px; }
+.review-modal-company { font-size: 17px; font-weight: 700; margin-bottom: 12px; padding-right: 24px; }
+.review-modal-list { max-height: 220px; overflow-y: auto; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px; }
+.review-modal-list:empty { display: none; }
+.review-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.review-item-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 4px; }
+.review-item-author { font-weight: 600; }
+.review-item-stars { color: #f5a623; font-size: 12px; }
+.review-item-text { font-size: 13px; color: var(--text); line-height: 1.4; }
+.review-item-date { font-size: 11px; color: var(--hint); margin-top: 4px; }
+.review-modal-form-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.review-modal-form { display: flex; flex-direction: column; gap: 8px; }
+.review-modal-form input[type=text], .review-modal-form textarea { border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 14px; font-family: inherit; width: 100%; box-sizing: border-box; }
+.review-modal-form textarea { min-height: 80px; resize: vertical; }
+.review-stars { font-size: 24px; letter-spacing: 4px; cursor: pointer; user-select: none; }
+.review-stars span { color: var(--border); transition: color .1s; }
+.review-stars span.on { color: #f5a623; }
+.review-modal-form button[type=submit] { margin-top: 4px; padding: 10px; border-radius: var(--radius); border: none; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.review-modal-note { font-size: 11px; color: var(--hint); text-align: center; }
+.review-modal-success { display: none; text-align: center; font-size: 14px; padding: 20px 0; }
+.review-modal-success.open { display: block; }
 .card-footer { border-top: 1px solid var(--border); padding-top: 12px; display: flex; align-items: center; justify-content: space-between; }
 .card-meta { display: flex; gap: 16px; }
 .meta-item { font-size: 12px; color: var(--muted); }
@@ -676,6 +704,30 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   </div>
 </div>
 
+<!-- Модалка отзывов — 17.08.2026, см. CSS-комментарий выше (.review-modal-overlay)
+     и JS openReviewModal()/submitReview() ниже. Сознательно вынесена сюда,
+     сестрой .main, а не внутрь него — тот же урок про grid-раскладку на
+     мобильных, что уже привёл к переносу FAQ/footer (см. комментарий ниже). -->
+<div class="review-modal-overlay" id="reviewModalOverlay" onclick="if(event.target===this) closeReviewModal()">
+  <div class="review-modal">
+    <button type="button" class="review-modal-close" onclick="closeReviewModal()">✕</button>
+    <div class="review-modal-company" id="reviewModalCompany"></div>
+    <div class="review-modal-list" id="reviewModalList"></div>
+    <form class="review-modal-form" id="reviewModalForm" onsubmit="return submitReview(event)">
+      <div class="review-modal-form-title">Оставить отзыв</div>
+      <div class="review-stars" id="rvStars">
+        <span data-star="1">★</span><span data-star="2">★</span><span data-star="3">★</span><span data-star="4">★</span><span data-star="5">★</span>
+      </div>
+      <input type="text" id="rv-author" placeholder="Ваше имя" required />
+      <textarea id="rv-text" placeholder="Расскажите о своём опыте — что заказывали, как прошла доставка" required></textarea>
+      <input type="text" id="rv-contact" placeholder="Телефон или Telegram (не публикуется, только для связи)" />
+      <button type="submit">Отправить отзыв</button>
+      <div class="review-modal-note">Отзыв опубликуется после проверки модератором.</div>
+    </form>
+    <div class="review-modal-success" id="reviewModalSuccess">Спасибо! Отзыв отправлен на модерацию и появится на сайте после проверки.</div>
+  </div>
+</div>
+
 <!-- FAQ — критично для GEO/нейросетей -->
 <!-- 14.08.2026: найден и закрыт структурный баг — у .main (открывается
      выше, "<div class="main" id="catalog">") не хватало закрывающего
@@ -997,6 +1049,106 @@ function submitMassRequest(event) {
   });
   return false;
 }
+
+// 17.08.2026: нативные отзывы на сайте — модалка openReviewModal() вместо
+// кнопки, которая раньше вела на сторонние площадки (см. CSS-комментарий у
+// .review-modal-overlay и /api/review в telegram_bot_service.py). Каждый
+// отзыв уходит на модерацию (moderate_reviews.py на сервере) и появляется
+// в reviewsList компании только после того, как владелец его одобрит и
+// прогонит update_site.py.
+const REVIEW_API = "https://myavto-agregator.ru/api/review";
+let rvSelectedRating = 0;
+let rvCurrentCompany = null;
+
+function reviewWordRu(n) {
+  const n10 = n % 10, n100 = n % 100;
+  if (n10 === 1 && n100 !== 11) return "отзыв";
+  if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return "отзыва";
+  return "отзывов";
+}
+
+function updateReviewStars() {
+  document.querySelectorAll("#rvStars span").forEach(s => {
+    s.classList.toggle("on", parseInt(s.dataset.star, 10) <= rvSelectedRating);
+  });
+}
+document.getElementById("rvStars")?.addEventListener("click", (e) => {
+  const star = e.target.closest("span[data-star]");
+  if (!star) return;
+  rvSelectedRating = parseInt(star.dataset.star, 10);
+  updateReviewStars();
+});
+
+function openReviewModal(companyId) {
+  const c = COMPANIES.find(x => x.id === companyId);
+  if (!c) return;
+  rvCurrentCompany = c;
+  document.getElementById("reviewModalCompany").textContent = c.name;
+  const items = c.reviewsList || [];
+  document.getElementById("reviewModalList").innerHTML = items.map(r => {
+    const stars = parseInt(r.rating, 10) || 0;
+    return `<div class="review-item">
+      <div class="review-item-head">
+        <span class="review-item-author">${r.author}</span>
+        <span class="review-item-stars">${"★".repeat(stars)}${"☆".repeat(5 - stars)}</span>
+      </div>
+      <div class="review-item-text">${r.text}</div>
+      ${r.date ? `<div class="review-item-date">${r.date.split(" ")[0]}</div>` : ""}
+    </div>`;
+  }).join("");
+  rvSelectedRating = 0;
+  updateReviewStars();
+  document.getElementById("rv-author").value = "";
+  document.getElementById("rv-text").value = "";
+  document.getElementById("rv-contact").value = "";
+  document.getElementById("reviewModalForm").style.display = "";
+  document.getElementById("reviewModalSuccess").classList.remove("open");
+  document.getElementById("reviewModalOverlay").classList.add("open");
+}
+
+function closeReviewModal() {
+  document.getElementById("reviewModalOverlay").classList.remove("open");
+}
+
+function submitReview(event) {
+  event.preventDefault();
+  if (!rvCurrentCompany) return false;
+  const author = document.getElementById("rv-author").value.trim();
+  const text = document.getElementById("rv-text").value.trim();
+  const contact = document.getElementById("rv-contact").value.trim();
+  if (!author || !text) {
+    alert("Заполните имя и текст отзыва");
+    return false;
+  }
+  if (!rvSelectedRating) {
+    alert("Поставьте оценку от 1 до 5 звёзд");
+    return false;
+  }
+  if (text.length < 10) {
+    alert("Текст отзыва слишком короткий — расскажите чуть подробнее о своём опыте");
+    return false;
+  }
+  fetch(REVIEW_API, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      company_id: rvCurrentCompany.id,
+      company_name: rvCurrentCompany.name,
+      author_name: author,
+      rating: rvSelectedRating,
+      text, contact
+    })
+  })
+    .then(r => { if (!r.ok) throw new Error("backend error"); return r.json(); })
+    .then(() => {
+      document.getElementById("reviewModalForm").style.display = "none";
+      document.getElementById("reviewModalSuccess").classList.add("open");
+    })
+    .catch(() => {
+      alert("Не удалось отправить отзыв — попробуйте ещё раз чуть позже.");
+    });
+  return false;
+}
 </script>
 
 <footer>
@@ -1270,20 +1422,16 @@ function renderCompanies(list) {
         </div>
         <div class="card-right">
           ${(() => {
-            // 14.08.2026, по прямому запросу пользователя: старый блок
-            // рейтинга/числа отзывов убран — это была агрегированная,
-            // непроверяемая постранично оценка ("липовые отзывы"). На её
-            // месте — кнопка "Оставить отзыв", которая ведёт на РЕАЛЬНУЮ
-            // площадку компании (тот же приоритет, что и у иконок ниже:
-            // Яндекс → Google → 2ГИС → Авито → Дром → Авто.ру → VK →
-            // Instagram — первая, где реально есть карточка компании).
-            // Когда наберётся достаточно настоящих отзывов оттуда — рейтинг
-            // на карточке можно будет вернуть, но уже на основе реальных
-            // данных, а не текущей прикидки.
-            const reviewHref = c.yandex || c.google || c.gis2 || c.avito || c.drom || c.autoru || c.vk || c.instagram || '';
-            return reviewHref
-              ? `<a href="${reviewHref}" target="_blank" class="leave-review-btn" onclick="event.stopPropagation()">✍️ Оставить отзыв</a>`
-              : `<div class="reviews">Новая в каталоге,<br>отзывов пока нет</div>`;
+            // 14.08.2026: старый блок рейтинга/числа отзывов убран — это
+            // была агрегированная, непроверяемая цифра ("липовые отзывы").
+            // 17.08.2026, по прямому запросу пользователя: кнопка больше не
+            // ведёт на сторонние площадки — отзыв создаётся прямо у нас
+            // (форма в модалке openReviewModal), проходит модерацию и
+            // публикуется на карточке. Если уже есть опубликованные
+            // отзывы — показываем их количество на самой кнопке.
+            const n = (c.reviewsList || []).length;
+            const label = n ? `★ ${n} ${reviewWordRu(n)}` : '✍️ Оставить отзыв';
+            return `<button type="button" class="leave-review-btn" onclick="event.stopPropagation(); openReviewModal(${c.id})">${label}</button>`;
           })()}
         </div>
       </div>

@@ -1478,7 +1478,23 @@ def run_agent():
         print("Ошибка: " + str(e))
         return
     existing = get_existing(ws)
-    next_id = len(ws.get_all_values())
+    # 18.08.2026: раньше next_id брался как len(ws.get_all_values()) — то есть
+    # количество строк в таблице. Это ложное допущение "id всегда совпадает с
+    # номером строки", которое ломается каждый раз, когда мы удаляем дубли
+    # или переномеровываем строки (fix_dedupe_company_ids.py и подобные) —
+    # количество строк после этого становится МЕНЬШЕ реального максимума id,
+    # и агент начинает штамповать новые id, которые уже заняты (найдено
+    # 18.08.2026: id 100,102,106,107,108,109,110 совпали со старыми
+    # компаниями). Правильный next_id — максимум РЕАЛЬНО существующих id в
+    # колонке + 1, не зависит от того, сколько строк физически в таблице.
+    existing_ids = []
+    for row in ws.get_all_values()[1:]:
+        if row and row[0].strip():
+            try:
+                existing_ids.append(int(float(row[0].strip())))
+            except ValueError:
+                pass
+    next_id = (max(existing_ids) + 1) if existing_ids else 1
     found = 0
     skipped = 0
 

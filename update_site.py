@@ -122,6 +122,7 @@ for c in companies:
 # совпадение по имени. Сбой чтения вкладки не должен ронять всю
 # синхронизацию сайта — просто отзывы в этот раз не подтянутся.
 reviews_by_company = {}
+approved_total = 0
 try:
     rws = connect_reviews_sheet()
     review_rows = rws.get_all_values()[1:]
@@ -146,15 +147,32 @@ except Exception as e:
 
 print(f'Подтверждено по ЕГРЮЛ: {verified_count} из {len(companies)}')
 
-js = 'const COMPANIES = [\n'
+
+def _to_float(s, default=0.0):
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return default
+
+
+# T-07 (18.08.2026, аудит TASKS.md — самая опасная находка): раньше этот
+# блок собирал JS-литерал f-строками, экранируя ТОЛЬКО одну кавычку и
+# ТОЛЬКО в поле description — любое другое поле (name, manager, region,
+# ссылки) с кавычкой или обратным слэшем ломало парсер (белый экран
+# каталога), а специально составленное значение вида
+# `X",x:alert(1)//` давало исполнение произвольного JS. Данные приходят
+# автопарсингом чужих сайтов и Telegram-каналов — доверять им нельзя.
+# Теперь весь массив собирается как обычные Python-словари и уходит через
+# json.dumps() ОДНИМ вызовом — экранирование гарантированно правильное
+# для всех полей сразу, забыть про новое поле в будущем невозможно.
+companies_out = []
 total_reviews = 0
 for c in companies:
-    dirs = json.dumps([d.strip() for d in c['directions'].split(',') if d.strip()], ensure_ascii=False)
-    tags = json.dumps([t.strip() for t in c['tags'].split(',') if t.strip()], ensure_ascii=False)
-    featured = 'true' if c['featured'].upper() == 'TRUE' else 'false'
-    desc = c['description'].replace('"', '\\"')
-    cid = str(int(float(c['id']))) if c['id'] else '0'
-    crev = str(int(float(c['reviews']))) if c['reviews'] else '0'
+    dirs = [d.strip() for d in c['directions'].split(',') if d.strip()]
+    tags = [t.strip() for t in c['tags'].split(',') if t.strip()]
+    featured = c['featured'].upper() == 'TRUE'
+    cid = int(float(c['id'])) if c['id'] else 0
+    crev = int(float(c['reviews'])) if c['reviews'] else 0
     # "Лет на рынке" (years) и год из ЕГРЮЛ — разные вещи (см. кейс
     # Altais-Cars: сайт заявляет "с 1998", а юрлицо перерегистрировано в
     # 2025), но если years так и остался неопределённым дефолтом "1"
@@ -165,12 +183,12 @@ for c in companies:
     raw_years = c['years']
     if (not raw_years or raw_years == '1') and c['egrul_year']:
         try:
-            cyrs = str(max(1, datetime.date.today().year - int(c['egrul_year'])))
+            cyrs = max(1, datetime.date.today().year - int(c['egrul_year']))
         except ValueError:
-            cyrs = str(int(float(raw_years))) if raw_years else '1'
+            cyrs = int(float(raw_years)) if raw_years else 1
     else:
-        cyrs = str(int(float(raw_years))) if raw_years else '1'
-    total_reviews += int(crev)
+        cyrs = int(float(raw_years)) if raw_years else 1
+    total_reviews += crev
     # Приоритет клика по всей карточке (не по конкретной иконке-кнопке) —
     # правило от 09.08.2026: сайт > telegram > instagram > vk > MAX >
     # YouTube > RuTube > WhatsApp-группа > ничего (раньше был только
@@ -185,22 +203,26 @@ for c in companies:
              (('https://t.me/' + tg_for_link) if tg_for_link else '') or
              c['instagram'] or c['vk'] or c['max'] or c['youtube'] or
              c['rutube'] or c['whatsapp'] or '#')
-    egrul_verified = 'true' if c['egrul_year'] else 'false'
-    onboarded = 'true' if c['onboarded'].upper() == 'TRUE' else 'false'
+    egrul_verified = bool(c['egrul_year'])
+    onboarded = c['onboarded'].upper() == 'TRUE'
     c_reviews = reviews_by_company.get(c['name'].strip().lower(), [])
-    reviews_list_json = json.dumps(c_reviews, ensure_ascii=False)
-    js += (f'  {{id:{cid},name:"{c["name"]}",rating:{c["rating"]},reviews:{crev},years:{cyrs},'
-           f'delivered:"{c["delivered"]}",description:"{desc}",directions:{dirs},tags:{tags},'
-           f'telegram:"{c["telegram"]}",phone:"{c["phone"]}",site:"{c["site"]}",manager:"{c["manager"]}",'
-           f'region:"{c["region"]}",featured:{featured},avatar:"{c["avatar"]}",color:"{c["color"]}",'
-           f'yandex:"{c["yandex"]}",google:"{c["google"]}",gis2:"{c["gis2"]}",'
-           f'instagram:"{c["instagram"]}",vk:"{c["vk"]}",'
-           f'avito:"{c["avito"]}",drom:"{c["drom"]}",autoru:"{c["autoru"]}",'
-           f'max:"{c["max"]}",youtube:"{c["youtube"]}",rutube:"{c["rutube"]}",whatsapp:"{c["whatsapp"]}",'
-           f'tgcontact:"{c["tgcontact"]}",onboarded:{onboarded},'
-           f'link:"{clink}",egrulVerified:{egrul_verified},egrulYear:"{c["egrul_year"]}",'
-           f'reviewsList:{reviews_list_json}}},\n')
-js = js.rstrip(',\n') + '\n];'
+
+    companies_out.append({
+        'id': cid, 'name': c['name'], 'rating': _to_float(c['rating'], 4.5),
+        'reviews': crev, 'years': cyrs, 'delivered': c['delivered'],
+        'description': c['description'], 'directions': dirs, 'tags': tags,
+        'telegram': c['telegram'], 'phone': c['phone'], 'site': c['site'],
+        'manager': c['manager'], 'region': c['region'], 'featured': featured,
+        'avatar': c['avatar'], 'color': c['color'], 'yandex': c['yandex'],
+        'google': c['google'], 'gis2': c['gis2'], 'instagram': c['instagram'],
+        'vk': c['vk'], 'avito': c['avito'], 'drom': c['drom'], 'autoru': c['autoru'],
+        'max': c['max'], 'youtube': c['youtube'], 'rutube': c['rutube'],
+        'whatsapp': c['whatsapp'], 'tgcontact': c['tgcontact'], 'onboarded': onboarded,
+        'link': clink, 'egrulVerified': egrul_verified, 'egrulYear': c['egrul_year'],
+        'reviewsList': c_reviews,
+    })
+
+js = 'const COMPANIES = ' + json.dumps(companies_out, ensure_ascii=False) + ';'
 
 html = open('index.html').read()
 s = html.find('const COMPANIES = [')
@@ -209,14 +231,27 @@ html = html[:s] + js + html[e:]
 
 count = len(companies)
 
-# Обновляем реальные цифры в статистике на главной (было: статичный
-# плейсхолдер "500+", не совпадавший с фактическими данными).
+# T-26 (18.08.2026, по решению пользователя): плашка "Отзывов в каталоге"
+# показывала сумму старой колонки reviews (29 110) — сид-данные по ~32
+# компаниям, которые никто не проверял. С появлением нативных отзывов
+# (17.08.2026) это стало видимым противоречием: сверху "29 110 отзывов",
+# на каждой карточке при этом кнопка "Оставить отзыв", потому что реальных
+# модерированных отзывов — 0. Решение: показывать только approved_total
+# (честное число), а пока оно 0 — не показывать плашку вообще, а не врать
+# нулём. Весь блок .stats-bar перестраивается с нуля при каждом прогоне
+# (а не точечным regex по старому значению), чтобы плашка сама появлялась,
+# как только approved_total станет > 0, без ручных правок HTML.
+stats_rows = [(str(count), 'Компаний в каталоге')]
+if approved_total > 0:
+    stats_rows.append((f'{approved_total:,}'.replace(',', ' '), 'Отзывов в каталоге'))
+stats_rows += [('8', 'Направлений импорта'), ('9 стран', 'Покрытие СНГ')]
+stats_inner = '\n'.join(
+    f'  <div class="stat"><div class="stat-n">{n}</div><div class="stat-l">{l}</div></div>'
+    for n, l in stats_rows)
+new_stats_block = '<div class="stats-bar">\n' + stats_inner + '\n</div>\n'
 html = re.sub(
-    r'(<div class="stat-n">)[^<]*(</div><div class="stat-l">Компаний в каталоге</div>)',
-    rf'\g<1>{count}\g<2>', html)
-html = re.sub(
-    r'(<div class="stat-n">)[^<]*(</div><div class="stat-l">Отзывов в каталоге</div>)',
-    rf'\g<1>{total_reviews:,}'.replace(',', ' ') + r'\g<2>', html)
+    r'<div class="stats-bar">\n.*?\n</div>\n',
+    lambda _m: new_stats_block, html, count=1, flags=re.DOTALL)
 
 open('index.html', 'w').write(html)
 print(f'Сайт обновлён! {count} компаний, {total_reviews} отзывов, {verified_count} подтверждены по ЕГРЮЛ.')

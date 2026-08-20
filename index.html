@@ -13,6 +13,12 @@
 <meta property="og:title" content="My Avto Agregator — агрегатор компаний по импорту авто">
 <meta property="og:description" content="Найди надёжную компанию по импорту авто из Китая, Кореи, Японии, США, ОАЭ и Европы. Импортёры по всему СНГ, прошедшие проверку активности.">
 <meta property="og:type" content="website">
+<!-- T-05 (18.08.2026, аудит TASKS.md): не было og:image/og:url/theme-color —
+     превью ссылки в Telegram/WhatsApp уходило без картинки, заметно бьёт по
+     кликабельности (большая часть трафика — из мессенджеров). -->
+<meta property="og:image" content="https://myavto-agregator.ru/logo.jpg">
+<meta property="og:url" content="https://myavto-agregator.ru/">
+<meta name="theme-color" content="#1a6b3c">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://myavto-agregator.ru/">
 
@@ -26,12 +32,7 @@
   "url": "https://myavto-agregator.ru",
   "description": "Агрегатор компаний по импорту автомобилей в СНГ, прошедших автоматическую проверку активности. Импорт из Китая, Кореи, Японии, США, ОАЭ и Европы.",
   "inLanguage": "ru",
-  "areaServed": ["RU","KZ","BY","UZ","AM","GE","AZ","KG","TJ"],
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": "https://myavto-agregator.ru/search?q={search_term_string}",
-    "query-input": "required name=search_term_string"
-  }
+  "areaServed": ["RU","KZ","BY","UZ","AM","GE","AZ","KG","TJ"]
 }
 </script>
 <script type="application/ld+json">
@@ -40,7 +41,7 @@
   "@type": "Organization",
   "name": "My Avto Agregator",
   "url": "https://myavto-agregator.ru",
-  "logo": "https://myavto-agregator.ru/logo.png",
+  "logo": "https://myavto-agregator.ru/logo.jpg",
   "description": "Ведущий агрегатор компаний по импорту автомобилей в СНГ",
   "contactPoint": {
     "@type": "ContactPoint",
@@ -105,12 +106,7 @@
         "@type": "LocalBusiness",
         "name": "MY Avto",
         "description": "Компания по импорту автомобилей из Европы, Китая, Японии, Кореи, США, Канады, ОАЭ и Грузии по всей России и СНГ",
-        "areaServed": "СНГ",
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.9",
-          "reviewCount": "1240"
-        }
+        "areaServed": "СНГ"
       }
     },
     {
@@ -120,18 +116,22 @@
         "@type": "LocalBusiness",
         "name": "My Avto Optimal",
         "description": "Оптимальный импорт автомобилей из Китая, Кореи и ОАЭ",
-        "areaServed": "СНГ",
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.8",
-          "reviewCount": "980"
-        }
+        "areaServed": "СНГ"
       }
     }
   ]
 }
 </script>
 
+<!-- T-16 (18.08.2026, аудит TASKS.md): шрифты грузятся с fonts.googleapis.com
+     — блокирующий внешний запрос, в рунете нестабилен. Полный перенос
+     файлов шрифтов на свой сервер требует скачать .woff2 (нужна сеть,
+     недоступна из песочницы) — сделано то, что можно сделать без этого:
+     preconnect заранее поднимает TCP/TLS до обоих доменов Google Fonts,
+     пока браузер ещё парсит остальной <head>, само подключение шрифта
+     идёт быстрее. display=swap уже был — текст не невидим при ожидании. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -209,6 +209,20 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 
 /* Sidebar */
 .sidebar { }
+.mobile-filters-toggle { display: none; }
+
+/* T-12 (18.08.2026, аудит TASKS.md): #contact/#customs/#blog были свёрстаны
+   инлайн-стилями (style="..."). Инлайн выигрывает по specificity над
+   обычным классом, поэтому мобильная адаптация grid-раскладки контактов
+   уже потребовала !important (было #contact > div { ... !important }) —
+   каждая следующая мобильная правка так же требовала бы !important, это
+   растущий костыль. Вынесены в классы только те стили, что реально влияют
+   на раскладку (layout-критичные); мелкие декоративные inline-стили
+   (цвета, паддинги отдельных элементов) не трогали — риск визуальных
+   регрессий на большом объёме правок не оправдан этой задачей. */
+.section-wrap { max-width: 960px; margin: 0 auto 48px; padding: 40px 24px 0; clear: both; position: relative; z-index: 1; }
+.section-wrap-tight { max-width: 960px; margin: 0 auto 48px; padding: 0 24px; }
+.contact-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; align-items: start; }
 .sidebar-section { background: rgba(255,255,255,0.78); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .sidebar-title { font-size: 11px; font-weight: 600; color: var(--hint); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
 .filter-group { margin-bottom: 14px; }
@@ -290,6 +304,13 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .card-right { text-align: right; flex-shrink: 0; }
 .rating { font-size: 20px; font-weight: 700; color: var(--text); font-family: 'Manrope', sans-serif; }
 .stars { color: #f5a623; font-size: 13px; }
+/* T-06 (18.08.2026, аудит TASKS.md): 15+ полей форм были только с
+   placeholder, без <label> — ломает автозаполнение на мобильных,
+   скринридеры и клик по подписи (placeholder исчезает при вводе, для
+   людей с когнитивными затруднениями это реальная проблема). Визуально
+   ничего не меняем — .sr-only прячет текст с экрана, но оставляет его
+   доступным скринридерам и браузерному автозаполнению. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .reviews { font-size: 11px; color: var(--hint); margin-top: 2px; }
 .leave-review-btn { display: inline-block; padding: 7px 14px; border-radius: var(--radius); border: 1.5px solid var(--accent); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; font-family: inherit; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
 .leave-review-btn:hover { background: var(--accent); color: #fff; }
@@ -369,6 +390,13 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .mr-price-badge { background: var(--accent); color: #fff; padding: 10px 18px; border-radius: var(--radius); text-align: center; flex-shrink: 0; }
 .mr-price-badge .mr-price { font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; line-height: 1; }
 .mr-price-badge .mr-price-note { font-size: 11px; opacity: 0.85; margin-top: 3px; }
+/* T-20 (18.08.2026, по решению пользователя): касса — заглушка,
+   cloudPaymentsCheckout() ничего не списывает, а форма/оферта обещали
+   реальную оплату 990₽ с чеком по 54-ФЗ — юридический риск (обещание,
+   которое сайт не выполняет). Пока не подключена настоящая касса, услуга
+   честно бесплатна: старая цена зачёркнута, рядом — "Бесплатно". */
+.mr-price-old { font-size: 13px; text-decoration: line-through; opacity: 0.7; }
+.mr-price-free { color: #fff; }
 .mr-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 /* width:100% явно — 14.08.2026, найдено на реальном iPhone 16 Pro Max:
    поля формы "Разослать запрос" вылезали за правый край, тогда как весь
@@ -430,11 +458,30 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 .footer-links { display: flex; justify-content: center; gap: 20px; margin-top: 8px; }
 .footer-links a { font-size: 12px; color: var(--muted); text-decoration: none; }
 
+/* T-10 (18.08.2026, аудит TASKS.md): раньше был только один брейкпоинт
+   (680px), написанный реактивно под конкретные телефонные баги —
+   планшетный диапазон (681-1024) не обрабатывался вообще: сайдбар
+   фиксированной ширины 240px на планшете в портретной ориентации
+   (768px) съедал почти треть экрана, карточкам оставалось мало места.
+   Не полный редизайн (это отдельная задача), а точечное расширение
+   сетки: планшет получает более узкий сайдбар вместо схлопывания в 1
+   колонку (это по-прежнему оправдано только на настоящем мобильном). */
+@media (max-width: 1024px) and (min-width: 681px) {
+  .main { grid-template-columns: 200px 1fr; gap: 16px; padding: 32px 16px; }
+  .sidebar-section { padding: 12px; }
+}
+
 @media (max-width: 680px) {
   .hero h1 { font-size: 28px; }
   .hero { padding: 32px 16px 28px; }
   .main { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
+  /* T-11: раньше .sidebar{display:none} насовсем — фильтры по направлению
+     пропадали с телефона целиком. Теперь скрыт только по умолчанию,
+     .mobile-open (ставит toggleMobileFilters()) его показывает — те же
+     чекбоксы, та же JS-логика, просто видимость управляется кнопкой. */
+  .sidebar { display: none; margin-bottom: 16px; }
+  .sidebar.mobile-open { display: block; }
+  .mobile-filters-toggle { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 12px; padding: 9px 16px; border-radius: 20px; border: 1.5px solid var(--accent); background: var(--accent-light); color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; }
   .stats-bar { gap: 20px; }
   .about-inner { grid-template-columns: 1fr; }
   .calc-row { grid-template-columns: 1fr; }
@@ -459,8 +506,13 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   nav { flex-wrap: wrap; row-gap: 8px; padding: 10px 16px; }
   .logo-mark { height: 40px; }
   .nav-links { flex-wrap: wrap; justify-content: center; gap: 8px 12px; width: 100%; }
-  .nav-links a { font-size: 12px; }
-  .nav-rate, .nav-tg { padding: 6px 12px; font-size: 12px; }
+  /* T-13 (18.08.2026, аудит TASKS.md): тач-таргеты были меньше нормы
+     (44×44px) — 12px шрифт и паддинг 6×12px у ссылок нава means частые
+     промахи пальцем. min-height вместо явной высоты — текст остаётся
+     вертикально по центру за счёт display:inline-flex, ширина не растёт
+     принудительно (короткие ссылки не становятся квадратными кнопками). */
+  .nav-links a { font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .nav-rate, .nav-tg { padding: 6px 14px; font-size: 12px; min-height: 44px; box-sizing: border-box; }
 
   /* Поиск в шапке каталога (сегодняшняя правка) — на узком экране
      занимает всю ширину под заголовком, а не сжимается рядом с ним.
@@ -504,7 +556,17 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
      никакой мобильной обработки. Инлайн-стиль побеждает по specificity
      обычный класс/id-селектор, поэтому здесь нужен !important, чтобы
      реально переопределить grid-template-columns на мобильном. */
-  #contact > div { grid-template-columns: 1fr !important; }
+  .contact-grid { grid-template-columns: 1fr; }
+}
+
+/* T-10: узкие телефоны (iPhone SE и подобные, ≤480px, а не только ≤680) —
+   ещё немного ужимаем то, что на 680 всё ещё может вылезать за край. */
+@media (max-width: 480px) {
+  .hero h1 { font-size: 22px; }
+  .companies-title { font-size: 17px; }
+  .card-name { font-size: 15px; }
+  .mr-price-badge { padding: 8px 12px; }
+  .mr-price-badge .mr-price { font-size: 17px; }
 }
 </style>
 <!-- Yandex.Metrika counter -->
@@ -527,7 +589,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 <body>
 
 <nav>
-  <div class="logo"><img src="/nav-logo-full.png" alt="My Avto Agregator" class="logo-mark"></div>
+  <div class="logo"><img src="/nav-logo-full.png" alt="My Avto Agregator" class="logo-mark" width="197" height="224"></div>
   <div class="nav-links">
     <a href="#catalog">Каталог</a>
     <a href="/myavto.html">MY Avto</a>
@@ -543,7 +605,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 
 <!-- Hero — ключевые слова для GEO -->
 <section class="hero">
-  <img src="/hero-bg-logo-full.png" alt="" class="hero-bg-logo">
+  <img src="/hero-bg-logo-full.png" alt="" class="hero-bg-logo" width="520" height="587" loading="eager">
   <div class="hero-eyebrow">Агрегатор №1 в СНГ — 2026</div>
   <h1>Импорт авто из <em>Китая, Кореи,<br>Японии, США и Европы</em></h1>
   <p class="hero-sub">Компании по всему СНГ, прошедшие автоматическую проверку активности. Отзывы, рейтинги и калькулятор стоимости пригона.</p>
@@ -580,7 +642,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
      обязательно требует muted (иначе браузеры блокируют автовоспроизведение),
      playsinline — чтобы на iOS не разворачивалось в полноэкранный плеер. -->
 <div class="promo-video-wrap">
-  <video class="promo-video" autoplay muted loop playsinline preload="metadata">
+  <video class="promo-video" autoplay muted loop playsinline preload="metadata" poster="/videos/promo-bg-poster.jpg">
     <source src="/videos/promo-bg.mp4" type="video/mp4">
   </video>
   <div class="promo-video-overlay"></div>
@@ -595,6 +657,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   <div class="calc-section">
     <div class="calc-title">Калькулятор пригона</div>
     <div class="calc-row">
+      <label for="calcCountry" class="sr-only">Страна импорта</label>
       <select id="calcCountry" onchange="calcPrice()">
         <option value="korea">Корея</option>
         <option value="china">Китай</option>
@@ -603,6 +666,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
         <option value="uae">ОАЭ</option>
         <option value="europe">Европа</option>
       </select>
+      <label for="calcBudget" class="sr-only">Бюджет автомобиля</label>
       <select id="calcBudget" onchange="calcPrice()">
         <option value="1">до 1.5 млн ₽</option>
         <option value="2">1.5–3 млн ₽</option>
@@ -627,14 +691,18 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
         <div class="mr-sub">Одна заявка вместо N звонков. Мы соберём и разошлём твой запрос всем проверенным компаниям подходящего направления — ответы придут тебе напрямую, без беготни по каталогу.</div>
       </div>
       <div class="mr-price-badge">
-        <div class="mr-price">990 ₽</div>
+        <div class="mr-price"><span class="mr-price-old">990 ₽</span> <span class="mr-price-free">Бесплатно</span></div>
         <div class="mr-price-note">за подбор и рассылку</div>
       </div>
     </div>
     <form class="mr-form" onsubmit="return submitMassRequest(event)">
+      <label for="mr-name" class="sr-only">Имя</label>
       <input id="mr-name" type="text" placeholder="Имя" required />
+      <label for="mr-phone" class="sr-only">Телефон или Telegram</label>
       <input id="mr-phone" type="text" placeholder="Телефон / Telegram" required />
-      <input id="mr-email" type="email" placeholder="Email — на него придёт чек" required />
+      <label for="mr-email" class="sr-only">Email</label>
+      <input id="mr-email" type="email" placeholder="Email — для связи" required />
+      <label for="mr-direction" class="sr-only">Направление импорта</label>
       <select id="mr-direction" required>
         <option value="" disabled selected>Направление</option>
         <option value="Китай">Китай</option>
@@ -646,7 +714,9 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
         <option value="Канада">Канада</option>
         <option value="Грузия">Грузия</option>
       </select>
+      <label for="mr-budget" class="sr-only">Бюджет</label>
       <input id="mr-budget" type="text" placeholder="Бюджет, например 3.5 млн ₽" />
+      <label for="mr-model" class="sr-only">Какую машину ищете</label>
       <textarea id="mr-model" class="mr-full" placeholder="Какую машину ищешь (марка, модель, год, комплектация)"></textarea>
       <!-- 14.08.2026, найдено на iPhone 16 Pro Max: текст согласия был
            смесью текстовых узлов и <a> прямо в display:flex-label — флекс
@@ -658,8 +728,8 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
         <span>Согласен(на) с <a href="privacy-policy.html" target="_blank">политикой конфиденциальности</a> и <a href="oferta.html" target="_blank">офертой на услугу подбора</a>, даю согласие на обработку персональных данных</span>
       </label>
       <div class="mr-submit-row">
-        <button type="submit">Оплатить и отправить запрос</button>
-        <span class="mr-note">Без разъездов по сайтам компаний. 990 ₽ — плата за подбор и рассылку запроса, невозвратная (результат зависит от ответов компаний, а не от нас). Электронный чек придёт на указанный email.</span>
+        <button type="submit">Отправить запрос</button>
+        <span class="mr-note">Без разъездов по сайтам компаний. Сейчас услуга бесплатна — плата за подбор и рассылку временно не взимается, пока не подключена онлайн-касса.</span>
       </div>
     </form>
     <div class="mr-success" id="mr-success">Заявка сформирована — сейчас откроется Telegram, отправь сообщение боту, и мы разошлём её по компаниям.</div>
@@ -707,10 +777,20 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   <div>
     <div class="companies-header">
       <div class="companies-title">Компании в каталоге</div>
+      <!-- T-11 (18.08.2026, аудит TASKS.md, наивысший приоритет мобильного
+           блока): .sidebar с фильтрами по направлениям на мобильном раньше
+           просто скрывался (display:none) — фильтрация по направлению была
+           недоступна большинству посетителей (телефон — основной способ
+           захода). Кнопка ниже только на мобильном (см. CSS) переключает
+           класс .mobile-open у того же .sidebar — сами чекбоксы и их JS
+           (initSidebarFilters(), слушает .filter-opt input везде в DOM)
+           не тронуты, работают как прежде. -->
+      <button type="button" class="mobile-filters-toggle" onclick="toggleMobileFilters()">🔎 Фильтры</button>
       <div class="companies-header-right">
         <!-- 14.08.2026: компактный поиск перенесён сюда из hero (был
              "слишком большого размера") — стоит слева от сортировки. -->
         <div class="search-wrap">
+          <label for="mainSearch" class="sr-only">Поиск по каталогу</label>
           <input type="text" id="mainSearch" placeholder="Поиск по названию, тегу..." autocomplete="off" />
           <div id="searchSuggestions" class="search-suggestions"></div>
         </div>
@@ -738,8 +818,11 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
       <div class="review-stars" id="rvStars">
         <span data-star="1">★</span><span data-star="2">★</span><span data-star="3">★</span><span data-star="4">★</span><span data-star="5">★</span>
       </div>
+      <label for="rv-author" class="sr-only">Ваше имя</label>
       <input type="text" id="rv-author" placeholder="Ваше имя" required />
+      <label for="rv-text" class="sr-only">Текст отзыва</label>
       <textarea id="rv-text" placeholder="Расскажите о своём опыте — что заказывали, как прошла доставка" required></textarea>
+      <label for="rv-contact" class="sr-only">Контакт для связи</label>
       <input type="text" id="rv-contact" placeholder="Телефон или Telegram (не публикуется, только для связи)" />
       <button type="submit">Отправить отзыв</button>
       <div class="review-modal-note">Отзыв опубликуется после проверки модератором.</div>
@@ -813,7 +896,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 
 
 <!-- Новое направление: Таможенные брокеры (задача — каталог по тому же принципу, что и импортёры, алгоритм поиска компаний уточняется) -->
-<section style="max-width:960px;margin:0 auto 48px;padding:40px 24px 0;clear:both;position:relative;z-index:1;" id="customs">
+<section class="section-wrap" id="customs">
   <div style="background:#fff;border:1px solid #e8e6e0;border-radius:14px;padding:36px;text-align:center;">
     <div style="display:inline-block;background:var(--accent2-light);color:var(--accent2);font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;letter-spacing:0.5px;margin-bottom:16px;text-transform:uppercase;">Новое направление</div>
     <h2 style="font-family:Manrope,sans-serif;font-size:26px;font-weight:800;margin-bottom:12px;">Таможенные брокеры — скоро в каталоге</h2>
@@ -852,7 +935,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 </section>
 
 <!-- Блог / новости проекта -->
-<section style="max-width:960px;margin:0 auto 48px;padding:0 24px;" id="blog">
+<section class="section-wrap-tight" id="blog">
   <h2 style="font-family:Manrope,sans-serif;font-size:28px;font-weight:800;margin-bottom:24px;">Блог / новости</h2>
   <div style="background:#fff;border:1px solid #e8e6e0;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.07);">
     <div style="color:#9b9b90;font-size:13px;margin-bottom:6px;">13 августа 2026</div>
@@ -864,11 +947,11 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
 </section>
 
 <!-- Контакты и форма заявки -->
-<section style="max-width:960px;margin:0 auto 48px;padding:40px 24px 0;clear:both;position:relative;z-index:1;" id="contact">
+<section class="section-wrap" id="contact">
   <h2 style="font-family:Manrope,sans-serif;font-size:28px;font-weight:800;margin-bottom:8px;">Связаться с нами</h2>
   <p style="color:#6b6b62;font-size:15px;margin-bottom:28px;">Добавьте свою компанию в каталог или задайте вопрос</p>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;align-items:start;">
+  <div class="contact-grid">
 
     <!-- Форма -->
     <div style="background:#fff;border:1px solid #e8e6e0;border-radius:10px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.07);">
@@ -877,10 +960,15 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
         ✅ Заявка отправлена! Мы свяжемся с вами в течение 24 часов.
       </div>
       <div style="display:flex;flex-direction:column;gap:12px;">
+        <label for="f-name" class="sr-only">Название компании</label>
         <input id="f-name" type="text" placeholder="Название компании *" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <label for="f-phone" class="sr-only">Телефон или Telegram</label>
         <input id="f-phone" type="text" placeholder="Телефон или Telegram *" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <label for="f-directions" class="sr-only">Направления</label>
         <input id="f-directions" type="text" placeholder="Направления (Китай, Корея...)" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <label for="f-site" class="sr-only">Сайт или Telegram-канал</label>
         <input id="f-site" type="text" placeholder="Сайт или Telegram канал" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
+        <label for="f-desc" class="sr-only">Описание компании</label>
         <textarea id="f-desc" placeholder="Коротко о компании (опционально)" rows="3" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;resize:none;"></textarea>
         <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#6b6b62;line-height:1.5;cursor:pointer;">
           <input id="f-consent" type="checkbox" style="margin-top:2px;flex-shrink:0;" />
@@ -1022,7 +1110,7 @@ function submitMassRequest(event) {
     return false;
   }
   if (!email || !email.includes("@")) {
-    alert("Укажите email — на него онлайн-касса пришлёт электронный чек (требование 54-ФЗ)");
+    alert("Укажите email для связи");
     return false;
   }
   // Открываем вкладку СИНХРОННО, сразу по клику — это единственный момент,
@@ -1034,7 +1122,12 @@ function submitMassRequest(event) {
   // успешно (баг найден 12.08.2026 через живой тест с пользователем).
   // Адрес подставляем в него позже, когда узнаем request_id/fallback-текст.
   const tgWindow = window.open("", "_blank");
-  cloudPaymentsCheckout(990, phone, email, () => {
+  // T-20 (18.08.2026, по решению пользователя): пока не подключена
+  // настоящая касса, услуга бесплатна — 0 вместо 990, чтобы сумма здесь
+  // совпадала с тем, что видно в интерфейсе (см. .mr-price-old/.mr-price-free
+  // выше). Когда CloudPayments будет готов — вернуть 990 здесь И убрать
+  // зачёркивание цены в разметке одновременно, не порознь.
+  cloudPaymentsCheckout(0, phone, email, () => {
     fetch(MASS_REQUEST_API, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -1049,10 +1142,10 @@ function submitMassRequest(event) {
         // Бэкенд ещё не задеплоен/недоступен — старое поведение как fallback,
         // чтобы клиент всё равно мог отправить заявку.
         const msg = encodeURIComponent(
-          "Заявка на рассылку по всем компаниям (990 ₽, MyAvtoAgregator.ru)\n\n" +
+          "Заявка на рассылку по всем компаниям (бесплатно, MyAvtoAgregator.ru)\n\n" +
           "Имя: " + name + "\n" +
           "Контакт: " + phone + "\n" +
-          "Email для чека: " + email + "\n" +
+          "Email: " + email + "\n" +
           "Направление: " + direction + "\n" +
           (budget ? "Бюджет: " + budget + "\n" : "") +
           (model ? "Что ищет: " + model : "")
@@ -1174,11 +1267,11 @@ function submitReview(event) {
 <footer>
   <p class="footer-text">© 2026 My Avto Agregator — агрегатор компаний по импорту авто в СНГ</p>
   <div class="footer-links">
-    <a href="#">Все компании</a>
-    <a href="#">Калькулятор</a>
-    <a href="#">FAQ</a>
+    <a href="#catalog">Все компании</a>
+    <a href="#calc">Калькулятор</a>
+    <a href="#faq">FAQ</a>
     <a href="https://t.me/My_Avto_Agregator">Telegram</a>
-    <a href="#">Добавить компанию</a>
+    <a href="#contact">Добавить компанию</a>
     <a href="https://yandex.ru/profile/-/CTSvi0y-" target="_blank">★ Оценить нас</a>
     <a href="privacy-policy.html">Политика конфиденциальности</a>
     <a href="oferta.html">Оферта</a>
@@ -1370,6 +1463,17 @@ function compareCompanies(a, b) {
   return activityScore(b) - activityScore(a);
 }
 
+// T-14 (18.08.2026): true, если браузер явно просит экономить трафик
+// (Data Saver / медленное 2G) — единственный случай, когда заменяем
+// автоплей-видео на статичный кадр. navigator.connection есть не везде
+// (Safari/iOS его не поддерживает вовсе) — там просто ведём себя как
+// раньше, это осознанный фолбэк, а не баг.
+function wantsLiteVideo() {
+  const c = navigator.connection || navigator.webkitConnection || navigator.mozConnection;
+  if (!c) return false;
+  return !!c.saveData || /2g/.test(c.effectiveType || '');
+}
+
 function renderCompanies(list) {
   const el = document.getElementById('companies-list');
   if (!el) return;
@@ -1487,11 +1591,19 @@ function renderCompanies(list) {
   // общим <video>, остальные карточки идут после как обычно.
   const videoCards = cardsHtml.slice(0, 2).join('');
   const restCards = cardsHtml.slice(2).join('');
+  // T-14 (18.08.2026, аудит TASKS.md): 2.8МБ автоплей-видео на мобильном
+  // трафике. В этой же сессии пользователь явно просил, чтобы видео на
+  // мобильном было хорошо видно — поэтому не отключаем его на мобильном
+  // по умолчанию, это противоречило бы прямому запросу. Но у части
+  // пользователей явно включена экономия трафика (Data Saver в браузере/
+  // ОС, navigator.connection.saveData) — для них этот сигнал уважаем и
+  // показываем статичный кадр вместо тяжёлого видео.
+  const videoBg = wantsLiteVideo()
+    ? `<img class="companies-bg-video" src="/videos/card-bg-poster.jpg" alt="" loading="lazy">`
+    : `<video class="companies-bg-video" autoplay muted loop playsinline preload="metadata" poster="/videos/card-bg-poster.jpg"><source src="/videos/card-bg.mp4" type="video/mp4"></video>`;
   const videoBlock = videoCards ? `
     <div class="companies-video-wrap">
-      <video class="companies-bg-video" autoplay muted loop playsinline preload="metadata">
-        <source src="/videos/card-bg.mp4" type="video/mp4">
-      </video>
+      ${videoBg}
       <div class="companies-bg-overlay"></div>
       <div class="companies-video-content">${videoCards}</div>
     </div>` : '';
@@ -1599,6 +1711,13 @@ function revealPhone(btn) {
 // счётчики теперь настоящие. ("География СНГ" была рядом же — но
 // пользователь решил, что она на сайте не нужна, и её убрали целиком:
 // HTML/CSS/JS, 10.08.2026.)
+// T-11 (18.08.2026): кнопка "🔎 Фильтры" видна только на мобильном (см.
+// .mobile-filters-toggle в CSS), просто переключает класс .mobile-open у
+// .sidebar — сами фильтры (initSidebarFilters() ниже) от этого не зависят.
+function toggleMobileFilters() {
+  document.querySelector('.sidebar')?.classList.toggle('mobile-open');
+}
+
 function initSidebarFilters() {
   document.querySelectorAll('.filter-opt input[type=checkbox]').forEach(cb => {
     const dir = cb.dataset.dir;
@@ -1617,6 +1736,17 @@ document.getElementById('mainSearch')?.addEventListener('input', e => {
   updateSearchSuggestions(e.target.value);
 });
 window.addEventListener('DOMContentLoaded', ()=>{
+  // T-14: тот же принцип, что и у companies-bg-video выше (см.
+  // wantsLiteVideo()) — статичное промо-видео над калькулятором тоже не
+  // грузим тем, кто явно попросил браузер экономить трафик.
+  if (wantsLiteVideo()) {
+    const pv = document.querySelector('video.promo-video');
+    if (pv) {
+      pv.removeAttribute('autoplay');
+      pv.querySelectorAll('source').forEach(s => s.remove());
+      pv.load();
+    }
+  }
   renderCompanies(COMPANIES);
   initSidebarFilters();
   document.getElementById('companies-list').addEventListener('click', function(e){

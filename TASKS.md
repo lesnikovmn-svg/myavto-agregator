@@ -349,9 +349,16 @@ Sheets (владелец редактирует данные сам). Excel пр
   `127.0.0.1:5055` вместо прежнего `0.0.0.0:5055` — раньше порт бота был
   доступен напрямую снаружи VPS в обход nginx (и любых будущих настроек
   на его уровне), теперь только через прокси.
-  *Осталось перед деплоем:* `pip install -r requirements.txt` на VPS
-  (добавлен `gunicorn`), затем `systemctl daemon-reload` (юнит-файл
-  поменялся) и `systemctl restart telegram-bot`.
+  *Задеплоено и проверено 21.08.2026:* `pip3 install --break-system-packages`
+  (новая Ubuntu блокирует системный pip без этого флага, PEP 668) —
+  внимание, ставить именно через `/usr/bin/python3 -m pip`, тем же
+  интерпретатором, что запускает systemd (на сервере их два —
+  `/usr/bin/python3` и другой в PATH у `pip3`, из-за этого первая попытка
+  дала "No module named gunicorn"). После установки — `daemon-reload` +
+  `restart`, в логе `journalctl -u telegram-bot` виден чистый старт
+  gunicorn (`Listening at: http://127.0.0.1:5055`, `Using worker: gthread`,
+  `[bot] поллинг запущен`), `curl -X POST .../api/visit` снаружи вернул
+  `200 {"count":16}`.
 - [ ] **T-72. Дублирование Google Sheets / .env-подключения в 11 файлах.**
   `Credentials.from_service_account_file` + `gspread.authorize` +
   ручной парсинг `agent_config.env` построчно скопипащены в

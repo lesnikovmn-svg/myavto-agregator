@@ -239,6 +239,15 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .companies-sort { font-size: 13px; color: var(--muted); }
 .companies-sort select { border: 1px solid var(--border); background: var(--surface); padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--text); }
 
+/* Пагинация каталога — 18.08.2026, по запросу пользователя ("навигация
+   пролистывания каталога для быстрого перемещения"). */
+.pager { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; margin: 24px 0 8px; }
+.pager-btn { min-width: 36px; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; font-family: 'Inter', sans-serif; cursor: pointer; }
+.pager-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pager-btn:disabled { opacity: 0.4; cursor: default; }
+.pager-btn.pager-current { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.pager-ellipsis { padding: 0 4px; color: var(--hint); }
+
 /* Company card */
 .company-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; box-shadow: var(--shadow); transition: box-shadow 0.15s; }
 .company-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
@@ -631,6 +640,7 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
   <div class="stat"><div class="stat-n">109</div><div class="stat-l">Компаний в каталоге</div></div>
   <div class="stat"><div class="stat-n">8</div><div class="stat-l">Направлений импорта</div></div>
   <div class="stat"><div class="stat-n">9 стран</div><div class="stat-l">Покрытие СНГ</div></div>
+  <div class="stat"><div class="stat-n"><span id="visitCount">…</span></div><div class="stat-l">Посещений сайта</div></div>
 </div>
 
 <!-- Видео-фон за калькулятором и формой массовой заявки — 14.08.2026,
@@ -1168,6 +1178,20 @@ function submitMassRequest(event) {
 // в reviewsList компании только после того, как владелец его одобрит и
 // прогонит update_site.py.
 const REVIEW_API = "https://myavto-agregator.ru/api/review";
+
+// T-60 (18.08.2026, по запросу пользователя): счётчик посетителей.
+// Один POST на загрузку страницы — инкрементит и сразу возвращает
+// актуальное число, подставляем в плейсхолдер #visitCount из .stats-bar
+// (см. update_site.py — сама плашка генерируется там, число сюда
+// приходит с бэкенда, не из Google Sheets). Если бэкенд недоступен —
+// тихо оставляем "…", без alert'ов и сломанной страницы.
+fetch("https://myavto-agregator.ru/api/visit", {method: "POST"})
+  .then(r => { if (!r.ok) throw new Error("backend error"); return r.json(); })
+  .then(data => {
+    const el = document.getElementById("visitCount");
+    if (el && typeof data.count === "number") el.textContent = data.count.toLocaleString("ru-RU");
+  })
+  .catch(() => {});
 let rvSelectedRating = 0;
 let rvCurrentCompany = null;
 
@@ -1362,11 +1386,41 @@ function wantsLiteVideo() {
   return !!c.saveData || /2g/.test(c.effectiveType || '');
 }
 
+// Пагинация каталога — 18.08.2026, по запросу пользователя: "нужна
+// навигация пролистывания каталога для быстрого перемещения по каталогу".
+// 109+ компаний одним бесконечным списком неудобно листать, особенно на
+// мобильном. Разбито по PAGE_SIZE штук на страницу + номера страниц внизу
+// (и продублированы вверху списка) — стандартный паттерн каталогов/
+// маркетплейсов, привычнее, чем "показать ещё" или бесконечный скролл, и
+// не требует IntersectionObserver. currentFilteredList хранит ПОЛНЫЙ
+// отфильтрованный список (без среза по странице) — applyFilters()
+// пересчитывает его и всегда возвращает на страницу 1 (иначе после смены
+// фильтра можно было бы залипнуть на пустой странице 5 из 2).
+let currentFilteredList = COMPANIES;
+let currentPage = 1;
+const PAGE_SIZE = 20;
+
 function renderCompanies(list) {
+  currentFilteredList = list;
+  currentPage = 1;
+  renderPage();
+}
+
+function goToPage(n) {
+  const totalPages = Math.max(1, Math.ceil(currentFilteredList.length / PAGE_SIZE));
+  currentPage = Math.min(Math.max(1, n), totalPages);
+  renderPage();
+  document.getElementById('companies-list')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function renderPage() {
   const el = document.getElementById('companies-list');
   if (!el) return;
-  const sorted = [...list].sort(compareCompanies);
-  const cardsHtml = sorted.map((c, idx) => {
+  const sorted = [...currentFilteredList].sort(compareCompanies);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const pageItems = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const cardsHtml = pageItems.map((c, idx) => {
     const isTop = c.featured;
     const tags = c.directions.slice(0,3).map(d=>`<span class="tag">🌍 ${d}</span>`).join('') +
                  c.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('');
@@ -1477,8 +1531,12 @@ function renderCompanies(list) {
   // видео по одному на карточку. Первые 2 карточки (по текущей сортировке
   // — сейчас топ/рекомендуемые) оборачиваются в .companies-video-wrap с
   // общим <video>, остальные карточки идут после как обычно.
-  const videoCards = cardsHtml.slice(0, 2).join('');
-  const restCards = cardsHtml.slice(2).join('');
+  // 18.08.2026: с пагинацией видео-фон имеет смысл только на 1-й странице
+  // (топ-компании всегда там благодаря compareCompanies) — на остальных
+  // страницах первые 2 карточки этой страницы никак не "топ", видео за
+  // ними было бы просто случайным.
+  const videoCards = currentPage === 1 ? cardsHtml.slice(0, 2).join('') : '';
+  const restCards = currentPage === 1 ? cardsHtml.slice(2).join('') : cardsHtml.join('');
   // T-14 (18.08.2026, аудит TASKS.md): 2.8МБ автоплей-видео на мобильном
   // трафике. В этой же сессии пользователь явно просил, чтобы видео на
   // мобильном было хорошо видно — поэтому не отключаем его на мобильном
@@ -1495,8 +1553,33 @@ function renderCompanies(list) {
       <div class="companies-bg-overlay"></div>
       <div class="companies-video-content">${videoCards}</div>
     </div>` : '';
-  el.innerHTML = videoBlock + restCards;
-  document.querySelector('.companies-title').textContent = `Компании в каталоге (${list.length})`;
+  el.innerHTML = videoBlock + restCards + buildPagerHtml(totalPages);
+  document.querySelector('.companies-title').textContent = `Компании в каталоге (${sorted.length})`;
+}
+
+// Разметка пагинации — простые кнопки Назад/1..N/Вперёд. При большом числе
+// страниц (>7) показываем только окно вокруг текущей + первую/последнюю с
+// многоточиями, чтобы не растягивать ряд на весь экран.
+function buildPagerHtml(totalPages) {
+  if (totalPages <= 1) return '';
+  const pages = [];
+  const add = n => pages.push(n);
+  const win = 1;
+  for (let n = 1; n <= totalPages; n++) {
+    if (n === 1 || n === totalPages || (n >= currentPage - win && n <= currentPage + win)) add(n);
+    else if (pages[pages.length - 1] !== '…') add('…');
+  }
+  const btn = (n, label, disabled) =>
+    `<button type="button" class="pager-btn" ${disabled ? 'disabled' : `onclick="goToPage(${n})"`}>${label}</button>`;
+  const numBtns = pages.map(n => n === '…'
+    ? `<span class="pager-ellipsis">…</span>`
+    : `<button type="button" class="pager-btn ${n === currentPage ? 'pager-current' : ''}" onclick="goToPage(${n})">${n}</button>`
+  ).join('');
+  return `<nav class="pager" aria-label="Страницы каталога">
+    ${btn(currentPage - 1, '‹ Назад', currentPage === 1)}
+    ${numBtns}
+    ${btn(currentPage + 1, 'Вперёд ›', currentPage === totalPages)}
+  </nav>`;
 }
 
 // DIR_MAP — общий словарь ключ->название направления, используется и

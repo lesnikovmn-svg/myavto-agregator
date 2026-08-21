@@ -361,6 +361,48 @@ def submit_review():
     return jsonify({"status": "ok", "id": review_id})
 
 
+# Счётчик посетителей — 18.08.2026, по запросу пользователя (T-60 в
+# TASKS.md). Простой хит-каунтер: каждый POST /api/visit увеличивает число
+# на 1 и возвращает текущее значение, index.html дёргает его раз при
+# каждой загрузке страницы (см. DOMContentLoaded) и подставляет в
+# .stats-bar. Не дедуплицирует уникальных посетителей (это не Метрика, а
+# честный простой счётчик хитов — ровно то, что просили). Хранится в
+# отдельном JSON-файле, не в bot_state.json — логически другая сущность
+# (не оперативное состояние бота), проще откатить/обнулить отдельно.
+VISITS_FILE = "visits.json"
+_visits_lock = threading.Lock()
+
+
+def _load_visits():
+    if os.path.exists(VISITS_FILE):
+        try:
+            with open(VISITS_FILE, encoding="utf-8") as f:
+                return int(json.load(f).get("count", 0))
+        except Exception:
+            return 0
+    return 0
+
+
+def _save_visits(count):
+    tmp = VISITS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"count": count}, f)
+    os.replace(tmp, VISITS_FILE)
+
+
+@app.route("/api/visit", methods=["POST"])
+def register_visit():
+    with _visits_lock:
+        count = _load_visits() + 1
+        _save_visits(count)
+    return jsonify({"count": count})
+
+
+@app.route("/api/visit", methods=["GET"])
+def get_visits():
+    return jsonify({"count": _load_visits()})
+
+
 def handle_start(chat_id, username, payload, state):
     if payload.startswith("req_"):
         req_id = payload[len("req_"):]

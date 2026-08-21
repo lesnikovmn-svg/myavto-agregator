@@ -245,6 +245,12 @@ stats_rows = [(str(count), 'Компаний в каталоге')]
 if approved_total > 0:
     stats_rows.append((f'{approved_total:,}'.replace(',', ' '), 'Отзывов в каталоге'))
 stats_rows += [('8', 'Направлений импорта'), ('9 стран', 'Покрытие СНГ')]
+# T-60 (18.08.2026, по запросу пользователя): счётчик посетителей.
+# Реальное число не из Google Sheets — оно живёт в visits.json на VPS
+# (см. /api/visit в telegram_bot_service.py), сюда просто кладём
+# плейсхолдер-span с известным id, JS на странице (fetch при загрузке)
+# сам подставит актуальное число при каждом открытии сайта.
+stats_rows.append(('<span id="visitCount">…</span>', 'Посещений сайта'))
 stats_inner = '\n'.join(
     f'  <div class="stat"><div class="stat-n">{n}</div><div class="stat-l">{l}</div></div>'
     for n, l in stats_rows)

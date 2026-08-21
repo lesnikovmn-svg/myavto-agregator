@@ -13,3 +13,4 @@ __pycache__/
 main
 daily_update.log
 venv/
+node_modules/

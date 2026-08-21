@@ -181,12 +181,36 @@
   telegram-bot`, но только если в диффе реально поменялся
   `telegram_bot_service.py` (статик вроде `index.html` рестарта не требует).
   Конвенция на VPS: деплоить через `./deploy.sh`, а не голый `git pull`.
-- [ ] **T-24. Иконки площадок грузятся с чужих доменов** (avito.ru, drom.ru, 2gis) —
-  утечка аудитории и риск 404 в любой момент. Положить локально.
-- [ ] **T-25. Гигиена репозитория.** Удалить ~60 отработанных `fix_*/add_*/check_*/debug_*`,
-  `testfile_outside.txt`, `company_agent_old.py`, неиспользуемый `favicon.svg` (364 КБ),
-  дубли `cars/*.png`. Добавить `node_modules` в `.gitignore` (сейчас закоммичен,
-  1836 файлов) и завести `requirements.txt`.
+- [~] **T-24. Иконки площадок грузятся с чужих доменов** (21.08.2026, частично)
+  `index.html` переведён на `/platform-icons/2gis.png`, `/avito.png`,
+  `/drom.png` (было — прямые `<img src>` на `d-assets.2gis.ru`,
+  `www.avito.ru`, `r2.drom.ru`). У песочницы агента нет сетевого доступа к
+  внешним доменам, чтобы скачать сами файлы — нужно один раз выполнить
+  команды ниже на Маке (см. сообщение в чате) и закоммитить сами PNG.
+  Остальные иконки (Yandex/Google/VK/Instagram/Avto.ru/Telegram) уже были
+  инлайн-SVG, хотлинка не было.
+- [x] **T-25. Гигиена репозитория.** (21.08.2026)
+  Удалено 70 отработанных одноразовых скриптов: 53 `fix_*.py`, 7 `add_*.py`,
+  3 `debug_*.py`, 2 `dump_*.py`, 1 `dedup_*.py`, плюс 4 `check_*.py`,
+  привязанных к конкретным прошлым инцидентам (`check_all_sites.py`,
+  `check_email_stats.py`, `check_last_batch.py`, `check_names_exist.py`).
+  Оставлены переиспользуемые диагностические `check_onboarded.py`,
+  `check_duplicate_ids.py`, `check_ooo_vs_ip.py` — не привязаны к
+  конкретному инциденту, могут пригодиться повторно. Также удалены
+  `company_agent_old.py`, `company_agent_check.py` (старые копии-черновики
+  `company_agent.py`), `testfile_outside.txt`, дубли `cars/*.png` (везде
+  реально используются только `cars/*.jpg`, см. `myavto.html`).
+  `node_modules` (1836 файлов) убран из git (`git rm -r --cached`, файлы
+  на диске остались) и добавлен в `.gitignore`. Заведён `requirements.txt`
+  (gspread, google-auth, flask, requests, ddgs — по факту `import` в коде).
+  *Поправка к первоначальной заметке:* `favicon.svg` НЕ оказался неиспользуемым —
+  на него ссылается `myavto.html`, поэтому не тронут.
+  *Не входило в эту правку, замечено по ходу:* в корне остались другие
+  скрипты вне `fix_/add_/check_/debug_/dump_/dedup_` (`backfill_*.py`,
+  `inspect_*.py`, `list_sheet_revisions.py`, `export_revision.py`,
+  `onboard_my_avto.py`, `sync_onboarded_to_sheet.py`, `update_agent.py`) —
+  не разбирались, каждый может быть как одноразовым, так и рабочим
+  инструментом, нужен отдельный проход, не делали не глядя.
 - [x] **T-26. На главной «29 110 отзывов», реально опубликовано — 0.** (18.08.2026)
   Решение пользователя: вариант (б) — плашка «Отзывов в каталоге» убрана
   из `.stats-bar`, пока `approved_total` (реальные модерированные отзывы)

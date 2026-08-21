@@ -39,8 +39,9 @@ scp ~/myavto-agregator/credentials.json root@89.108.70.185:/var/www/myavto-agreg
 # на VPS: зайти по ssh
 ssh root@89.108.70.185
 
-# поставить зависимости
-pip3 install flask requests gspread google-auth
+# поставить зависимости (requirements.txt заведён 21.08.2026, T-25/T-71 —
+# включает gunicorn, нужен для запуска бота в проде, см. Шаг 3 ниже)
+pip3 install -r /var/www/myavto-agregator/requirements.txt
 
 # скопировать systemd unit (telegram_bot_service.py уже там же, т.к. в git)
 cp /var/www/myavto-agregator/deploy/telegram-bot.service /etc/systemd/system/

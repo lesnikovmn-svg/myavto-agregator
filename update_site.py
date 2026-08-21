@@ -264,6 +264,38 @@ open('index.html', 'w').write(html)
 # reviews, 29110) — сбивало с толку рядом с approved_total=0 в логе чуть
 # выше. Теперь в итоговой строке тоже approved_total, они не расходятся.
 print(f'Сайт обновлён! {count} компаний, {approved_total} реальных отзывов, {verified_count} подтверждены по ЕГРЮЛ.')
-subprocess.run(['git','add','.'])
-subprocess.run(['git','commit','-m',f'update: sync {count} companies from Google Sheets ({verified_count} ЕГРЮЛ-verified)'])
-subprocess.run(['git','push','origin','main'])
+
+# T-70 (21.08.2026): раньше был `git add .` (подхватывал вообще всё в
+# рабочей директории на VPS, не только index.html — если рядом лежал
+# незакоммиченный черновик другого файла, он улетал в git под чужим
+# сообщением коммита) и коды возврата subprocess.run() не проверялись
+# (тихий провал git push из-за разошедшейся истории выглядел как успех).
+# Это была прямая причина git-конфликтов и lock-файлов, с которыми
+# разбирались весь день 21.08.2026 при параллельных ручных пушах с Мака.
+# Теперь: 1) коммитим только index.html — единственный файл, который этот
+# скрипт пишет; 2) ничего не коммитим, если реальных изменений нет (пустые
+# коммиты с одинаковым сообщением засоряли историю при каждом прогоне
+# cron, даже когда в таблице ничего не менялось); 3) перед push делаем
+# pull --no-rebase, чтобы забрать чужие изменения (например, ручной пуш с
+# Мака) и смёрджиться автоматически, а не молча разойтись; 4) при ЛЮБОЙ
+# ошибке печатаем её явно вместо тихого продолжения.
+def run_git(args):
+    r = subprocess.run(['git'] + args, capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"[git] ОШИБКА: git {' '.join(args)}\n{r.stderr.strip()}")
+    return r
+
+diff_check = subprocess.run(['git', 'diff', '--quiet', 'index.html'])
+if diff_check.returncode == 0:
+    print('[git] index.html не изменился — коммит не нужен.')
+else:
+    run_git(['add', 'index.html'])
+    commit_r = run_git(['commit', '-m', f'update: sync {count} companies from Google Sheets ({verified_count} ЕГРЮЛ-verified)'])
+    if commit_r.returncode == 0:
+        pull_r = run_git(['pull', '--no-rebase'])
+        if pull_r.returncode == 0:
+            push_r = run_git(['push', 'origin', 'main'])
+            if push_r.returncode == 0:
+                print('[git] index.html закоммичен и запушен.')
+        else:
+            print('[git] pull перед push не удался — push пропущен, разберитесь вручную (git status).')

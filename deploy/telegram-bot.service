@@ -9,7 +9,21 @@ User=root
 # по относительному пути из текущей директории — поэтому важно, чтобы
 # WorkingDirectory совпадала с местом, куда задеплоены эти файлы.
 WorkingDirectory=/var/www/myavto-agregator
-ExecStart=/usr/bin/python3 /var/www/myavto-agregator/telegram_bot_service.py
+# T-71 (21.08.2026): раньше — `python3 telegram_bot_service.py`, что
+# запускало встроенный dev-сервер Flask (app.run(...)). Flask сам прямым
+# текстом предупреждает не использовать его в проде — нет нормального
+# управления процессом/нагрузкой. gunicorn — production WSGI-сервер,
+# nginx уже стоит перед ним (см. deploy/nginx-api-snippet.conf).
+#
+# --workers 1 ОБЯЗАТЕЛЬНО, не менять без изменения архитектуры бота —
+# тред опроса Telegram (getUpdates) хранит offset в памяти процесса,
+# больше одного воркера = дублирующиеся/теряющиеся сообщения (см.
+# комментарий в telegram_bot_service.py у threading.Thread(poll_loop)).
+# --threads 4 даёт ту же параллельность на HTTP-запросы, что раньше
+# threaded=True у Flask dev-сервера. --preload НЕ используется намеренно —
+# он импортировал бы модуль (и стартовал тред) в мастер-процессе ДО
+# форка воркера, тред опроса не пережил бы форк.
+ExecStart=/usr/bin/python3 -m gunicorn --workers 1 --threads 4 --worker-class gthread --bind 127.0.0.1:5055 --timeout 60 telegram_bot_service:app
 Restart=on-failure
 RestartSec=5
 

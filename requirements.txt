@@ -6,3 +6,4 @@ google-auth
 flask
 requests
 ddgs
+gunicorn

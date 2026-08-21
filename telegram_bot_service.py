@@ -91,6 +91,8 @@ company_name}; если компания действительно ответи
 отвечать реплаем. Клиенту в любом случае видно ИМЯ компании в тексте
 пересланного ответа (раньше было безлико "Ответ от компании").
 """
+import collections
+import functools
 import json
 import os
 import re
@@ -205,6 +207,57 @@ _state_lock = threading.Lock()
 app = Flask(__name__)
 
 
+# T-21 (21.08.2026): у /api/mass-request и /api/review не было вообще
+# никакой защиты от спама/накрутки — форма шлёт JSON без токена, скрипт
+# может дёргать её сколько угодно раз в секунду, заваливая admin-уведомления
+# и (для mass-request) реальные компании. По решению пользователя — без
+# внешних сервисов (reCAPTCHA и т.п., это отдельная настройка с ключами),
+# два простых и бесплатных барьера:
+#   1) rate-limit по IP — не больше N запросов на эндпоинт за окно времени;
+#   2) honeypot — скрытое от людей поле в форме (см. index.html, класс
+#      .hp-field), которое видят только боты, читающие HTML целиком.
+#      Если оно заполнено — заявка тихо отбрасывается, но клиенту всё равно
+#      отвечаем "ok" (чтобы не подсказывать боту, что его вычислили).
+def get_client_ip():
+    # Flask за nginx видит remote_addr = 127.0.0.1 для всех запросов, если
+    # nginx не прокидывает реальный IP явно. Смотрим X-Forwarded-For первым
+    # (стандартный заголовок реверс-прокси), remote_addr — запасной вариант.
+    # Проверить на VPS: `grep X-Forwarded-For /etc/nginx/sites-enabled/*`.
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+_rate_lock = threading.Lock()
+_rate_buckets = collections.defaultdict(list)  # (endpoint, ip) -> [timestamps]
+
+
+def rate_limit(max_calls, window_seconds):
+    """Не больше max_calls запросов с одного IP на этот эндпоинт за window_seconds."""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapped(*args, **kwargs):
+            ip = get_client_ip()
+            key = (fn.__name__, ip)
+            now = time.time()
+            with _rate_lock:
+                bucket = _rate_buckets[key]
+                cutoff = now - window_seconds
+                while bucket and bucket[0] < cutoff:
+                    bucket.pop(0)
+                if len(bucket) >= max_calls:
+                    return jsonify({"error": "too many requests, попробуйте позже"}), 429
+                bucket.append(now)
+            return fn(*args, **kwargs)
+        return wrapped
+    return decorator
+
+
+def is_honeypot_filled(data):
+    return bool((data.get("website") or "").strip())
+
+
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, encoding="utf-8") as f:
@@ -213,8 +266,17 @@ def load_state():
 
 
 def save_state(state):
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
+    # T-22 (21.08.2026): раньше писали прямо в STATE_FILE — падение процесса
+    # (OOM, kill -9, рестарт деплоем) ровно в момент записи оставляло файл
+    # обрезанным наполовину, следующий load_state() падал на json.load() и
+    # терял весь накопленный онбординг компаний и заявок. Тот же паттерн,
+    # что уже применён для visits.json: пишем во временный файл рядом и
+    # атомарно подменяем — os.replace() на одной файловой системе никогда
+    # не оставляет STATE_FILE в промежуточном состоянии.
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, STATE_FILE)
 
 
 def tg_send(chat_id, text):
@@ -275,8 +337,13 @@ def get_companies():
 
 
 @app.route("/api/mass-request", methods=["POST"])
+@rate_limit(max_calls=5, window_seconds=300)
 def mass_request():
     data = request.get_json(force=True) or {}
+    if is_honeypot_filled(data):
+        # Бот заполнил скрытое поле — тихо делаем вид, что всё ок, реальную
+        # заявку не сохраняем и никого не уведомляем.
+        return jsonify({"request_id": "0", "bot_username": BOT_USERNAME})
     name = (data.get("name") or "").strip()
     phone = (data.get("phone") or "").strip()
     email = (data.get("email") or "").strip()
@@ -326,8 +393,11 @@ _reviews_lock = threading.Lock()
 
 
 @app.route("/api/review", methods=["POST"])
+@rate_limit(max_calls=5, window_seconds=300)
 def submit_review():
     data = request.get_json(force=True) or {}
+    if is_honeypot_filled(data):
+        return jsonify({"status": "ok", "id": "0"})
     company_id = str(data.get("company_id") or "").strip()
     company_name = (data.get("company_name") or "").strip()
     author_name = (data.get("author_name") or "").strip()

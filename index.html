@@ -320,6 +320,14 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    ничего не меняем — .sr-only прячет текст с экрана, но оставляет его
    доступным скринридерам и браузерному автозаполнению. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+/* T-21 (21.08.2026): honeypot-поле для форм mass-request/отзыва — обычные
+   посетители его не видят и не заполняют (off-screen, а не display:none —
+   часть спам-ботов пропускает поля с display:none как явную ловушку),
+   боты, читающие сырой HTML, часто заполняют все input подряд. Задний
+   бэкенд (telegram_bot_service.py, is_honeypot_filled()) тихо отбрасывает
+   заявку, если поле непустое. tabindex=-1 и aria-hidden — чтобы поле не
+   попадало в Tab-навигацию и не читалось скринридером. */
+.hp-field { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 .reviews { font-size: 11px; color: var(--hint); margin-top: 2px; }
 .leave-review-btn { display: inline-block; padding: 7px 14px; border-radius: var(--radius); border: 1.5px solid var(--accent); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; font-family: inherit; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
 .leave-review-btn:hover { background: var(--accent); color: #fff; }
@@ -504,7 +512,13 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
      обычным блоком в потоке — видно целиком, во всю ширину, а калькулятор
      и форма заявки идут СТРОГО ПОСЛЕ него, не перекрывая. */
   .promo-video-wrap { padding: 0 0 20px; }
-  .promo-video { position: static; width: 100%; height: auto; display: block; }
+  /* 21.08.2026: без aspect-ratio блок видео до подгрузки метаданных занимал
+     дефолтные 300×150px (или 0, пока не готов poster), а после появления
+     реальных размеров (448×672, портрет) резко "прыгал" вниз — пользователь
+     видел это как "картинка съезжает" и мелькающую полосу под ней. С
+     aspect-ratio браузер сразу резервирует финальную высоту под poster,
+     скачка нет. */
+  .promo-video { position: static; width: 100%; height: auto; aspect-ratio: 448 / 672; display: block; }
   .promo-video-content { padding-top: 16px; }
 
   /* Нав — 14.08.2026: раньше это была одна нерастягиваемая строка из
@@ -705,6 +719,10 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
       </div>
     </div>
     <form class="mr-form" onsubmit="return submitMassRequest(event)">
+      <div class="hp-field" aria-hidden="true">
+        <label for="mr-website">Сайт</label>
+        <input id="mr-website" type="text" name="website" tabindex="-1" autocomplete="off" />
+      </div>
       <label for="mr-name" class="sr-only">Имя</label>
       <input id="mr-name" type="text" placeholder="Имя" required />
       <label for="mr-phone" class="sr-only">Телефон или Telegram</label>
@@ -823,6 +841,10 @@ footer { background: var(--surface); border-top: 1px solid var(--border); paddin
     <div class="review-modal-company" id="reviewModalCompany"></div>
     <div class="review-modal-list" id="reviewModalList"></div>
     <form class="review-modal-form" id="reviewModalForm" onsubmit="return submitReview(event)">
+      <div class="hp-field" aria-hidden="true">
+        <label for="rv-website">Сайт</label>
+        <input id="rv-website" type="text" name="website" tabindex="-1" autocomplete="off" />
+      </div>
       <div class="review-modal-form-title">Оставить отзыв</div>
       <div class="review-stars" id="rvStars">
         <span data-star="1">★</span><span data-star="2">★</span><span data-star="3">★</span><span data-star="4">★</span><span data-star="5">★</span>
@@ -1113,6 +1135,7 @@ function submitMassRequest(event) {
   const direction = document.getElementById("mr-direction").value;
   const budget = document.getElementById("mr-budget").value.trim();
   const model = document.getElementById("mr-model").value.trim();
+  const website = document.getElementById("mr-website").value; // T-21: honeypot, у людей всегда пусто
   if (!name || !phone || !direction) {
     alert("Заполните имя, телефон/Telegram и направление");
     return false;
@@ -1139,7 +1162,7 @@ function submitMassRequest(event) {
     fetch(MASS_REQUEST_API, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({name, phone, email, direction, budget, model})
+      body: JSON.stringify({name, phone, email, direction, budget, model, website})
     })
       .then(r => { if (!r.ok) throw new Error("backend error"); return r.json(); })
       .then(data => {
@@ -1163,7 +1186,7 @@ function submitMassRequest(event) {
       })
       .finally(() => {
         document.getElementById("mr-success").style.display = "block";
-        ["mr-name","mr-phone","mr-email","mr-budget","mr-model"].forEach(id => document.getElementById(id).value = "");
+        ["mr-name","mr-phone","mr-email","mr-budget","mr-model","mr-website"].forEach(id => document.getElementById(id).value = "");
         document.getElementById("mr-direction").value = "";
         document.getElementById("mr-consent").checked = false;
       });
@@ -1236,6 +1259,7 @@ function openReviewModal(companyId) {
   document.getElementById("rv-author").value = "";
   document.getElementById("rv-text").value = "";
   document.getElementById("rv-contact").value = "";
+  document.getElementById("rv-website").value = "";
   document.getElementById("reviewModalForm").style.display = "";
   document.getElementById("reviewModalSuccess").classList.remove("open");
   document.getElementById("reviewModalOverlay").classList.add("open");
@@ -1251,6 +1275,7 @@ function submitReview(event) {
   const author = document.getElementById("rv-author").value.trim();
   const text = document.getElementById("rv-text").value.trim();
   const contact = document.getElementById("rv-contact").value.trim();
+  const website = document.getElementById("rv-website").value; // T-21: honeypot
   if (!author || !text) {
     alert("Заполните имя и текст отзыва");
     return false;
@@ -1271,7 +1296,7 @@ function submitReview(event) {
       company_name: rvCurrentCompany.name,
       author_name: author,
       rating: rvSelectedRating,
-      text, contact
+      text, contact, website
     })
   })
     .then(r => { if (!r.ok) throw new Error("backend error"); return r.json(); })

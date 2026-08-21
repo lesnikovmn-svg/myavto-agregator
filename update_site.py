@@ -254,7 +254,10 @@ html = re.sub(
     lambda _m: new_stats_block, html, count=1, flags=re.DOTALL)
 
 open('index.html', 'w').write(html)
-print(f'Сайт обновлён! {count} компаний, {total_reviews} отзывов, {verified_count} подтверждены по ЕГРЮЛ.')
+# 18.08.2026: раньше здесь печаталось total_reviews (сумма старой колонки
+# reviews, 29110) — сбивало с толку рядом с approved_total=0 в логе чуть
+# выше. Теперь в итоговой строке тоже approved_total, они не расходятся.
+print(f'Сайт обновлён! {count} компаний, {approved_total} реальных отзывов, {verified_count} подтверждены по ЕГРЮЛ.')
 subprocess.run(['git','add','.'])
 subprocess.run(['git','commit','-m',f'update: sync {count} companies from Google Sheets ({verified_count} ЕГРЮЛ-verified)'])
 subprocess.run(['git','push','origin','main'])

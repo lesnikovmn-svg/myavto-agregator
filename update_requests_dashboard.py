@@ -30,10 +30,11 @@ import datetime
 import json
 import os
 
-import gspread
-from google.oauth2.service_account import Credentials
+import gspread  # нужен для gspread.WorksheetNotFound ниже
 
-from company_agent import SHEET_ID
+# T-72 (21.08.2026): общий sheets_client.py вместо своей копии
+# Credentials/gspread.authorize (см. его docstring).
+from sheets_client import SHEET_ID, get_client
 
 DASHBOARD_TITLE = "Заявки"
 BOT_STATE_FILE = "bot_state.json"
@@ -44,10 +45,7 @@ HEADER = ["ID заявки", "Дата", "Имя клиента", "Телефо�
 
 
 def connect_spreadsheet():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    client = gspread.authorize(creds)
-    return client.open_by_key(SHEET_ID)
+    return get_client().open_by_key(SHEET_ID)
 
 
 if not os.path.exists(BOT_STATE_FILE):

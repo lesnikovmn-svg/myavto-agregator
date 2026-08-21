@@ -41,35 +41,19 @@ import zipfile
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 
-import gspread
-from google.oauth2.service_account import Credentials
+# T-72 (21.08.2026): Credentials/gspread.authorize/парсинг .env — общий
+# sheets_client.py вместо своей копии (см. его docstring).
+import sheets_client
 
 BACKUPS_DIR = "backups"
 KEEP_BACKUPS = 14  # хранить последние 14 запусков (~2 недели при ежедневном cron)
 
-config = {}
-with open("agent_config.env") as f:
-    for line in f:
-        if "=" in line:
-            k, v = line.strip().split("=", 1)
-            config[k] = v
-SHEET_ID = config["SHEET_ID"]
-
-MAIL_CONFIG = {}
-if os.path.exists("mail_config.env"):
-    with open("mail_config.env") as f:
-        for line in f:
-            line = line.strip()
-            if "=" in line and not line.startswith("#"):
-                k, v = line.split("=", 1)
-                MAIL_CONFIG[k.strip()] = v.strip()
+SHEET_ID = sheets_client.SHEET_ID
+MAIL_CONFIG = sheets_client.load_env("mail_config.env")
 
 
 def connect():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    client = gspread.authorize(creds)
-    return client.open_by_key(SHEET_ID)
+    return sheets_client.get_client().open_by_key(SHEET_ID)
 
 
 def safe_filename(title):

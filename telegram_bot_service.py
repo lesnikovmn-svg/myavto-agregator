@@ -102,10 +102,14 @@ import threading
 import time
 from email.mime.text import MIMEText
 
-import gspread
 import requests
 from flask import Flask, jsonify, request
-from google.oauth2.service_account import Credentials
+
+# T-72 (21.08.2026): раньше здесь были прямые import gspread + Credentials
+# для собственного подключения к таблице (см. get_companies() ниже) —
+# теперь через общий sheets_client.py (connect_sheets/SHEET_ID), тот же
+# модуль уже используют company_agent.py и update_site.py.
+from sheets_client import SHEET_ID, connect_sheets
 
 # 12.08.2026: под systemd stdout не подключён к терминалу, поэтому Python
 # по умолчанию блочно буферизует print() — сообщения могут подолгу не
@@ -193,13 +197,7 @@ def notify_admin(text):
             tg_send(dest, f"🔔 {text}")
     send_admin_email("MyAvtoAgregator — уведомление", text)
 
-SHEET_CONFIG = {}
-with open("agent_config.env") as f:
-    for line in f:
-        if "=" in line:
-            k, v = line.strip().split("=", 1)
-            SHEET_CONFIG[k] = v
-SHEET_ID = SHEET_CONFIG["SHEET_ID"]
+# SHEET_ID импортирован из sheets_client (T-72) — см. импорты вверху файла.
 
 STATE_FILE = "bot_state.json"
 _state_lock = threading.Lock()
@@ -313,10 +311,10 @@ def get_companies():
         if _companies_cache["data"] is not None and time.time() - _companies_cache["ts"] < COMPANIES_CACHE_TTL:
             return _companies_cache["data"]
 
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    client = gspread.authorize(creds)
-    ws = client.open_by_key(SHEET_ID).sheet1
+    # T-72 (21.08.2026): connect_sheets() из sheets_client.py делает то же
+    # самое (Credentials + gspread.authorize + open_by_key(...).sheet1),
+    # что раньше было продублировано прямо тут.
+    ws = connect_sheets()
     rows = ws.get_all_values()[1:]
     companies = []
     for row in rows:

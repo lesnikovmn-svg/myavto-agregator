@@ -3,18 +3,24 @@ import json
 import re
 import time
 import datetime
-import gspread
-from google.oauth2.service_account import Credentials
 from ddgs import DDGS
 
-config = {}
-with open("agent_config.env") as f:
-    for line in f:
-        if "=" in line:
-            k, v = line.strip().split("=", 1)
-            config[k] = v
+# T-72 (21.08.2026): Credentials/gspread.authorize/парсинг agent_config.env
+# и логика подключения к таблице переехали в sheets_client.py — тот же
+# блок был скопипащен в 11+ файлах. connect_sheets/connect_reviews_sheet/
+# SHEET_ID/REVIEWS_HEADER/REVIEWS_SHEET_TITLE реэкспортируются отсюда без
+# изменений, чтобы все `from company_agent import connect_sheets` и
+# подобное в остальных скриптах продолжали работать как раньше.
+from sheets_client import (
+    SHEET_ID,
+    connect_sheets,
+    connect_reviews_sheet,
+    REVIEWS_SHEET_TITLE,
+    REVIEWS_HEADER,
+    load_env,
+)
 
-SHEET_ID = config["SHEET_ID"]
+config = load_env("agent_config.env")
 
 # 13.08.2026: перенос агента на VPS показал, что t.me с VPS напрямую не
 # открывается (тот же блок, что раньше ловили с api.telegram.org) —
@@ -23,42 +29,10 @@ SHEET_ID = config["SHEET_ID"]
 # самого tgstat (видимо, поэтому и на Маке в логах бывают дни с
 # "0 каналов" по всем запросам), прокси тут не поможет, чинить отдельно.
 # PROXY_URL опционален — если не задан в agent_config.env, работаем
-# как раньше, напрямую.
+# как раньше, напрямую. (Это не про Sheets — про фетч сайтов/tgstat —
+# поэтому осталось здесь, а не в sheets_client.py.)
 PROXY_URL = config.get("PROXY_URL", "").strip()
 PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
-
-def connect_sheets():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    client = gspread.authorize(creds)
-    return client.open_by_key(SHEET_ID).sheet1
-
-# 17.08.2026: нативные отзывы на сайте (задача пользователя — заменить
-# кнопку "Оставить отзыв", которая вела на сторонние площадки, на реальную
-# форму отзыва прямо на нашем сайте). Отзывы храним в отдельной вкладке
-# "Отзывы" той же Google Таблицы (не в bot_state.json — это durable-данные,
-# а не оперативное состояние бота, см. PROJECT_STATE.md про разделение
-# durable/оперативных данных). Поток: форма на карточке компании -> POST
-# /api/review (telegram_bot_service.py) -> сюда со статусом "pending" ->
-# владелец модерирует через moderate_reviews.py -> "approved"/"rejected" ->
-# update_site.py подтягивает только approved-отзывы в карточки на сайте.
-REVIEWS_SHEET_TITLE = "Отзывы"
-REVIEWS_HEADER = ["id", "company_id", "company_name", "author_name", "rating", "text", "status", "created_at", "contact"]
-
-
-def connect_reviews_sheet():
-    """Возвращает вкладку "Отзывы" — создаёт её с заголовком, если это
-    первый запуск и вкладки ещё нет."""
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    client = gspread.authorize(creds)
-    sh = client.open_by_key(SHEET_ID)
-    try:
-        ws = sh.worksheet(REVIEWS_SHEET_TITLE)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=REVIEWS_SHEET_TITLE, rows=500, cols=len(REVIEWS_HEADER))
-        ws.append_row(REVIEWS_HEADER)
-    return ws
 
 def check_site(url):
     try:

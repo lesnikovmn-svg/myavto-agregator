@@ -2,8 +2,7 @@ import json, re, subprocess
 
 import datetime
 import os
-import gspread
-from google.oauth2.service_account import Credentials
+import sheets_client
 import verify_egrul
 from company_agent import connect_reviews_sheet, REVIEWS_HEADER
 
@@ -18,20 +17,18 @@ from company_agent import connect_reviews_sheet, REVIEWS_HEADER
 # update_site.py как раз запускаются один за другим без паузы, так что бага
 # бы повторялся каждый день. Переключились на тот же способ чтения, что уже
 # использует company_agent.py — авторизованный gspread без кэширующего слоя.
-config = {}
-if os.path.exists('agent_config.env'):
-    with open('agent_config.env') as f:
-        for line in f:
-            if '=' in line:
-                k, v = line.strip().split('=', 1)
-                config[k] = v
+#
+# T-72 (21.08.2026): сама авторизация (Credentials + gspread.authorize)
+# теперь берётся из sheets_client.get_client() — тот же клиент, что
+# использует company_agent.py. SHEET_ID здесь остаётся СВОЙ, с historic
+# жёстко зашитым фолбэком (не sheets_client.SHEET_ID) — этот скрипт
+# специально работает и без agent_config.env под рукой, дублировать
+# фолбэк в sheets_client.py не стали, он специфичен именно для update_site.py.
+config = sheets_client.load_env('agent_config.env')
 SHEET_ID = os.environ.get('SHEET_ID') or config.get('SHEET_ID', '1u3WuYo6Iyb4RJMQVbanx4YGm29B2V-DQMuKzVrtdcLY')
 
 print('Загружаю данные из Google Sheets...')
-scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds = Credentials.from_service_account_file('credentials.json', scopes=scopes)
-client = gspread.authorize(creds)
-ws = client.open_by_key(SHEET_ID).sheet1
+ws = sheets_client.get_client().open_by_key(SHEET_ID).sheet1
 all_rows = ws.get_all_values()[1:]  # без строки заголовков
 
 

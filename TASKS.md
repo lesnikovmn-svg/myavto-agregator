@@ -359,15 +359,24 @@ Sheets (владелец редактирует данные сам). Excel пр
   gunicorn (`Listening at: http://127.0.0.1:5055`, `Using worker: gthread`,
   `[bot] поллинг запущен`), `curl -X POST .../api/visit` снаружи вернул
   `200 {"count":16}`.
-- [ ] **T-72. Дублирование Google Sheets / .env-подключения в 11 файлах.**
-  `Credentials.from_service_account_file` + `gspread.authorize` +
-  ручной парсинг `agent_config.env` построчно скопипащены в
-  `company_agent.py`, `telegram_bot_service.py`, `backup_sheets.py`,
-  `update_site.py`, `update_onboarding_dashboard.py`,
-  `update_requests_dashboard.py` и ещё 5 местах — один и тот же ~15-строчный
-  блок. Любой фикс (смена scopes, добавление ретраев) нужно вносить в 11
-  местах вручную, часть неизбежно забудется. Вынести в общий
-  `sheets_client.py`.
+- [x] **T-72. Дублирование Google Sheets / .env-подключения в 11 файлах.** (21.08.2026)
+  Вынесено в `sheets_client.py` — `connect_sheets()`, `connect_reviews_sheet()`,
+  `get_client()` (кэширует авторизованный клиент на процесс), `load_env()`
+  (общий парсер `KEY=VALUE`), `SHEET_ID`. Мигрированы 6 файлов:
+  `company_agent.py` (реэкспортирует эти имена — все `from company_agent
+  import connect_sheets` и т.п. в остальном коде продолжают работать без
+  изменений), `telegram_bot_service.py`, `update_site.py` (сохранил свой
+  historic жёстко зашитый SHEET_ID-фолбэк — специфика именно этого
+  скрипта, не стали тащить в общий модуль), `backup_sheets.py`,
+  `update_onboarding_dashboard.py`, `update_requests_dashboard.py`.
+  Проверено: `py_compile` на все 7 файлов + смоук-тест импортом каждого —
+  все доходят до реального похода в Google API (не падают раньше на
+  NameError/ImportError).
+  *Не мигрировано, сознательно оставлено на потом:* мелкие одноразовые
+  скрипты вне основного потока (`backfill_inn.py`, `backfill_maps_years.py`,
+  `dryrun_reverify_sites.py`, `export_revision.py`, `inspect_*.py`,
+  `list_sheet_revisions.py`) — ниже риск, ниже частота использования, не
+  стали трогать не глядя (см. похожую заметку у T-25).
 - [ ] **T-73. Нигде не используется `logging`, 170 сырых `print()` вместо него.**
   На VPS всё летит в systemd journal одним потоком без уровней
   (info/warning/error) — нельзя штатно отфильтровать шум от реальных

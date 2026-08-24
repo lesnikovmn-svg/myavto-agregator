@@ -502,8 +502,18 @@ async def main():
                 continue
             groups = group_backfill_messages(raw_messages)
             logger.info("[%s] %s сообщений -> %s постов после склейки альбомов", source, len(raw_messages), len(groups))
+            last_seen_id = state.get(f"last_id:{source}", 0)
+            skipped = 0
             for group in groups:
+                if max(m.id for m in group) <= last_seen_id:
+                    # Уже публиковали этот пост в прошлом запуске — не дублируем
+                    # (важно при автозапуске сервиса через systemd: без этой
+                    # проверки каждый рестарт заново постил бы весь бэкфилл).
+                    skipped += 1
+                    continue
                 await handle_group(client, source, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
+            if skipped:
+                logger.info("[%s] %s из %s постов бэкфилла уже были обработаны раньше — пропущены", source, skipped, len(groups))
         logger.info("--- Конец тестового прогона, жду новые посты в реальном времени ---")
 
     # Живой поток: элементы одного альбома прилетают отдельными событиями

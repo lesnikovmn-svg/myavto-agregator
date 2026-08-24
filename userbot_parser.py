@@ -249,6 +249,30 @@ def save_state(state):
     tmp.replace(STATE_PATH)
 
 
+# Дедуп по точному набору уже отправленных id сообщений, а не по "максимальному
+# id" (watermark). Watermark ошибочен для ретроспективного бэкфилла: старый
+# пост, пропущенный раньше (например, альбом без подписи в узком окне выборки),
+# имеет id МЕНЬШЕ уже отправленного нового — watermark считает его "уже
+# сделанным", хотя реально он не отправлялся, и не даёт его переотправить,
+# даже если окно выборки потом расширили и подпись в него попала.
+
+def _sent_ids_key(source_username):
+    return f"sent_ids:{source_username}"
+
+
+def _get_sent_ids(state, source_username):
+    return set(state.get(_sent_ids_key(source_username), []))
+
+
+def _mark_sent(state, source_username, ids):
+    key = _sent_ids_key(source_username)
+    state[key] = sorted(set(state.get(key, [])) | set(ids))
+
+
+def _already_sent(state, source_username, ids):
+    return bool(set(ids) & _get_sent_ids(state, source_username))
+
+
 # --- Парсинг источников -----------------------------------------------
 
 def parse_eu_wholesale(text):
@@ -432,8 +456,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         except Exception:
             logger.exception("[%s#%s] ошибка при постинге в %s", source_username, ids, target)
 
-    key = f"last_id:{source_username}"
-    state[key] = max(state.get(key, 0), max(ids))
+    _mark_sent(state, source_username, ids)
     save_state(state)
 
 
@@ -507,10 +530,9 @@ async def main():
                 continue
             groups = group_backfill_messages(raw_messages)
             logger.info("[%s] %s сообщений -> %s постов после склейки альбомов", source, len(raw_messages), len(groups))
-            last_seen_id = state.get(f"last_id:{source}", 0)
             skipped = 0
             for group in groups:
-                if max(m.id for m in group) <= last_seen_id:
+                if _already_sent(state, source, [m.id for m in group]):
                     # Уже публиковали этот пост в прошлом запуске — не дублируем
                     # (важно при автозапуске сервиса через systemd: без этой
                     # проверки каждый рестарт заново постил бы весь бэкфилл).
@@ -534,7 +556,7 @@ async def main():
         if not group:
             return
         ids = [m.id for m in group]
-        if max(ids) <= state.get(f"last_id:{source_username}", 0):
+        if _already_sent(state, source_username, ids):
             # Telegram иногда повторно доставляет событие после
             # переподключения (нестабильная сеть на VPS уже такое
             # устраивала) — этот пост уже был отправлен, не дублируем.
@@ -547,7 +569,7 @@ async def main():
         source_username = (event.chat.username or "").lower()
         msg = event.message
         if msg.grouped_id is None:
-            if msg.id <= state.get(f"last_id:{source_username}", 0):
+            if _already_sent(state, source_username, [msg.id]):
                 logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, [msg.id])
                 return
             await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, dry_run, test_group, state)

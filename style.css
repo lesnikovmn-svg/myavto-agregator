@@ -100,6 +100,7 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .companies-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .companies-header-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .companies-title { font-size: 18px; font-weight: 600; }
+.companies-count { font-size: 14px; font-weight: 400; color: var(--muted); }
 .companies-sort { font-size: 13px; color: var(--muted); }
 .companies-sort select { border: 1px solid var(--border); background: var(--surface); padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--text); }
 .companies-city-filter select { border: 1px solid var(--border); background: var(--surface); padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--text); max-width: 160px; }

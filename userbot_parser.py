@@ -90,6 +90,12 @@ def build_repost_text(raw_text):
 PRICE_LOW = 4_500_000
 PRICE_HIGH = 6_000_000
 
+# Telegram: подпись (caption) к фото/видео/альбому не может быть длиннее
+# этого — иначе MediaCaptionTooLongError. У bezpokrasa исходный текст
+# (подробные ТТХ) + наш футер часто превышают лимит, в отличие от коротких
+# постов artalexgroup.
+CAPTION_LIMIT = 1024
+
 
 def load_env(path="userbot_config.env"):
     env = {}
@@ -308,7 +314,12 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
 
     for target in send_targets:
         try:
-            if media_list:
+            if media_list and len(post_text) > CAPTION_LIMIT:
+                # Длинная подпись не влезает в лимит caption для медиа/альбома —
+                # шлём фото/видео без подписи, текст отдельным сообщением следом.
+                await client.send_message(target, "", file=media_list)
+                await client.send_message(target, post_text, parse_mode="md")
+            elif media_list:
                 await client.send_message(target, post_text, file=media_list, parse_mode="md")
             else:
                 await client.send_message(target, post_text, parse_mode="md")

@@ -602,6 +602,9 @@ function filterDir(el, dir) {
 // w, "х" — и h, и kh), но покрывает большинство обычных случаев ("вестмо
 // торс" -> "vestmotors" всё равно не совпадёт с "westmotors" — это
 // известное ограничение транслитерации, не баг).
+// TEST-EXTRACT-START (test_search.js вырезает отсюда досюда для юнит-теста
+// поиска — держите этот блок самодостаточным, без зависимостей на DOM или
+// на остальной код файла, иначе извлечение сломается).
 const TRANSLIT_MAP = {
   а:'a', б:'b', в:'v', г:'g', д:'d', е:'e', ё:'e', ж:'zh', з:'z', и:'i',
   й:'y', к:'k', л:'l', м:'m', н:'n', о:'o', п:'p', р:'r', с:'s', т:'t',
@@ -633,6 +636,7 @@ function matchesQuery(c, q, qTranslit) {
   const aliases = SEARCH_ALIASES[name];
   return !!aliases && aliases.some(a => a.includes(q) || q.includes(a));
 }
+// TEST-EXTRACT-END
 
 function applyFilters() {
   let list = COMPANIES;

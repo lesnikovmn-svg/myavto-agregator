@@ -25,6 +25,9 @@ jobs:
       - name: Node.js — синтаксис app.js
         run: node --check app.js
 
+      - name: Node.js — тест поиска по каталогу (test_search.js)
+        run: node test_search.js
+
       - name: Python — неиспользуемые импорты/переменные (ruff)
         run: |
           pip install ruff --break-system-packages

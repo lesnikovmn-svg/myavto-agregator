@@ -12,6 +12,7 @@ check_all_sites.py и снова всплывший в check_ooo_vs_ip.py (18.08
 
 Запуск: python3 check_duplicate_ids.py
 """
+
 from collections import defaultdict
 from company_agent import connect_sheets
 
@@ -26,16 +27,24 @@ all_values = ws.get_all_values()
 
 by_id = defaultdict(list)
 for i, row in enumerate(all_values[1:], start=2):
+
     def val(col):
-        return row[col - 1].strip() if len(row) >= col and row[col - 1] else ''
+        return row[col - 1].strip() if len(row) >= col and row[col - 1] else ""
+
     name = val(NAME_COL)
     if not name:
         continue
     cid = val(ID_COL)
-    by_id[cid].append({
-        'row': i, 'id': cid, 'name': name,
-        'site': val(SITE_COL), 'telegram': val(TELEGRAM_COL), 'inn': val(INN_COL),
-    })
+    by_id[cid].append(
+        {
+            "row": i,
+            "id": cid,
+            "name": name,
+            "site": val(SITE_COL),
+            "telegram": val(TELEGRAM_COL),
+            "inn": val(INN_COL),
+        }
+    )
 
 dupes = {cid: rows for cid, rows in by_id.items() if len(rows) > 1}
 
@@ -43,12 +52,18 @@ if not dupes:
     print("Дублирующихся id не найдено.")
     raise SystemExit(0)
 
-print(f"Найдено {len(dupes)} id-значений с дублями (всего {sum(len(v) for v in dupes.values())} строк):\n")
+print(
+    f"Найдено {len(dupes)} id-значений с дублями (всего {sum(len(v) for v in dupes.values())} строк):\n"
+)
 for cid, rows in sorted(dupes.items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else 0):
     print(f"id={cid}:")
     for r in rows:
-        print(f"  строка {r['row']}: {r['name']} | site={r['site'] or '—'} | telegram={r['telegram'] or '—'} | inn={r['inn'] or '—'}")
+        print(
+            f"  строка {r['row']}: {r['name']} | site={r['site'] or '—'} | telegram={r['telegram'] or '—'} | inn={r['inn'] or '—'}"
+        )
     print()
 
 max_id = max((int(v) for v in by_id if v.isdigit()), default=0)
-print(f"Максимальный текущий id: {max_id}. Новым id для лишних дублей логично брать {max_id + 1}, {max_id + 2}, ...")
+print(
+    f"Максимальный текущий id: {max_id}. Новым id для лишних дублей логично брать {max_id + 1}, {max_id + 2}, ..."
+)

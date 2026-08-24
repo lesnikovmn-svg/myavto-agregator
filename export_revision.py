@@ -10,6 +10,7 @@
   python3 export_revision.py 209 AviAuto CarExport
   python3 export_revision.py 364          # напечатает все строки
 """
+
 import sys
 import csv
 import io

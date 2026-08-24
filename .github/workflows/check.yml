@@ -1,0 +1,31 @@
+name: Проверка синтаксиса
+
+# T-75 (24.08.2026): раньше синтаксические ошибки (в Python-скриптах или
+# app.js) ловились только руками — либо на VPS при ручном деплое, либо
+# случайно замечались при следующем запуске cron (daily_update.sh).
+# Этот воркфлоу гоняет те же самые проверки, что и раньше делались вручную
+# (node --check, python -m py_compile) автоматически на каждый push и pull
+# request — ошибка видна в GitHub до деплоя на VPS, а не после.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python — синтаксис всех .py файлов
+        run: python3 -m py_compile *.py
+
+      - name: Node.js — синтаксис app.js
+        run: node --check app.js
+
+      - name: Python — неиспользуемые импорты/переменные (ruff)
+        run: |
+          pip install ruff --break-system-packages
+          ruff check .

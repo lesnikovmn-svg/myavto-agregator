@@ -26,6 +26,7 @@ bot_config.env заполнить ADMIN_CHAT_ID (и/или ADMIN_GROUP_CHAT_ID) 
 
 Запуск: python3 update_requests_dashboard.py
 """
+
 import datetime
 import json
 import os
@@ -39,9 +40,19 @@ from sheets_client import SHEET_ID, get_client
 DASHBOARD_TITLE = "Заявки"
 BOT_STATE_FILE = "bot_state.json"
 
-HEADER = ["ID заявки", "Дата", "Имя клиента", "Телефон", "Email",
-          "Направление", "Бюджет", "Что ищет", "Клиент подтвердил?",
-          "Компаний уведомлено", "Кому разослано"]
+HEADER = [
+    "ID заявки",
+    "Дата",
+    "Имя клиента",
+    "Телефон",
+    "Email",
+    "Направление",
+    "Бюджет",
+    "Что ищет",
+    "Клиент подтвердил?",
+    "Компаний уведомлено",
+    "Кому разослано",
+]
 
 
 def connect_spreadsheet():
@@ -49,10 +60,12 @@ def connect_spreadsheet():
 
 
 if not os.path.exists(BOT_STATE_FILE):
-    print(f"Не нашёл {BOT_STATE_FILE} в текущей папке.\n"
-          f"Он лежит на VPS: /var/www/myavto-agregator/bot_state.json\n"
-          f"Либо запусти этот скрипт по SSH прямо на VPS, либо скачай файл:\n"
-          f"  scp root@89.108.70.185:/var/www/myavto-agregator/bot_state.json .")
+    print(
+        f"Не нашёл {BOT_STATE_FILE} в текущей папке.\n"
+        f"Он лежит на VPS: /var/www/myavto-agregator/bot_state.json\n"
+        f"Либо запусти этот скрипт по SSH прямо на VPS, либо скачай файл:\n"
+        f"  scp root@89.108.70.185:/var/www/myavto-agregator/bot_state.json ."
+    )
     raise SystemExit(1)
 
 with open(BOT_STATE_FILE, encoding="utf-8") as f:
@@ -61,16 +74,30 @@ with open(BOT_STATE_FILE, encoding="utf-8") as f:
 requests_data = state.get("requests", {})
 
 rows = [HEADER]
-for req_id, r in sorted(requests_data.items(), key=lambda kv: kv[1].get("created_at", 0), reverse=True):
+for req_id, r in sorted(
+    requests_data.items(), key=lambda kv: kv[1].get("created_at", 0), reverse=True
+):
     created = r.get("created_at")
-    date_str = datetime.datetime.fromtimestamp(created).strftime("%d.%m.%Y %H:%M") if created else ""
+    date_str = (
+        datetime.datetime.fromtimestamp(created).strftime("%d.%m.%Y %H:%M") if created else ""
+    )
     confirmed = "Да" if r.get("client_chat_id") else "Нет (ссылку не открыл)"
     notified = r.get("companies_notified", [])
-    rows.append([
-        req_id, date_str, r.get("name", ""), r.get("phone", ""), r.get("email", ""),
-        r.get("direction", ""), r.get("budget", ""), r.get("model", ""),
-        confirmed, str(len(notified)), ", ".join(notified),
-    ])
+    rows.append(
+        [
+            req_id,
+            date_str,
+            r.get("name", ""),
+            r.get("phone", ""),
+            r.get("email", ""),
+            r.get("direction", ""),
+            r.get("budget", ""),
+            r.get("model", ""),
+            confirmed,
+            str(len(notified)),
+            ", ".join(notified),
+        ]
+    )
 
 sh = connect_spreadsheet()
 try:
@@ -86,6 +113,8 @@ dash_ws.freeze(rows=1)
 confirmed_count = sum(1 for r in rows[1:] if r[8] == "Да")
 print(f"Готово: вкладка '{DASHBOARD_TITLE}' обновлена — {len(rows) - 1} заявок.")
 print(f"Подтверждено клиентом: {confirmed_count} из {len(rows) - 1}.")
-print(f"\nСовет: заполни ADMIN_CHAT_ID в bot_config.env (см. его docstring) — "
-      f"тогда о каждой новой заявке будешь узнавать сразу в Telegram, "
-      f"без необходимости запускать этот скрипт.")
+print(
+    f"\nСовет: заполни ADMIN_CHAT_ID в bot_config.env (см. его docstring) — "
+    f"тогда о каждой новой заявке будешь узнавать сразу в Telegram, "
+    f"без необходимости запускать этот скрипт."
+)

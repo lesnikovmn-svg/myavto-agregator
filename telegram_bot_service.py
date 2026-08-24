@@ -91,12 +91,12 @@ company_name}; если компания действительно ответи
 отвечать реплаем. Клиенту в любом случае видно ИМЯ компании в тексте
 пересланного ответа (раньше было безлико "Ответ от компании").
 """
+
 import collections
 import functools
 import json
 import logging
 import os
-import re
 import smtplib
 import sys
 import threading
@@ -108,9 +108,9 @@ from flask import Flask, jsonify, request
 
 # T-72 (21.08.2026): раньше здесь были прямые import gspread + Credentials
 # для собственного подключения к таблице (см. get_companies() ниже) —
-# теперь через общий sheets_client.py (connect_sheets/SHEET_ID), тот же
+# теперь через общий sheets_client.py (connect_sheets), тот же
 # модуль уже используют company_agent.py и update_site.py.
-from sheets_client import SHEET_ID, connect_sheets
+from sheets_client import connect_sheets
 
 # 12.08.2026: под systemd stdout не подключён к терминалу, поэтому Python
 # по умолчанию блочно буферизует вывод — сообщения могут подолгу не
@@ -200,7 +200,9 @@ def send_admin_email(subject, body):
         to_addr = MAIL_CONFIG.get("ADMIN_EMAIL", "").strip() or from_addr
         msg["From"] = f"{MAIL_CONFIG.get('FROM_NAME', from_addr)} <{from_addr}>"
         msg["To"] = to_addr
-        with smtplib.SMTP(MAIL_CONFIG["SMTP_HOST"], int(MAIL_CONFIG["SMTP_PORT"]), timeout=10) as server:
+        with smtplib.SMTP(
+            MAIL_CONFIG["SMTP_HOST"], int(MAIL_CONFIG["SMTP_PORT"]), timeout=10
+        ) as server:
             server.starttls()
             server.login(from_addr, MAIL_CONFIG["SMTP_PASSWORD"])
             server.sendmail(from_addr, [to_addr], msg.as_string())
@@ -216,7 +218,6 @@ def notify_admin(text):
             tg_send(dest, f"🔔 {text}")
     send_admin_email("MyAvtoAgregator — уведомление", text)
 
-# SHEET_ID импортирован из sheets_client (T-72) — см. импорты вверху файла.
 
 STATE_FILE = "bot_state.json"
 _state_lock = threading.Lock()
@@ -252,6 +253,7 @@ _rate_buckets = collections.defaultdict(list)  # (endpoint, ip) -> [timestamps]
 
 def rate_limit(max_calls, window_seconds):
     """Не больше max_calls запросов с одного IP на этот эндпоинт за window_seconds."""
+
     def decorator(fn):
         @functools.wraps(fn)
         def wrapped(*args, **kwargs):
@@ -267,7 +269,9 @@ def rate_limit(max_calls, window_seconds):
                     return jsonify({"error": "too many requests, попробуйте позже"}), 429
                 bucket.append(now)
             return fn(*args, **kwargs)
+
         return wrapped
+
     return decorator
 
 
@@ -303,7 +307,12 @@ def tg_send(chat_id, text):
     # на какое именно сообщение компания ответила реплаем (см. handle_reply
     # и раздел "Точная маршрутизация ответов компаний" в PROJECT_STATE.md).
     try:
-        r = requests.post(f"{API}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=10, proxies=PROXIES)
+        r = requests.post(
+            f"{API}/sendMessage",
+            json={"chat_id": chat_id, "text": text},
+            timeout=10,
+            proxies=PROXIES,
+        )
         return r.json()
     except Exception as e:
         logger.warning(f"не удалось отправить сообщение {chat_id}: {e}")
@@ -327,7 +336,10 @@ def get_companies():
     отдельной копии данных не держим. Результат кэшируется на
     COMPANIES_CACHE_TTL секунд (см. комментарий выше)."""
     with _companies_cache_lock:
-        if _companies_cache["data"] is not None and time.time() - _companies_cache["ts"] < COMPANIES_CACHE_TTL:
+        if (
+            _companies_cache["data"] is not None
+            and time.time() - _companies_cache["ts"] < COMPANIES_CACHE_TTL
+        ):
             return _companies_cache["data"]
 
     # T-72 (21.08.2026): connect_sheets() из sheets_client.py делает то же
@@ -341,11 +353,13 @@ def get_companies():
         telegram = row[9].strip() if len(row) > 9 else ""
         directions = row[7].strip() if len(row) > 7 else ""
         if name and telegram:
-            companies.append({
-                "name": name,
-                "telegram": telegram.lstrip("@").lower(),
-                "directions": [d.strip() for d in directions.split(",") if d.strip()],
-            })
+            companies.append(
+                {
+                    "name": name,
+                    "telegram": telegram.lstrip("@").lower(),
+                    "directions": [d.strip() for d in directions.split(",") if d.strip()],
+                }
+            )
 
     with _companies_cache_lock:
         _companies_cache["data"] = companies
@@ -379,18 +393,23 @@ def mass_request():
     with _state_lock:
         state = load_state()
         state["requests"][request_id] = {
-            "name": name, "phone": phone, "email": email, "direction": direction,
-            "budget": budget, "model": model,
-            "client_chat_id": None, "companies_notified": [],
+            "name": name,
+            "phone": phone,
+            "email": email,
+            "direction": direction,
+            "budget": budget,
+            "model": model,
+            "client_chat_id": None,
+            "companies_notified": [],
             "created_at": time.time(),
         }
         save_state(state)
     notify_admin(
         f"Новая заявка #{request_id}\nИмя: {name}\nКонтакт: {phone}\nEmail: {email}\n"
-        f"Направление: {direction}\n" +
-        (f"Бюджет: {budget}\n" if budget else "") +
-        (f"Что ищет: {model}\n" if model else "") +
-        "(ещё не подтверждена — клиент должен открыть бота и нажать Старт)"
+        f"Направление: {direction}\n"
+        + (f"Бюджет: {budget}\n" if budget else "")
+        + (f"Что ищет: {model}\n" if model else "")
+        + "(ещё не подтверждена — клиент должен открыть бота и нажать Старт)"
     )
     return jsonify({"request_id": request_id, "bot_username": BOT_USERNAME})
 
@@ -438,7 +457,19 @@ def submit_review():
     created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     with _reviews_lock:
         ws = connect_reviews_sheet()
-        ws.append_row([review_id, company_id, company_name, author_name, str(rating), text, "pending", created_at, contact])
+        ws.append_row(
+            [
+                review_id,
+                company_id,
+                company_name,
+                author_name,
+                str(rating),
+                text,
+                "pending",
+                created_at,
+                contact,
+            ]
+        )
 
     notify_admin(
         f"Новый отзыв #{review_id} на модерацию\nКомпания: {company_name}\n"
@@ -492,29 +523,41 @@ def get_visits():
 
 def handle_start(chat_id, username, payload, state):
     if payload.startswith("req_"):
-        req_id = payload[len("req_"):]
+        req_id = payload[len("req_") :]
         req = state["requests"].get(req_id)
         if not req:
-            tg_send(chat_id, "Не нашёл эту заявку — возможно, ссылка устарела. Заполни форму на сайте ещё раз.")
+            tg_send(
+                chat_id,
+                "Не нашёл эту заявку — возможно, ссылка устарела. Заполни форму на сайте ещё раз.",
+            )
             return
         req["client_chat_id"] = chat_id
-        tg_send(chat_id, "Заявка принята! Ищу подходящие компании по направлению \"" + req["direction"] +
-                "\" и рассылаю им запрос — ответы придут сюда же, каждый раз с указанием, какая именно "
-                "компания ответила (если откликнется несколько — увидишь их по отдельности).")
+        tg_send(
+            chat_id,
+            'Заявка принята! Ищу подходящие компании по направлению "'
+            + req["direction"]
+            + '" и рассылаю им запрос — ответы придут сюда же, каждый раз с указанием, какая именно '
+            "компания ответила (если откликнется несколько — увидишь их по отдельности).",
+        )
 
-        matched = [c for c in get_companies()
-                   if req["direction"] in c["directions"] and c["telegram"] in state["companies"]]
+        matched = [
+            c
+            for c in get_companies()
+            if req["direction"] in c["directions"] and c["telegram"] in state["companies"]
+        ]
         for c in matched:
             company_chat_id = state["companies"][c["telegram"]]
-            text = (f"Новая заявка через MyAvtoAgregator.ru\n\n"
-                    f"Клиент: {req['name']}\nКонтакт: {req['phone']}\n"
-                    f"Направление: {req['direction']}\n" +
-                    (f"Бюджет: {req['budget']}\n" if req["budget"] else "") +
-                    (f"Что ищет: {req['model']}\n" if req["model"] else "") +
-                    "\n❗️Отвечай РЕПЛАЕМ (в Telegram: зажать это сообщение и "
-                    "выбрать \"Ответить\") именно на ЭТО сообщение — так бот "
-                    "точно поймёт, к какой заявке относится твой ответ, даже "
-                    "если у тебя параллельно несколько заявок.")
+            text = (
+                f"Новая заявка через MyAvtoAgregator.ru\n\n"
+                f"Клиент: {req['name']}\nКонтакт: {req['phone']}\n"
+                f"Направление: {req['direction']}\n"
+                + (f"Бюджет: {req['budget']}\n" if req["budget"] else "")
+                + (f"Что ищет: {req['model']}\n" if req["model"] else "")
+                + "\n❗️Отвечай РЕПЛАЕМ (в Telegram: зажать это сообщение и "
+                'выбрать "Ответить") именно на ЭТО сообщение — так бот '
+                "точно поймёт, к какой заявке относится твой ответ, даже "
+                "если у тебя параллельно несколько заявок."
+            )
             resp = tg_send(company_chat_id, text)
 
             req["companies_notified"].append(c["telegram"])
@@ -533,7 +576,8 @@ def handle_start(chat_id, username, payload, state):
             if sent_msg_id:
                 state["message_routes"] = state.get("message_routes", {})
                 state["message_routes"][f"{company_chat_id}:{sent_msg_id}"] = {
-                    "request_id": req_id, "company_name": c["name"],
+                    "request_id": req_id,
+                    "company_name": c["name"],
                 }
 
             # Запасной вариант (если компания всё же ответит НЕ реплаем,
@@ -542,17 +586,25 @@ def handle_start(chat_id, username, payload, state):
             # кто именно ответил, а не безликое "Ответ от компании".
             state["companies_last_request"] = state.get("companies_last_request", {})
             state["companies_last_request"][str(company_chat_id)] = {
-                "request_id": req_id, "company_name": c["name"],
+                "request_id": req_id,
+                "company_name": c["name"],
             }
 
         if matched:
             tg_send(chat_id, f"Заявка отправлена {len(matched)} компаниям.")
         else:
-            tg_send(chat_id, "Пока не нашлось онбордившихся компаний по этому направлению — свяжемся с тобой вручную.")
+            tg_send(
+                chat_id,
+                "Пока не нашлось онбордившихся компаний по этому направлению — свяжемся с тобой вручную.",
+            )
         notify_admin(
             f"Заявка #{req_id} подтверждена клиентом (chat_id={chat_id}), "
             f"направление \"{req['direction']}\" — разослана {len(matched)} компаниям"
-            + (f": {', '.join(c['telegram'] for c in matched)}" if matched else " (никому, нет онбордившихся)")
+            + (
+                f": {', '.join(c['telegram'] for c in matched)}"
+                if matched
+                else " (никому, нет онбордившихся)"
+            )
         )
         return
 
@@ -562,11 +614,19 @@ def handle_start(chat_id, username, payload, state):
         match = next((c for c in companies if c["telegram"] == username.lower()), None)
         if match:
             state["companies"][match["telegram"]] = chat_id
-            tg_send(chat_id, f"Готово, {match['name']}! Теперь новые заявки по вашим направлениям будут приходить сюда.")
-            notify_admin(f"Компания онбордилась: {match['name']} (@{match['telegram']}, chat_id={chat_id})")
+            tg_send(
+                chat_id,
+                f"Готово, {match['name']}! Теперь новые заявки по вашим направлениям будут приходить сюда.",
+            )
+            notify_admin(
+                f"Компания онбордилась: {match['name']} (@{match['telegram']}, chat_id={chat_id})"
+            )
             return
 
-    tg_send(chat_id, "Привет! Это бот MyAvtoAgregator.ru. Если ты клиент — оформи заявку на сайте, ссылка придёт сюда автоматически.")
+    tg_send(
+        chat_id,
+        "Привет! Это бот MyAvtoAgregator.ru. Если ты клиент — оформи заявку на сайте, ссылка придёт сюда автоматически.",
+    )
 
 
 def handle_reply(chat_id, text, state, reply_to_message_id=None):
@@ -611,13 +671,18 @@ def handle_reply(chat_id, text, state, reply_to_message_id=None):
     tg_send(req["client_chat_id"], f"Ответ от {label}:\n\n{text}")
 
     if not matched_by_reply:
-        tg_send(chat_id, "⚠️ Не понял точно, к какой заявке относится это сообщение (это не был "
-                          "реплай на заявку) — переслал клиенту как ответ на последнюю известную "
-                          "заявку. Если ведёшь несколько заявок одновременно, в следующий раз "
-                          "отвечай РЕПЛАЕМ прямо на сообщение с нужной заявкой, чтобы не перепутать.")
+        tg_send(
+            chat_id,
+            "⚠️ Не понял точно, к какой заявке относится это сообщение (это не был "
+            "реплай на заявку) — переслал клиенту как ответ на последнюю известную "
+            "заявку. Если ведёшь несколько заявок одновременно, в следующий раз "
+            "отвечай РЕПЛАЕМ прямо на сообщение с нужной заявкой, чтобы не перепутать.",
+        )
 
-    notify_admin(f"Компания {label} (chat_id={chat_id}) ответила по заявке #{request_id} "
-                 f"клиенту {req['name']}:\n\n{text}")
+    notify_admin(
+        f"Компания {label} (chat_id={chat_id}) ответила по заявке #{request_id} "
+        f"клиенту {req['name']}:\n\n{text}"
+    )
 
 
 def poll_loop():
@@ -643,7 +708,12 @@ def poll_loop():
                 offset = state.get("last_update_id", 0) + 1
             logger.debug(f"запрашиваю getUpdates, offset={offset}, proxies={PROXIES}")
             try:
-                r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25, proxies=PROXIES)
+                r = requests.get(
+                    f"{API}/getUpdates",
+                    params={"offset": offset, "timeout": 20},
+                    timeout=25,
+                    proxies=PROXIES,
+                )
                 updates = r.json().get("result", [])
                 logger.debug(f"getUpdates ответил: status={r.status_code}, апдейтов={len(updates)}")
                 for u in updates:
@@ -678,8 +748,10 @@ def poll_loop():
                     # группы (владелец хочет получать туда переписку
                     # клиент<->компания) — печатаем тип/название чата для
                     # КАЖДОГО входящего сообщения, не только обработанных.
-                    logger.info(f"сообщение из chat_id={chat_id}, type={msg['chat'].get('type')}, "
-                                f"title={msg['chat'].get('title', '')}, from=@{username}, text={text!r}")
+                    logger.info(
+                        f"сообщение из chat_id={chat_id}, type={msg['chat'].get('type')}, "
+                        f"title={msg['chat'].get('title', '')}, from=@{username}, text={text!r}"
+                    )
                     try:
                         if text.startswith("/start"):
                             parts = text.split(maxsplit=1)
@@ -698,7 +770,9 @@ def poll_loop():
                         # поллинг — двигаем offset дальше (уже сделано
                         # выше, state["last_update_id"] обновлён) и просто
                         # логируем, чтобы было видно в journalctl.
-                        logger.error(f"ошибка обработки апдейта {u.get('update_id')} от chat_id={chat_id}: {e}")
+                        logger.error(
+                            f"ошибка обработки апдейта {u.get('update_id')} от chat_id={chat_id}: {e}"
+                        )
                 save_state(state)
         except Exception as e:
             # Последний рубеж — если упало что-то совсем неожиданное

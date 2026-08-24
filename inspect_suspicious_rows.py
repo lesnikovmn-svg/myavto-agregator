@@ -30,6 +30,7 @@
 
 Запуск: python3 inspect_suspicious_rows.py
 """
+
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -46,10 +47,38 @@ creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
 client = gspread.authorize(creds)
 ws = client.open_by_key(SHEET_ID).sheet1
 
-HEADERS = ["id","name","rating","reviews","years","delivered","description","directions",
-    "tags","telegram","phone","site","manager","region","featured","avatar","color",
-    "yandex","inn","google","gis2","instagram","vk","avito","drom","autoru","max",
-    "youtube","rutube","whatsapp"]
+HEADERS = [
+    "id",
+    "name",
+    "rating",
+    "reviews",
+    "years",
+    "delivered",
+    "description",
+    "directions",
+    "tags",
+    "telegram",
+    "phone",
+    "site",
+    "manager",
+    "region",
+    "featured",
+    "avatar",
+    "color",
+    "yandex",
+    "inn",
+    "google",
+    "gis2",
+    "instagram",
+    "vk",
+    "avito",
+    "drom",
+    "autoru",
+    "max",
+    "youtube",
+    "rutube",
+    "whatsapp",
+]
 
 TARGET_ROWS = [5, 50, 59, 60, 65, 66, 74, 75, 76]
 

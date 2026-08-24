@@ -14,6 +14,7 @@
 только status=approved в карточки на сайте, отклонённые и ещё не решённые
 отзывы на сайт не попадают.
 """
+
 from company_agent import connect_reviews_sheet, REVIEWS_HEADER
 
 ID_COL = REVIEWS_HEADER.index("id") + 1
@@ -44,6 +45,7 @@ print(f"На модерации: {len(pending)} отзыв(ов).\n")
 
 approved, rejected, skipped = 0, 0, 0
 for row_idx, row in pending:
+
     def cell(col):
         return row[col - 1].strip() if len(row) >= col and row[col - 1] else ""
 
@@ -55,7 +57,9 @@ for row_idx, row in pending:
         print(f"Контакт (не публикуется): {cell(CONTACT_COL)}")
     print(f"Текст: {cell(TEXT_COL)}")
 
-    choice = input("Одобрить (a) / Отклонить (r) / Пропустить (Enter) / Выход (q): ").strip().lower()
+    choice = (
+        input("Одобрить (a) / Отклонить (r) / Пропустить (Enter) / Выход (q): ").strip().lower()
+    )
     if choice == "q":
         print("Остановлено пользователем.")
         break

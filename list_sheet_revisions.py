@@ -8,6 +8,7 @@ vk.ru, хотя её настоящий сайт prim-auto.com).
 
 Запуск: python3 list_sheet_revisions.py
 """
+
 import requests
 import google.auth.transport.requests
 from google.oauth2.service_account import Credentials

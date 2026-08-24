@@ -11,6 +11,7 @@ verify_egrul.py/update_site.py).
 
 Запуск: python3 check_ooo_vs_ip.py
 """
+
 import re
 from company_agent import connect_sheets
 
@@ -24,15 +25,16 @@ all_values = ws.get_all_values()
 ooo, ip, no_inn = [], [], []
 
 for row in all_values[1:]:
+
     def val(col):
-        return row[col - 1].strip() if len(row) >= col and row[col - 1] else ''
+        return row[col - 1].strip() if len(row) >= col and row[col - 1] else ""
 
     name = val(NAME_COL)
     if not name:
         continue
 
     inn_raw = val(INN_COL)
-    inn = re.sub(r'\D', '', inn_raw)
+    inn = re.sub(r"\D", "", inn_raw)
 
     if len(inn) == 10:
         ooo.append((val(ID_COL), name, inn))

@@ -21,6 +21,7 @@ docstring рядом с импортом).
     ws = connect_sheets()            # главный лист компаний (sheet1)
     reviews_ws = connect_reviews_sheet()  # вкладка "Отзывы"
 """
+
 import os
 
 import gspread
@@ -69,7 +70,17 @@ def connect_sheets():
 # отзывы вместо редиректа на сторонние площадки). Схема не менялась при
 # переносе сюда — только источник импорта.
 REVIEWS_SHEET_TITLE = "Отзывы"
-REVIEWS_HEADER = ["id", "company_id", "company_name", "author_name", "rating", "text", "status", "created_at", "contact"]
+REVIEWS_HEADER = [
+    "id",
+    "company_id",
+    "company_name",
+    "author_name",
+    "rating",
+    "text",
+    "status",
+    "created_at",
+    "contact",
+]
 
 
 def connect_reviews_sheet():

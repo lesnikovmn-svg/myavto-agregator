@@ -18,6 +18,7 @@ myavto-agregator/bot_state.json .) и запустить локально ряд
 
 Запуск: python3 check_onboarded.py
 """
+
 import json
 import os
 
@@ -28,10 +29,12 @@ NAME_COL = 2
 TELEGRAM_COL = 10
 
 if not os.path.exists(STATE_FILE):
-    print(f"Не нашёл {STATE_FILE} в текущей папке.\n"
-          f"Он лежит на VPS: /var/www/myavto-agregator/bot_state.json\n"
-          f"Либо запусти этот скрипт по SSH прямо на VPS, либо скачай файл:\n"
-          f"  scp root@89.108.70.185:/var/www/myavto-agregator/bot_state.json .")
+    print(
+        f"Не нашёл {STATE_FILE} в текущей папке.\n"
+        f"Он лежит на VPS: /var/www/myavto-agregator/bot_state.json\n"
+        f"Либо запусти этот скрипт по SSH прямо на VPS, либо скачай файл:\n"
+        f"  scp root@89.108.70.185:/var/www/myavto-agregator/bot_state.json ."
+    )
     raise SystemExit(1)
 
 with open(STATE_FILE, encoding="utf-8") as f:
@@ -60,16 +63,21 @@ print(f"Онбордились ({len(onboarded)}):")
 for name, handle in onboarded:
     print(f"  ✓ {name} (@{handle})")
 
-print(f"\nЕЩЁ НЕ онбордились ({len(not_onboarded)}) — этим компаниям нужно "
-      f"прислать ссылку на бота t.me/MyAvtoAgregator_bot и попросить нажать /start:")
+print(
+    f"\nЕЩЁ НЕ онбордились ({len(not_onboarded)}) — этим компаниям нужно "
+    f"прислать ссылку на бота t.me/MyAvtoAgregator_bot и попросить нажать /start:"
+)
 for name, handle in not_onboarded:
     print(f"  ✗ {name} (@{handle})")
 
 if no_telegram:
-    print(f"\nБез telegram вообще ({len(no_telegram)}) — онбординг через бота "
-          f"им пока недоступен:")
+    print(
+        f"\nБез telegram вообще ({len(no_telegram)}) — онбординг через бота " f"им пока недоступен:"
+    )
     for name in no_telegram:
         print(f"  — {name}")
 
-print(f"\nИтого: {len(onboarded)} из {len(onboarded) + len(not_onboarded)} "
-      f"компаний с telegram-каналом уже онбордились.")
+print(
+    f"\nИтого: {len(onboarded)} из {len(onboarded) + len(not_onboarded)} "
+    f"компаний с telegram-каналом уже онбордились."
+)

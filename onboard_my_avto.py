@@ -28,6 +28,7 @@ MY Avto — это ожидаемо, MY Avto участвует в рассыл�
 Перезапускать бота после этого не нужно — bot_state.json читается заново
 на каждой итерации поллинга, эффект сразу.
 """
+
 import json
 import os
 
@@ -36,8 +37,10 @@ MY_AVTO_TELEGRAM_HANDLE = "my_avto5"  # из таблицы, колонка J ("
 MY_AVTO_CHAT_ID = 435849652  # личный chat_id владельца (тот же, что ADMIN_CHAT_ID)
 
 if not os.path.exists(STATE_FILE):
-    print(f"Не нашёл {STATE_FILE} в текущей папке — запусти скрипт прямо на VPS, "
-          f"в /var/www/myavto-agregator.")
+    print(
+        f"Не нашёл {STATE_FILE} в текущей папке — запусти скрипт прямо на VPS, "
+        f"в /var/www/myavto-agregator."
+    )
     raise SystemExit(1)
 
 with open(STATE_FILE, encoding="utf-8") as f:
@@ -51,5 +54,9 @@ else:
     state["companies"][MY_AVTO_TELEGRAM_HANDLE] = MY_AVTO_CHAT_ID
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
-    print(f"Готово: MY Avto онбордилась (telegram='{MY_AVTO_TELEGRAM_HANDLE}' -> chat_id={MY_AVTO_CHAT_ID}).")
-    print("Заявки по направлениям MY Avto теперь будут приходить тебе в личку вместе с 🔔-уведомлениями.")
+    print(
+        f"Готово: MY Avto онбордилась (telegram='{MY_AVTO_TELEGRAM_HANDLE}' -> chat_id={MY_AVTO_CHAT_ID})."
+    )
+    print(
+        "Заявки по направлениям MY Avto теперь будут приходить тебе в личку вместе с 🔔-уведомлениями."
+    )

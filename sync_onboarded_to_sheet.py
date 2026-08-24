@@ -23,6 +23,7 @@ bot_state.json (не должно случаться в норме) — коло
 Запуск (после add_onboarded_column.py): python3 sync_onboarded_to_sheet.py
 После — python3 update_site.py.
 """
+
 import json
 import os
 
@@ -34,10 +35,12 @@ ONBOARDED_COL = 33
 BOT_STATE_FILE = "bot_state.json"
 
 if not os.path.exists(BOT_STATE_FILE):
-    print(f"Не нашёл {BOT_STATE_FILE} в текущей папке.\n"
-          f"Он лежит на VPS: /var/www/myavto-agregator/bot_state.json\n"
-          f"Либо запусти этот скрипт по SSH прямо на VPS, либо скачай файл:\n"
-          f"  scp root@89.108.70.185:/var/www/myavto-agregator/bot_state.json .")
+    print(
+        f"Не нашёл {BOT_STATE_FILE} в текущей папке.\n"
+        f"Он лежит на VPS: /var/www/myavto-agregator/bot_state.json\n"
+        f"Либо запусти этот скрипт по SSH прямо на VPS, либо скачай файл:\n"
+        f"  scp root@89.108.70.185:/var/www/myavto-agregator/bot_state.json ."
+    )
     raise SystemExit(1)
 
 with open(BOT_STATE_FILE, encoding="utf-8") as f:
@@ -48,8 +51,10 @@ onboarded_handles = set(state.get("companies", {}).keys())
 ws = connect_sheets()
 header = ws.cell(1, ONBOARDED_COL).value
 if not header:
-    print(f"Колонка {ONBOARDED_COL} (AG) ещё не создана — сначала запусти "
-          f"python3 add_onboarded_column.py")
+    print(
+        f"Колонка {ONBOARDED_COL} (AG) ещё не создана — сначала запусти "
+        f"python3 add_onboarded_column.py"
+    )
     raise SystemExit(1)
 
 all_values = ws.get_all_values()

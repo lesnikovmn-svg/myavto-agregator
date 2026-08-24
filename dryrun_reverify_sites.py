@@ -37,14 +37,20 @@ company_agent.py (run_agent, ветка DuckDuckGo) — при обычном п
 Дальше — обсудить с Claude, что из отчёта применять, и только тогда
 писать/запускать отдельный fix-скрипт на конкретные строки.
 """
+
 import re
 import time
 import gspread
 from google.oauth2.service_account import Credentials
 from company_agent import (
-    fetch_site_text, find_subpage_urls, fetch_extra_site_text,
-    extract_brand_from_site, extract_inn, extract_phone,
-    extract_direct_contacts, is_probably_tagline, domain_of,
+    fetch_site_text,
+    fetch_extra_site_text,
+    extract_brand_from_site,
+    extract_inn,
+    extract_phone,
+    extract_direct_contacts,
+    is_probably_tagline,
+    domain_of,
     looks_like_bot_wall,
 )
 
@@ -69,10 +75,16 @@ AVITO_COL, DROM_COL, AUTORU_COL = 24, 25, 26
 MAX_COL, YOUTUBE_COL, RUTUBE_COL, WHATSAPP_COL = 27, 28, 29, 30
 
 DIRECT_FIELDS = [
-    ("vk", VK_COL), ("instagram", INSTAGRAM_COL),
-    ("avito", AVITO_COL), ("drom", DROM_COL), ("autoru", AUTORU_COL),
-    ("max", MAX_COL), ("youtube", YOUTUBE_COL), ("rutube", RUTUBE_COL),
-    ("whatsapp", WHATSAPP_COL), ("gis2", GIS2_COL),
+    ("vk", VK_COL),
+    ("instagram", INSTAGRAM_COL),
+    ("avito", AVITO_COL),
+    ("drom", DROM_COL),
+    ("autoru", AUTORU_COL),
+    ("max", MAX_COL),
+    ("youtube", YOUTUBE_COL),
+    ("rutube", RUTUBE_COL),
+    ("whatsapp", WHATSAPP_COL),
+    ("gis2", GIS2_COL),
 ]
 
 
@@ -137,7 +149,11 @@ for i, row in enumerate(rows, start=2):
     brand = extract_brand_from_site(html)
     current_tagline = is_probably_tagline(name)
     current_domain_like = looks_domain_derived(name, site)
-    if brand and brand.strip().lower() != name.strip().lower() and (current_tagline or current_domain_like):
+    if (
+        brand
+        and brand.strip().lower() != name.strip().lower()
+        and (current_tagline or current_domain_like)
+    ):
         findings.append(f"name: '{name}' -> '{brand}' (og:site_name сайта)")
 
     if not cell(row, INN_COL):
@@ -168,8 +184,10 @@ for i, row in enumerate(rows, start=2):
 
 print(f"\n{'='*70}")
 if needs_manual:
-    print(f"ТРЕБУЮТ РУЧНОЙ ПРОВЕРКИ ({len(needs_manual)}) — сайт не читается автоматически "
-          f"(антибот/капча/недоступен), нужно зайти самому и прислать название + соцсети:")
+    print(
+        f"ТРЕБУЮТ РУЧНОЙ ПРОВЕРКИ ({len(needs_manual)}) — сайт не читается автоматически "
+        f"(антибот/капча/недоступен), нужно зайти самому и прислать название + соцсети:"
+    )
     for i, name, site, reason in needs_manual:
         print(f"  [{i}] {name} ({site}) — {reason}")
 else:

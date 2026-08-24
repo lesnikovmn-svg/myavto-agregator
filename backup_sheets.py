@@ -32,6 +32,7 @@ Cron (см. daily_update.sh):           # автоматически, раз в 
 в Google Sheets — Файл -> Импорт -> Заменить текущий лист (или отдельным
 листом, если нужно сверить построчно перед заменой).
 """
+
 import csv
 import datetime
 import os
@@ -86,7 +87,9 @@ def rotate_old_backups():
 
 def email_offsite_copy(out_dir, label):
     if not MAIL_CONFIG:
-        print("[backup] mail_config.env нет — офсайт-копия по почте пропущена (это ок, локальный бэкап уже сделан)")
+        print(
+            "[backup] mail_config.env нет — офсайт-копия по почте пропущена (это ок, локальный бэкап уже сделан)"
+        )
         return
     if datetime.date.today().weekday() != 0:  # только по понедельникам
         return
@@ -102,7 +105,9 @@ def email_offsite_copy(out_dir, label):
         msg["From"] = f"{MAIL_CONFIG.get('FROM_NAME', from_addr)} <{from_addr}>"
         msg["To"] = to_addr
         msg.attach(MIMEApplication(open(zip_path, "rb").read(), Name=os.path.basename(zip_path)))
-        with smtplib.SMTP(MAIL_CONFIG["SMTP_HOST"], int(MAIL_CONFIG["SMTP_PORT"]), timeout=20) as server:
+        with smtplib.SMTP(
+            MAIL_CONFIG["SMTP_HOST"], int(MAIL_CONFIG["SMTP_PORT"]), timeout=20
+        ) as server:
             server.starttls()
             server.login(from_addr, MAIL_CONFIG["SMTP_PASSWORD"])
             server.sendmail(from_addr, [to_addr], msg.as_string())

@@ -37,6 +37,7 @@ id:1 (MY Avto, собственная компания пользователя)
 
 Запуск: python3 send_onboarding_emails.py
 """
+
 import json
 import os
 import smtplib
@@ -82,9 +83,11 @@ myavto-agregator.ru
 
 def load_mail_config():
     if not os.path.exists(MAIL_CONFIG_FILE):
-        print(f"Не нашёл {MAIL_CONFIG_FILE}. Скопируй mail_config.env.example "
-              f"в {MAIL_CONFIG_FILE} и впиши реальные SMTP-данные (инструкция "
-              f"для Gmail — прямо в примере).")
+        print(
+            f"Не нашёл {MAIL_CONFIG_FILE}. Скопируй mail_config.env.example "
+            f"в {MAIL_CONFIG_FILE} и впиши реальные SMTP-данные (инструкция "
+            f"для Gmail — прямо в примере)."
+        )
         raise SystemExit(1)
     cfg = {}
     with open(MAIL_CONFIG_FILE, encoding="utf-8") as f:
@@ -113,8 +116,10 @@ already_onboarded = set(load_json(BOT_STATE_FILE, {"companies": {}}).get("compan
 already_emailed = set(load_json(LOG_FILE, []))
 
 if not os.path.exists(BOT_STATE_FILE):
-    print(f"({BOT_STATE_FILE} не найден рядом — пропускаю проверку "
-          f"'уже онбордился', это не критично.)\n")
+    print(
+        f"({BOT_STATE_FILE} не найден рядом — пропускаю проверку "
+        f"'уже онбордился', это не критично.)\n"
+    )
 
 ws = connect_sheets()
 all_values = ws.get_all_values()
@@ -123,6 +128,7 @@ recipients = []
 skipped_no_email, skipped_no_telegram, skipped_onboarded, skipped_already_sent = 0, 0, 0, 0
 
 for row in all_values[1:]:
+
     def val(col):
         return row[col - 1].strip() if len(row) >= col else ""
 
@@ -149,8 +155,10 @@ for row in all_values[1:]:
     recipients.append({"name": name, "email": email, "telegram": telegram})
 
 print(f"Найдено получателей: {len(recipients)}")
-print(f"Пропущено: без email — {skipped_no_email}, без telegram — {skipped_no_telegram}, "
-      f"уже онбордились — {skipped_onboarded}, уже отправляли письмо раньше — {skipped_already_sent}")
+print(
+    f"Пропущено: без email — {skipped_no_email}, без telegram — {skipped_no_telegram}, "
+    f"уже онбордились — {skipped_onboarded}, уже отправляли письмо раньше — {skipped_already_sent}"
+)
 
 if not recipients:
     print("\nОтправлять некому — выйти.")
@@ -164,8 +172,10 @@ print(f"Тема: {SUBJECT}\n")
 print(sample_body)
 print("-" * 60)
 
-answer = input(f"\nОтправить это письмо (с подстановкой имени компании) "
-               f"{len(recipients)} получателям? Введи 'да' для подтверждения: ")
+answer = input(
+    f"\nОтправить это письмо (с подстановкой имени компании) "
+    f"{len(recipients)} получателям? Введи 'да' для подтверждения: "
+)
 if answer.strip().lower() != "да":
     print("Отменено, ничего не отправлено.")
     raise SystemExit(0)
@@ -192,5 +202,7 @@ with smtplib.SMTP(cfg["SMTP_HOST"], int(cfg["SMTP_PORT"])) as server:
         time.sleep(2)
 
 print(f"\nИтого: отправлено — {sent}, ошибок — {failed}.")
-print(f"Лог отправленных сохранён в {LOG_FILE} — при повторном запуске "
-      f"эти адреса будут пропущены автоматически.")
+print(
+    f"Лог отправленных сохранён в {LOG_FILE} — при повторном запуске "
+    f"эти адреса будут пропущены автоматически."
+)

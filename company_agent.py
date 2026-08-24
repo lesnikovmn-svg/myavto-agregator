@@ -1,5 +1,4 @@
 import requests
-import json
 import re
 import time
 import datetime
@@ -11,7 +10,7 @@ from ddgs import DDGS
 # SHEET_ID/REVIEWS_HEADER/REVIEWS_SHEET_TITLE реэкспортируются отсюда без
 # изменений, чтобы все `from company_agent import connect_sheets` и
 # подобное в остальных скриптах продолжали работать как раньше.
-from sheets_client import (
+from sheets_client import (  # noqa: F401 — намеренный реэкспорт, см. комментарий выше
     SHEET_ID,
     connect_sheets,
     connect_reviews_sheet,
@@ -34,9 +33,12 @@ config = load_env("agent_config.env")
 PROXY_URL = config.get("PROXY_URL", "").strip()
 PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
 
+
 def check_site(url):
     try:
-        r = requests.get(url, timeout=5, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(
+            url, timeout=5, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}
+        )
         return r.status_code == 200
     except Exception:
         # T-73 (21.08.2026): было голое `except:` — ловило вообще всё,
@@ -45,13 +47,16 @@ def check_site(url):
         # покрывает все реальные сетевые/парсинговые сбои, но не системные.
         return False
 
+
 def extract_phone(text):
     m = re.search(r"[78][\s\-\(]?\d{3}[\s\-\(]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}", text)
     return m.group(0) if m else "-"
 
+
 def extract_telegram(text):
     m = re.search(r"@([A-Za-z0-9_]{3,32})", text)
     return m.group(1) if m else ""
+
 
 # Email — добавлено 14.08.2026 для будущей email-рассылки при онбординге
 # компаний (см. onboarding_companies.xlsx). Ищем прямо в HTML/тексте
@@ -66,14 +71,49 @@ def extract_telegram(text):
 # - служебные адреса аналитики/конструкторов сайтов (Wix, Sentry и т.п.),
 #   плейсхолдеры из шаблонов ("example.com", "yourdomain.ru") — сайт
 #   компании их не имеет в виду как реальный контакт.
-EMAIL_JUNK_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp", "tiff", "avif", "css", "js"}
+EMAIL_JUNK_EXTENSIONS = {
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "svg",
+    "webp",
+    "ico",
+    "bmp",
+    "tiff",
+    "avif",
+    "css",
+    "js",
+}
 EMAIL_JUNK_DOMAINS = [
-    "example.com", "example.org", "example.net", "example.ru", "test.com", "domain.com", "domain.ru",
-    "yourdomain.com", "yourdomain.ru", "yoursite.com",
-    "sentry.io", "sentry-next.io", "wixpress.com", "wix.com", "schema.org", "w3.org",
-    "w3schools.com", "godaddy.com", "gstatic.com", "cloudflare.com", "jquery.com",
-    "google.com", "googleapis.com", "google-analytics.com", "recaptcha.net",
-    "bem.info", "vk.com", "yastatic.net",
+    "example.com",
+    "example.org",
+    "example.net",
+    "example.ru",
+    "test.com",
+    "domain.com",
+    "domain.ru",
+    "yourdomain.com",
+    "yourdomain.ru",
+    "yoursite.com",
+    "sentry.io",
+    "sentry-next.io",
+    "wixpress.com",
+    "wix.com",
+    "schema.org",
+    "w3.org",
+    "w3schools.com",
+    "godaddy.com",
+    "gstatic.com",
+    "cloudflare.com",
+    "jquery.com",
+    "google.com",
+    "googleapis.com",
+    "google-analytics.com",
+    "recaptcha.net",
+    "bem.info",
+    "vk.com",
+    "yastatic.net",
     # Найдено 14.08.2026 на реальном прогоне fix_backfill_emails.py: когда
     # источником служит карточка компании на 2ГИС/Яндекс.Картах, на самой
     # странице рядом с данными компании часто есть СОБСТВЕННЫЙ служебный
@@ -85,9 +125,20 @@ EMAIL_JUNK_DOMAINS = [
     # — технический хешированный адрес инфраструктуры ВКонтакте (виджеты/
     # пиксели), не человеческий контакт — тот же класс проблемы, что и с
     # "vk.com/rtrg"/"max.ru/u" (см. раздел про виджет-артефакты выше).
-    "2gis.ru", "maps.yandex.ru", "vk-portal.net",
+    "2gis.ru",
+    "maps.yandex.ru",
+    "vk-portal.net",
 ]
-EMAIL_JUNK_LOCAL_PREFIXES = {"noreply", "no-reply", "donotreply", "do-not-reply", "postmaster", "mailer-daemon", "abuse"}
+EMAIL_JUNK_LOCAL_PREFIXES = {
+    "noreply",
+    "no-reply",
+    "donotreply",
+    "do-not-reply",
+    "postmaster",
+    "mailer-daemon",
+    "abuse",
+}
+
 
 def extract_email(text):
     """
@@ -112,6 +163,7 @@ def extract_email(text):
         return candidate
     return ""
 
+
 def is_probably_tagline(text):
     """
     Отличаем настоящее название компании от рекламного слогана/заголовка
@@ -128,6 +180,7 @@ def is_probably_tagline(text):
         return False
     words = text.split()
     return len(text) > 35 or len(words) > 4
+
 
 def clean_name_from_title(title):
     """
@@ -156,18 +209,22 @@ def clean_name_from_title(title):
         return ""
     return stripped
 
+
 def extract_inn(text):
     # Ищем ИНН только рядом со словом "ИНН" — просто 10/12-значное число
     # в тексте слишком часто оказывается номером телефона или ОГРН.
     m = re.search(r"ИНН[:\s№]{0,5}(\d{10}|\d{12})", text, re.IGNORECASE)
     return m.group(1) if m else ""
 
+
 def fetch_site_text(url):
     # Отдельно от check_site: тут нужен именно текст страницы, чтобы
     # поискать в нём ИНН/реквизиты компании. Если не получилось — не страшно,
     # просто не найдём ИНН для этой компании сейчас.
     try:
-        r = requests.get(url, timeout=6, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(
+            url, timeout=6, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}
+        )
         if r.status_code == 200:
             # Баг найден 09.08.2026 (кодировка): если сервер не указал
             # charset в заголовке Content-Type (а полагается только на
@@ -187,6 +244,7 @@ def fetch_site_text(url):
         pass
     return ""
 
+
 # Признаки того, что вместо реального содержимого страницы мы получили
 # антибот-заглушку/капчу/чисто-JS-обёртку (реальный контент рендерится в
 # браузере, а requests видит только "скелет"). Найдено 10.08.2026 на
@@ -195,10 +253,22 @@ def fetch_site_text(url):
 # через настоящий браузер там ещё и капча ("нажмите на похожий цвет").
 # В таких случаях автоматически ничего не вытащить — компанию нужно
 # ПОДСВЕТИТЬ для ручного ввода, а не молча пропустить/оставить как есть.
-BOT_WALL_MARKERS = ["антибот", "antibot", "javascript отключен", "javascript is disabled",
-    "enable javascript", "checking your browser", "just a moment",
-    "attention required", "cloudflare", "verify you are human",
-    "нажмите на похожий цвет", "подтвердите, что вы не робот", "captcha"]
+BOT_WALL_MARKERS = [
+    "антибот",
+    "antibot",
+    "javascript отключен",
+    "javascript is disabled",
+    "enable javascript",
+    "checking your browser",
+    "just a moment",
+    "attention required",
+    "cloudflare",
+    "verify you are human",
+    "нажмите на похожий цвет",
+    "подтвердите, что вы не робот",
+    "captcha",
+]
+
 
 def looks_like_bot_wall(html):
     """True, если похоже, что requests получил антибот/капча-заглушку, а
@@ -209,6 +279,7 @@ def looks_like_bot_wall(html):
     t = html.lower()
     return any(marker in t for marker in BOT_WALL_MARKERS) and len(html) < 8000
 
+
 # Слова-подсказки для поиска ссылок на "Контакты"/"О нас" и похожие
 # подстраницы сайта. company_agent.py по умолчанию читает только главную
 # страницу сайта — телефон, реквизиты (ИНН/ОГРН) и часть соцсетей у многих
@@ -217,9 +288,25 @@ def looks_like_bot_wall(html):
 # на главной не было ни телефона, ни ИНН, ни правильного telegram, а на
 # /contacts было всё сразу (пользователь прислал текст этой страницы и
 # спросил "почему агент сам не вытащил?").
-SUBPAGE_HINTS = ["contact", "contacts", "kontakt", "kontakty", "kontaktyi",
-    "about", "o-nas", "onas", "o_nas", "o-kompanii", "o_kompanii",
-    "company", "rekvizity", "requisites", "о нас", "контакт"]
+SUBPAGE_HINTS = [
+    "contact",
+    "contacts",
+    "kontakt",
+    "kontakty",
+    "kontaktyi",
+    "about",
+    "o-nas",
+    "onas",
+    "o_nas",
+    "o-kompanii",
+    "o_kompanii",
+    "company",
+    "rekvizity",
+    "requisites",
+    "о нас",
+    "контакт",
+]
+
 
 def find_subpage_urls(html, base_url, limit=3):
     """
@@ -236,8 +323,9 @@ def find_subpage_urls(html, base_url, limit=3):
         return []
     found = []
     seen = set()
-    for m in re.finditer(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
-                          html, re.IGNORECASE | re.DOTALL):
+    for m in re.finditer(
+        r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL
+    ):
         href, inner = m.group(1), m.group(2)
         link_text = re.sub(r"<[^>]+>", " ", inner).strip().lower()
         href_lower = href.lower()
@@ -259,6 +347,7 @@ def find_subpage_urls(html, base_url, limit=3):
             break
     return found
 
+
 def fetch_extra_site_text(html, base_url, limit=3):
     """
     Догружает и склеивает текст с подстраниц "Контакты"/"О нас" (см.
@@ -273,6 +362,7 @@ def fetch_extra_site_text(html, base_url, limit=3):
         if t:
             extra_text += " " + t
     return extra_text
+
 
 def extract_brand_from_site(html):
     """
@@ -302,12 +392,14 @@ def extract_brand_from_site(html):
         return m.group(1).strip()
     return ""
 
+
 def domain_of(url):
     """Домен без www/схемы/пути — для сравнения "это тот же сайт?" вместо
     точного совпадения полного URL (иначе japantransit.ru и
     japantransit.ru/japan/auctions считаются разными компаниями)."""
     m = re.search(r"https?://(?:www\.)?([^/]+)", url or "")
     return m.group(1).lower() if m else ""
+
 
 def base_domain(url):
     """
@@ -325,6 +417,7 @@ def base_domain(url):
         return ""
     parts = d.split(".")
     return ".".join(parts[-2:]) if len(parts) > 2 else d
+
 
 def extract_years_experience(text):
     """
@@ -350,6 +443,7 @@ def extract_years_experience(text):
             return n
     return None
 
+
 # Первые слова названий, которые слишком короткие или слишком общеупотребимы,
 # чтобы одни, без остального названия, надёжно отличать "это точно ТА
 # компания" от случайного совпадения на чужой странице. Баг найден
@@ -363,10 +457,43 @@ def extract_years_experience(text):
 # backfill_from_sources каскадно растащил из неё же ВСЕ остальные пустые
 # поля (vk/instagram/telegram/avito/drom/autoru/max/youtube/rutube/
 # whatsapp) — один неверный "якорь" заразил сразу много полей.
-_GENERIC_NAME_WORDS = {"my","the","a","auto","avto","car","cars","trade","import",
-    "impex","group","club","center","centre","express","asia","east","west",
-    "north","south","global","inter","trans","world","winner","premium","elite",
-    "prime","star","best","top","new","first","royal","classic","standard",
+_GENERIC_NAME_WORDS = {
+    "my",
+    "the",
+    "a",
+    "auto",
+    "avto",
+    "car",
+    "cars",
+    "trade",
+    "import",
+    "impex",
+    "group",
+    "club",
+    "center",
+    "centre",
+    "express",
+    "asia",
+    "east",
+    "west",
+    "north",
+    "south",
+    "global",
+    "inter",
+    "trans",
+    "world",
+    "winner",
+    "premium",
+    "elite",
+    "prime",
+    "star",
+    "best",
+    "top",
+    "new",
+    "first",
+    "royal",
+    "classic",
+    "standard",
     # Кириллические аналоги — найдено 09.08.2026 на "Авто из Европы / Авто
     # Импорт ПРО": "авто" (4 символа — НЕ короче лимита в 4, поэтому не
     # ловилось прежним условием len(first)<4) — самое общеупотребимое
@@ -374,9 +501,29 @@ _GENERIC_NAME_WORDS = {"my","the","a","auto","avto","car","cars","trade","import
     # про машины. Из-за этого на карточку налипли telegram
     # @auto_import_cars_rus, vk antaresauto (.com и .ru), сайт
     # americanauto.ru?utm_source=2gis — явно чужие совпадения.
-    "авто","авта","машина","машины","импорт","экспорт","групп","клуб",
-    "центр","трейд","трэйд","сервис","компания","премиум","элит","топ",
-    "новый","новая","первый","классик","стандарт"}
+    "авто",
+    "авта",
+    "машина",
+    "машины",
+    "импорт",
+    "экспорт",
+    "групп",
+    "клуб",
+    "центр",
+    "трейд",
+    "трэйд",
+    "сервис",
+    "компания",
+    "премиум",
+    "элит",
+    "топ",
+    "новый",
+    "новая",
+    "первый",
+    "классик",
+    "стандарт",
+}
+
 
 def _name_key(name):
     """
@@ -398,15 +545,39 @@ def _name_key(name):
         return first + " " + words[1]
     return first
 
+
 # VK: служебные разделы сайта (не группы/профили конкретной компании).
 # Найдено 09.08.2026: "vk.com/js" (заглушка "включите JavaScript",
 # отдаётся VK ботам без нормальных заголовков — по ошибке "подтвердилась"
 # сразу для 4 РАЗНЫХ компаний, т.к. это общая страница, а не чья-то
 # карточка), "vk.com/video"/"vk.com/clips" (общий раздел видео сайта, а не
 # профиль компании).
-VK_RESERVED_PATHS = {"js","video","videos","wall","photo","photos","clips","away",
-    "login","join","search","catalog","market","games","apps","about","help",
-    "dev","faq","id","feed","audio","music","topic","board",
+VK_RESERVED_PATHS = {
+    "js",
+    "video",
+    "videos",
+    "wall",
+    "photo",
+    "photos",
+    "clips",
+    "away",
+    "login",
+    "join",
+    "search",
+    "catalog",
+    "market",
+    "games",
+    "apps",
+    "about",
+    "help",
+    "dev",
+    "faq",
+    "id",
+    "feed",
+    "audio",
+    "music",
+    "topic",
+    "board",
     # "rtrg" — найдено 09.08.2026: это ссылка на РЕТАРГЕТИНГ-ПИКСЕЛЬ ВК
     # (vk.com/rtrg?...), техническая метка для рекламы, которую компании
     # вставляют себе на сайт как обычный <script>/<img> — не чей-то
@@ -414,13 +585,29 @@ VK_RESERVED_PATHS = {"js","video","videos","wall","photo","photos","clips","away
     # from_text доверяет прямым ссылкам с сайта без доп. проверки) и по
     # ошибке "подтвердилась" сразу для 3 РАЗНЫХ компаний (OTRADACARS,
     # Jplife, ТокиДоки) — тот же класс бага, что и "vk.com/js" раньше.
-    "rtrg", "widget_comments", "share", "widget"}
+    "rtrg",
+    "widget_comments",
+    "share",
+    "widget",
+}
 
 # Instagram: системные файлы/служебные разделы, не профиль компании.
 # Найдено 09.08.2026: "instagram.com/favicon.ico" (иконка сайта!)
 # "подтвердилась" как аккаунт компании.
-INSTAGRAM_RESERVED_PATHS = {"favicon.ico","p","explore","accounts","reel","reels",
-    "stories","tv","about","legal","developer","robots.txt"}
+INSTAGRAM_RESERVED_PATHS = {
+    "favicon.ico",
+    "p",
+    "explore",
+    "accounts",
+    "reel",
+    "reels",
+    "stories",
+    "tv",
+    "about",
+    "legal",
+    "developer",
+    "robots.txt",
+}
 
 # MAX: тот же класс бага — виджет "Поделиться в MAX"/кнопка подписки на
 # сайте компании ведёт по общему техническому пути, а не на профиль
@@ -459,15 +646,21 @@ DIRECT_CONTACT_PATTERNS = {
 # LikeAvto в Яндекс.Картах: внизу страницы — "vk.com/yandex.maps",
 # "t.me/mapsyandex" — это соцсети самого Яндекс.Карт, не LikeAvto.
 KNOWN_PLATFORM_OWN_ACCOUNTS = {
-    "vk.com/yandex.maps", "vk.ru/yandex.maps", "t.me/mapsyandex",
-    "vk.com/2gis", "vk.ru/2gis", "t.me/dvagis",
+    "vk.com/yandex.maps",
+    "vk.ru/yandex.maps",
+    "t.me/mapsyandex",
+    "vk.com/2gis",
+    "vk.ru/2gis",
+    "t.me/dvagis",
 }
 
+
 def _account_handle(url):
-    """"vk.com/likeavto_import" из полного URL — для сверки с
+    """ "vk.com/likeavto_import" из полного URL — для сверки с
     KNOWN_PLATFORM_OWN_ACCOUNTS без привязки к схеме/query-строке."""
     m = re.search(r"https?://(?:www\.)?([^/]+/[^/?#]+)", url or "")
     return m.group(1).lower().rstrip("/") if m else ""
+
 
 def normalize_whatsapp_link(url):
     """
@@ -480,6 +673,7 @@ def normalize_whatsapp_link(url):
     """
     m = re.search(r"(?:wa\.me/|whatsapp\.com/send\?phone=)(\d+)", url)
     return f"https://wa.me/{m.group(1)}" if m else url
+
 
 def extract_direct_contacts(html):
     """
@@ -505,6 +699,7 @@ def extract_direct_contacts(html):
             break
     return result
 
+
 # Найдено 14.08.2026 при ручной проверке нескольких компаний (ТамСямAUTO,
 # Wanna-Car, Arnold-Auto, China.Sferacar, Jplife): у всех на собственном
 # сайте была ссылка на t.me/<handle>, отдельная от Telegram-КАНАЛА — и
@@ -514,7 +709,14 @@ def extract_direct_contacts(html):
 # пользователем 14.08.2026 про использование агента в других направлениях):
 # ЛЮБАЯ компания, что бы она ни продавала, обычно различает у себя на
 # сайте "подписывайтесь на канал" и "напишите нам" одинаково явно.
-TG_CONTACT_LABEL_HINTS = ["написать", "message", "написать в telegram", "написать в тг", "написать менеджеру"]
+TG_CONTACT_LABEL_HINTS = [
+    "написать",
+    "message",
+    "написать в telegram",
+    "написать в тг",
+    "написать менеджеру",
+]
+
 
 def extract_site_tg_contact(html):
     """
@@ -540,15 +742,20 @@ def extract_site_tg_contact(html):
     if not html:
         return ""
     for m in re.finditer(
-            r'<a\s+([^>]*)href=["\']https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)["\']([^>]*)>(.*?)</a>',
-            html, re.IGNORECASE | re.DOTALL):
+        r'<a\s+([^>]*)href=["\']https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)["\']([^>]*)>(.*?)</a>',
+        html,
+        re.IGNORECASE | re.DOTALL,
+    ):
         attrs_before, handle, attrs_after, inner = m.groups()
         if handle.lower().endswith("bot"):
             return handle
-        surrounding = (attrs_before + " " + attrs_after + " " + re.sub(r"<[^>]+>", " ", inner)).lower()
+        surrounding = (
+            attrs_before + " " + attrs_after + " " + re.sub(r"<[^>]+>", " ", inner)
+        ).lower()
         if any(hint in surrounding for hint in TG_CONTACT_LABEL_HINTS):
             return handle
     return ""
+
 
 def is_real_profile_url(link_lower):
     """
@@ -600,6 +807,7 @@ def is_real_profile_url(link_lower):
                 return False
     return True
 
+
 def fetch_page_signal_text(url):
     """
     Для финальной проверки нужен текст СТРАНИЦЫ НАЗНАЧЕНИЯ, а не сниппет из
@@ -614,6 +822,7 @@ def fetch_page_signal_text(url):
     for m in re.finditer(r'<meta property="og:(?:title|description)" content="([^"]*)"', html):
         parts.append(m.group(1))
     return " ".join(parts).lower()
+
 
 def _matches_domain_filter(link_lower, filt):
     """
@@ -642,6 +851,7 @@ def _matches_domain_filter(link_lower, filt):
     if path_part and path_part not in link_lower:
         return False
     return True
+
 
 def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
     """
@@ -677,8 +887,8 @@ def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
             continue
         snippet = ((r.get("title") or "") + " " + (r.get("snippet") or "")).lower()
         snippet_match = bool(
-            (name_key and name_key in snippet) or
-            (phone_digits and phone_digits in re.sub(r"\D", "", snippet))
+            (name_key and name_key in snippet)
+            or (phone_digits and phone_digits in re.sub(r"\D", "", snippet))
         )
         if not snippet_match:
             continue
@@ -686,12 +896,13 @@ def find_platform_link(query, domain_filters, name_key="", phone_digits=""):
         if not page_text:
             continue
         page_match = bool(
-            (name_key and name_key in page_text) or
-            (phone_digits and phone_digits in re.sub(r"\D", "", page_text))
+            (name_key and name_key in page_text)
+            or (phone_digits and phone_digits in re.sub(r"\D", "", page_text))
         )
         if page_match:
             return link, True
     return "", False
+
 
 def find_map_links(name, phone=""):
     """
@@ -704,13 +915,18 @@ def find_map_links(name, phone=""):
     """
     key = _name_key(name)
     pd = re.sub(r"\D", "", phone) if phone and phone != "-" else ""
-    yandex, yv = find_platform_link(f"{name} отзывы", ["yandex.ru/maps", "yandex.com/maps"], key, pd)
+    yandex, yv = find_platform_link(
+        f"{name} отзывы", ["yandex.ru/maps", "yandex.com/maps"], key, pd
+    )
     time.sleep(1)
-    google, gv = find_platform_link(f"{name} отзывы", ["google.com/maps", "maps.app.goo.gl", "goo.gl/maps"], key, pd)
+    google, gv = find_platform_link(
+        f"{name} отзывы", ["google.com/maps", "maps.app.goo.gl", "goo.gl/maps"], key, pd
+    )
     time.sleep(1)
     gis2, g2v = find_platform_link(f"{name} отзывы 2гис", ["2gis.ru", "2gis.com"], key, pd)
     time.sleep(1)
     return yandex, google, gis2, (yv or gv or g2v)
+
 
 def extract_social_from_text(text):
     """
@@ -747,6 +963,7 @@ def extract_social_from_text(text):
                 break
     return insta, vk
 
+
 def extract_extra_contacts_from_text(text):
     """
     То же самое, что extract_social_from_text, но для мессенджера MAX
@@ -763,7 +980,9 @@ def extract_extra_contacts_from_text(text):
         if is_real_profile_url(cand.lower()):
             result["max"] = cand
             break
-    for cand in re.findall(r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+", text):
+    for cand in re.findall(
+        r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+", text
+    ):
         result["youtube"] = cand
         break
     for cand in re.findall(r"https?://(?:www\.)?rutube\.ru/(?:channel|u)/[A-Za-z0-9_.\-]+", text):
@@ -786,6 +1005,7 @@ def extract_extra_contacts_from_text(text):
             break
     return result
 
+
 def find_social_links(name, text="", phone=""):
     """Instagram/VK компании — сначала пробуем достать прямо со страницы
     (см. extract_social_from_text — прямая ссылка от самой компании уже
@@ -805,6 +1025,7 @@ def find_social_links(name, text="", phone=""):
         time.sleep(1)
     return insta, vk, verified
 
+
 def find_marketplace_links(name, phone=""):
     """
     Ищем объявления/карточку компании на маркетплейсах (Авито, Дром,
@@ -820,6 +1041,7 @@ def find_marketplace_links(name, phone=""):
     autoru, aruv = find_platform_link(f"{name} auto.ru", ["auto.ru"], key, pd)
     time.sleep(1)
     return avito, drom, autoru, (av or dv or aruv)
+
 
 def extract_contacts_from_2gis(html):
     """
@@ -852,9 +1074,19 @@ def extract_contacts_from_2gis(html):
     YouTube/WhatsApp напрямую (видно на живом примере LikeAvto), раньше
     просто игнорировались.
     """
-    result = {"site": "", "telegram": "", "vk": "", "instagram": "",
-               "avito": "", "drom": "", "autoru": "",
-               "max": "", "youtube": "", "rutube": "", "whatsapp": ""}
+    result = {
+        "site": "",
+        "telegram": "",
+        "vk": "",
+        "instagram": "",
+        "avito": "",
+        "drom": "",
+        "autoru": "",
+        "max": "",
+        "youtube": "",
+        "rutube": "",
+        "whatsapp": "",
+    }
     if not html:
         return result
 
@@ -913,6 +1145,7 @@ def extract_contacts_from_2gis(html):
 
     return result
 
+
 def extract_contacts_from_yandex(html):
     """
     Яндекс.Карты отдают карточку организации тоже с серверным рендерингом
@@ -939,15 +1172,27 @@ def extract_contacts_from_yandex(html):
 
     Возвращает тот же набор ключей, что и extract_contacts_from_2gis.
     """
-    result = {"site": "", "telegram": "", "vk": "", "instagram": "",
-               "avito": "", "drom": "", "autoru": "",
-               "max": "", "youtube": "", "rutube": "", "whatsapp": ""}
+    result = {
+        "site": "",
+        "telegram": "",
+        "vk": "",
+        "instagram": "",
+        "avito": "",
+        "drom": "",
+        "autoru": "",
+        "max": "",
+        "youtube": "",
+        "rutube": "",
+        "whatsapp": "",
+    }
     if not html:
         return result
 
     m = re.search(
         r'<a[^>]+href="(https?://(?:www\.)?([a-z0-9][a-z0-9\-]*\.[a-z]{2,})[^"]*)"[^>]*>\s*(?:<[^>]+>\s*)*\2',
-        html, re.IGNORECASE)
+        html,
+        re.IGNORECASE,
+    )
     if m and "yandex." not in m.group(2).lower():
         result["site"] = m.group(1)
 
@@ -962,6 +1207,7 @@ def extract_contacts_from_yandex(html):
             result[kind] = val
 
     return result
+
 
 def backfill_from_2gis(gis2_url, current):
     """
@@ -985,6 +1231,7 @@ def backfill_from_2gis(gis2_url, current):
             filled[key] = val
             print(f"    из карточки 2ГИС нашлось {key}: {val}")
     return filled
+
 
 def backfill_from_sources(sources, current, content_check=None):
     """
@@ -1037,11 +1284,18 @@ def backfill_from_sources(sources, current, content_check=None):
             insta, vk = extract_social_from_text(html)
             extra = extract_extra_contacts_from_text(html)
             direct = extract_direct_contacts(html)
-            found = {"telegram": "", "vk": vk, "instagram": insta,
-                      "avito": direct.get("avito", ""), "drom": direct.get("drom", ""),
-                      "autoru": direct.get("autoru", ""),
-                      "max": extra.get("max", ""), "youtube": extra.get("youtube", ""),
-                      "rutube": extra.get("rutube", ""), "whatsapp": extra.get("whatsapp", "")}
+            found = {
+                "telegram": "",
+                "vk": vk,
+                "instagram": insta,
+                "avito": direct.get("avito", ""),
+                "drom": direct.get("drom", ""),
+                "autoru": direct.get("autoru", ""),
+                "max": extra.get("max", ""),
+                "youtube": extra.get("youtube", ""),
+                "rutube": extra.get("rutube", ""),
+                "whatsapp": extra.get("whatsapp", ""),
+            }
             tm = re.search(r"https?://(?:www\.)?t\.me/([A-Za-z0-9_]+)", html, re.IGNORECASE)
             if tm:
                 found["telegram"] = tm.group(1)
@@ -1053,11 +1307,13 @@ def backfill_from_sources(sources, current, content_check=None):
                 print(f"    из карточки {kind} нашлось {key}: {val}")
     return filled
 
+
 def mentions_ukraine(text):
     # Ловит "Украина/Украину/Украины/украинский" и т.п. — любые формы
     # с корнем "укра". Сайт нацелен на СНГ (Россия, Казахстан, Беларусь...),
     # компании, которые возят машины в Украину, сюда не нужны.
     return bool(re.search(r"укра", text, re.IGNORECASE))
+
 
 def is_vin_check_service(text):
     """
@@ -1077,16 +1333,31 @@ def is_vin_check_service(text):
     """
     t = text.lower()
     has_bot_or_service = ("бот" in t) or ("сервис проверки" in t)
-    has_check_lexicon = any(w in t for w in
-        ["пробив авто", "пробив по vin", "пробить авто", "проверка vin",
-         "проверить vin", "vin-check", "vin check", "по vin или",
-         "введите vin", "госномер", "автокриминалист",
-         # 13.08.2026: auto-praktis.vercel.app — статья "как бесплатно
-         # проверить историю автомобиля через Telegram-боты: от VIN-кода
-         # до штрафов" формально проходила старый список (ни одна фраза не
-         # совпадала буквально).
-         "vin-кода", "vin-код", "историю автомобиля"])
+    has_check_lexicon = any(
+        w in t
+        for w in [
+            "пробив авто",
+            "пробив по vin",
+            "пробить авто",
+            "проверка vin",
+            "проверить vin",
+            "vin-check",
+            "vin check",
+            "по vin или",
+            "введите vin",
+            "госномер",
+            "автокриминалист",
+            # 13.08.2026: auto-praktis.vercel.app — статья "как бесплатно
+            # проверить историю автомобиля через Telegram-боты: от VIN-кода
+            # до штрафов" формально проходила старый список (ни одна фраза не
+            # совпадала буквально).
+            "vin-кода",
+            "vin-код",
+            "историю автомобиля",
+        ]
+    )
     return has_bot_or_service and has_check_lexicon
+
 
 def is_customs_broker(text):
     """
@@ -1103,38 +1374,68 @@ def is_customs_broker(text):
     услуги.
     """
     t = text.lower()
-    return any(w in t for w in
-        ["таможенный брокер", "таможенный представитель", "таможенного представителя",
-         "таможенным представителем", "декларант", "услуги по таможенному оформлению",
-         "склад временного хранения", " свх "])
+    return any(
+        w in t
+        for w in [
+            "таможенный брокер",
+            "таможенный представитель",
+            "таможенного представителя",
+            "таможенным представителем",
+            "декларант",
+            "услуги по таможенному оформлению",
+            "склад временного хранения",
+            " свх ",
+        ]
+    )
+
 
 def get_directions(text):
     t = text.lower()
-    dm = {"Китай":["китай","china","byd","haval","geely","chery","далянь"],"Корея":["корея","korea","kia","hyundai","genesis"],"Япония":["япония","japan","toyota","lexus","honda","nissan","mazda"],"США":["сша","usa","america","tesla","ford","cadillac"],"ОАЭ":["оаэ","uae","dubai","эмираты"],"Европа":["европа","europe","bmw","mercedes","audi","volkswagen"],"Канада":["канада","canada"],"Грузия":["грузия","georgia"],"Армения":["армения","armenia"]}
-    dirs = [d for d,kws in dm.items() if any(k in t for k in kws)]
+    dm = {
+        "Китай": ["китай", "china", "byd", "haval", "geely", "chery", "далянь"],
+        "Корея": ["корея", "korea", "kia", "hyundai", "genesis"],
+        "Япония": ["япония", "japan", "toyota", "lexus", "honda", "nissan", "mazda"],
+        "США": ["сша", "usa", "america", "tesla", "ford", "cadillac"],
+        "ОАЭ": ["оаэ", "uae", "dubai", "эмираты"],
+        "Европа": ["европа", "europe", "bmw", "mercedes", "audi", "volkswagen"],
+        "Канада": ["канада", "canada"],
+        "Грузия": ["грузия", "georgia"],
+        "Армения": ["армения", "armenia"],
+    }
+    dirs = [d for d, kws in dm.items() if any(k in t for k in kws)]
     return dirs if dirs else ["Не указано"]
+
 
 def get_tags(text):
     t = text.lower()
     tags = []
-    if "под ключ" in t: tags.append("Под ключ")
-    if "растаможк" in t: tags.append("Растаможка")
-    if "аукцион" in t: tags.append("Аукционы")
-    if "параллельн" in t: tags.append("Параллельный импорт")
-    if "наличи" in t: tags.append("В наличии")
+    if "под ключ" in t:
+        tags.append("Под ключ")
+    if "растаможк" in t:
+        tags.append("Растаможка")
+    if "аукцион" in t:
+        tags.append("Аукционы")
+    if "параллельн" in t:
+        tags.append("Параллельный импорт")
+    if "наличи" in t:
+        tags.append("В наличии")
     # Ещё один частый продающий тезис в нише (см. SELLING_PHRASES) — "без
     # посредников"/"напрямую" — раньше никак не попадал в теги.
-    if "без посредник" in t or "напрямую" in t: tags.append("Без посредников")
+    if "без посредник" in t or "напрямую" in t:
+        tags.append("Без посредников")
     return tags if tags else ["Импорт авто"]
+
 
 def search_tgstat(query):
     url = "https://tgstat.ru/channels/search?q=" + requests.utils.quote(query) + "&country=ru"
     try:
         r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200: return []
+        if r.status_code != 200:
+            return []
         return list(set(re.findall(r"@([A-Za-z0-9_]{3,32})", r.text)))[:10]
     except Exception:  # T-73 (21.08.2026): было голое except:, см. check_site()
         return []
+
 
 def _extract_tgstat_title(html):
     """
@@ -1155,19 +1456,26 @@ def _extract_tgstat_title(html):
             return title
     return ""
 
+
 def parse_tgstat_channel(username):
     try:
-        r = requests.get("https://tgstat.ru/channel/@" + username, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200: return None
+        r = requests.get(
+            "https://tgstat.ru/channel/@" + username,
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if r.status_code != 200:
+            return None
         html = r.text
         subs_m = re.search(r"(\d[\d\s]+)\s*подписчик", html)
-        subs = int(subs_m.group(1).replace(" ","")) if subs_m else 0
+        subs = int(subs_m.group(1).replace(" ", "")) if subs_m else 0
         desc_m = re.search(r"peer-description[^>]*>(.*?)</div>", html, re.DOTALL)
-        desc = re.sub(r"<[^>]+>","",desc_m.group(1)).strip()[:200] if desc_m else ""
+        desc = re.sub(r"<[^>]+>", "", desc_m.group(1)).strip()[:200] if desc_m else ""
         title = _extract_tgstat_title(html)
         return {"subscribers": subs, "description": desc, "title": title}
     except Exception:  # T-73 (21.08.2026): было голое except:, см. check_site()
         return None
+
 
 def fetch_telegram_preview(username):
     """
@@ -1178,13 +1486,18 @@ def fetch_telegram_preview(username):
     его не знает.
     """
     try:
-        r = requests.get(f"https://t.me/{username}", timeout=8, headers={"User-Agent": "Mozilla/5.0"}, proxies=PROXIES)
+        r = requests.get(
+            f"https://t.me/{username}",
+            timeout=8,
+            headers={"User-Agent": "Mozilla/5.0"},
+            proxies=PROXIES,
+        )
         if r.status_code != 200:
             return None
         html = r.text
         title_m = re.search(r'<meta property="og:title" content="([^"]*)"', html)
         desc_m = re.search(r'<meta property="og:description" content="([^"]*)"', html)
-        subs_m = re.search(r'([\d\s]+)\s*subscribers', html)
+        subs_m = re.search(r"([\d\s]+)\s*subscribers", html)
         title = title_m.group(1).strip() if title_m else ""
         desc = desc_m.group(1).strip() if desc_m else ""
         subs = int(subs_m.group(1).replace(" ", "")) if subs_m else 0
@@ -1193,6 +1506,7 @@ def fetch_telegram_preview(username):
         return {"subscribers": subs, "description": desc, "title": clean_channel_title(title)}
     except Exception:
         return None
+
 
 def fetch_url_og_title(url, use_proxy=False):
     """
@@ -1204,8 +1518,12 @@ def fetch_url_og_title(url, use_proxy=False):
     fetch_page_signal_text.
     """
     try:
-        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"},
-                          proxies=PROXIES if use_proxy else None)
+        r = requests.get(
+            url,
+            timeout=8,
+            headers={"User-Agent": "Mozilla/5.0"},
+            proxies=PROXIES if use_proxy else None,
+        )
         if r.status_code != 200:
             return ""
         m = re.search(r'<meta property="og:title" content="([^"]*)"', r.text)
@@ -1213,8 +1531,10 @@ def fetch_url_og_title(url, use_proxy=False):
     except Exception:
         return ""
 
+
 def _name_key_words(name):
     return {w for w in re.findall(r"[a-zа-я0-9]+", name.lower()) if len(w) >= 3}
+
 
 def verify_company_name(name, tg="", vk="", instagram=""):
     """
@@ -1253,9 +1573,12 @@ def verify_company_name(name, tg="", vk="", instagram=""):
             continue
         cand_key = _name_key_words(cand_name)
         if cand_key and not (cand_key & own_key):
-            print(f"    ⚠️ имя разошлось с {source} ('{cand_name}' vs '{name}') — беру {source} как более надёжный источник (это страница самой компании)")
+            print(
+                f"    ⚠️ имя разошлось с {source} ('{cand_name}' vs '{name}') — беру {source} как более надёжный источник (это страница самой компании)"
+            )
             return cand_name
     return name
+
 
 def clean_channel_title(title):
     """Название телеграм-канала часто обвешано эмодзи и уточнением в
@@ -1270,25 +1593,36 @@ def clean_channel_title(title):
         t = m.group(1).strip(" -")
     return t or title
 
+
 def search_ddgs(query, num=5):
     try:
         results = []
         with DDGS() as ddgs:
             for r in ddgs.text(query, max_results=num, region="ru-ru"):
-                results.append({"title":r.get("title",""),"snippet":r.get("body",""),"link":r.get("href","")})
+                results.append(
+                    {
+                        "title": r.get("title", ""),
+                        "snippet": r.get("body", ""),
+                        "link": r.get("href", ""),
+                    }
+                )
         return results
     except Exception as e:
         print("Ошибка поиска: " + str(e))
         return []
+
 
 def get_existing(ws):
     try:
         data = ws.get_all_values()
         ex = set()
         for row in data[1:]:
-            if len(row) > 1 and row[1]: ex.add(row[1].lower().strip())
-            if len(row) > 9 and row[9]: ex.add(row[9].lower().strip())
-            if len(row) > 11 and row[11]: ex.add(row[11].lower().strip())
+            if len(row) > 1 and row[1]:
+                ex.add(row[1].lower().strip())
+            if len(row) > 9 and row[9]:
+                ex.add(row[9].lower().strip())
+            if len(row) > 11 and row[11]:
+                ex.add(row[11].lower().strip())
             # Домен сайта отдельно от полного URL — иначе одна и та же
             # компания под разными страницами (japantransit.ru vs
             # japantransit.ru/japan/auctions) считается двумя разными
@@ -1301,6 +1635,7 @@ def get_existing(ws):
         return ex
     except Exception:  # T-73 (21.08.2026): было голое except:, см. check_site()
         return set()
+
 
 def add_company(ws, data, row_num):
     # Колонка 31 (AE) добавлена 14.08.2026 по просьбе пользователя: поле
@@ -1323,7 +1658,40 @@ def add_company(ws, data, row_num):
     # Каталог задуман как "импорт авто в СНГ", не только Россия, так что
     # region теперь берётся из data, с "Россия" как дефолтом для обратной
     # совместимости (у большинства уже добавленных компаний он не указан).
-    row = [str(row_num),data["name"],data.get("rating","4.5"),data.get("reviews","0"),data.get("years","1"),data.get("delivered","-"),data["description"][:200],",".join(data["directions"]),",".join(data["tags"]),data.get("telegram",""),data.get("phone","-"),data.get("site",""),"-",data.get("region","Россия"),"FALSE",data["name"][:3].upper(),"av-gray",data.get("yandex",""),data.get("inn",""),data.get("google",""),data.get("gis2",""),data.get("instagram",""),data.get("vk",""),data.get("avito",""),data.get("drom",""),data.get("autoru",""),data.get("max",""),data.get("youtube",""),data.get("rutube",""),data.get("whatsapp",""),data.get("telegram_contact",""),data.get("email","")]
+    row = [
+        str(row_num),
+        data["name"],
+        data.get("rating", "4.5"),
+        data.get("reviews", "0"),
+        data.get("years", "1"),
+        data.get("delivered", "-"),
+        data["description"][:200],
+        ",".join(data["directions"]),
+        ",".join(data["tags"]),
+        data.get("telegram", ""),
+        data.get("phone", "-"),
+        data.get("site", ""),
+        "-",
+        data.get("region", "Россия"),
+        "FALSE",
+        data["name"][:3].upper(),
+        "av-gray",
+        data.get("yandex", ""),
+        data.get("inn", ""),
+        data.get("google", ""),
+        data.get("gis2", ""),
+        data.get("instagram", ""),
+        data.get("vk", ""),
+        data.get("avito", ""),
+        data.get("drom", ""),
+        data.get("autoru", ""),
+        data.get("max", ""),
+        data.get("youtube", ""),
+        data.get("rutube", ""),
+        data.get("whatsapp", ""),
+        data.get("telegram_contact", ""),
+        data.get("email", ""),
+    ]
     # ВАЖНО: без table_range='A1' append_row без явного якоря может "уехать"
     # вправо — Sheets API ищет "таблицу" по всему листу и в редких случаях
     # (09.08.2026, найдено при разборе бага с 52 vs 82 строк) начинает
@@ -1332,14 +1700,39 @@ def add_company(ws, data, row_num):
     # вызовом (20 -> 44 -> 67 -> 89 -> 112 колонок вправо на реальном
     # прогоне). table_range='A1' явно фиксирует, что "таблица" начинается
     # с колонки A, и это гарантированно лечит сдвиг.
-    ws.append_row(row, table_range='A1')
-    subs = data.get("subscribers",0)
+    ws.append_row(row, table_range="A1")
+    subs = data.get("subscribers", 0)
     inn_note = " [ИНН найден]" if data.get("inn") else ""
-    print("  OK: " + data["name"] + (" (" + str(subs) + " подписчиков)" if subs > 0 else "") + inn_note)
+    print(
+        "  OK: "
+        + data["name"]
+        + (" (" + str(subs) + " подписчиков)" if subs > 0 else "")
+        + inn_note
+    )
 
-BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","instagram","facebook","tiktok","yandex","google","wikipedia","zhihu","rutube","tgstat","nicegram","telegramchannels",
+
+BLACKLIST = [
+    "avito",
+    "drom",
+    "auto.ru",
+    "drive2",
+    "vk.com",
+    "vk.ru",
+    "youtube",
+    "instagram",
+    "facebook",
+    "tiktok",
+    "yandex",
+    "google",
+    "wikipedia",
+    "zhihu",
+    "rutube",
+    "tgstat",
+    "nicegram",
+    "telegramchannels",
     # Украинские площадки/сервисы — не имеют отношения к импорту авто в СНГ
-    "auto.ria","ria.com",
+    "auto.ria",
+    "ria.com",
     # Найдено 09.08.2026 (прогон через cron, без присмотра): "tenchat.ru" —
     # блог-платформа (вроде LinkedIn), агент утащил ЧУЖУЮ СТАТЬЮ про личный
     # опыт с "мошенником" как если бы это была карточка компании (имя
@@ -1348,7 +1741,8 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # SEO-зеркало/аналитика Telegram-каналов (аналог tgstat), не сайт самой
     # компании — попал как "сайт" компании, хотя это просто чужой
     # каталог-зеркало чужого канала.
-    "tenchat.ru","telagon.io",
+    "tenchat.ru",
+    "telagon.io",
     # Найдено 10.08.2026 через dryrun_reverify_sites.py (пользователь
     # прогнал всю базу новым алгоритмом): та же болезнь, что и с
     # tenchat.ru/telagon.io, но с ДРУГИМИ площадками-зеркалами Telegram-
@@ -1362,8 +1756,12 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # компании). "autonews.ru" — крупный автомобильный новостной портал,
     # попал в таблицу как "компания" из-за одной конкретной новостной
     # статьи, а не из-за того, что автопортал — компания-импортёр.
-    "telegram.menu","telegram-dialogs.ru","tele-finder.com","tgramlink.com",
-    "otzovik.com","autonews.ru",
+    "telegram.menu",
+    "telegram-dialogs.ru",
+    "tele-finder.com",
+    "tgramlink.com",
+    "otzovik.com",
+    "autonews.ru",
     # Найдено 10.08.2026 (следующий прогон после dryrun-отчёта, ~18 новых
     # строк, пользователь разбирал вручную): та же болезнь ещё раз, с
     # новыми конкретными площадками. "telno.ru" — ещё один каталог
@@ -1377,7 +1775,11 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # autonews.ru). "vagvin.ru" — известный самостоятельный сервис
     # расшифровки VIN (не импортёр, is_vin_check_service его не поймал —
     # лексикон у vagvin другой: "расшифровка VIN", а не "пробив авто").
-    "telno.ru","telderi.ru","telegramcat.blog","ixbt.com","vagvin.ru",
+    "telno.ru",
+    "telderi.ru",
+    "telegramcat.blog",
+    "ixbt.com",
+    "vagvin.ru",
     # Найдено 13.08.2026: та же болезнь (новостной/блог-портал принят за
     # компанию), но источник неожиданный — собственная статья автора на
     # vc.ru (tribuna/3075991) про этот же агрегатор. Агент нашёл её в
@@ -1399,14 +1801,18 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # "AUTOCOM"). "telepot.ru" — ещё один каталог Telegram-каналов (попал
     # как "Телеграмм канал Tiger Cars...", реальный канал — "Tiger Cars",
     # @TJ_cars).
-    "tgland.ru", "zenstat.ru", "freetelegramgroups.com", "telepot.ru",
+    "tgland.ru",
+    "zenstat.ru",
+    "freetelegramgroups.com",
+    "telepot.ru",
     # "aaajapan.com" — аукционная площадка (не компания-импортёр/посредник,
     # см. auction_sites.md — отдельная база на будущее, в каталог
     # импортёров не идёт). "auto-praktis.vercel.app" — блог со статьёй про
     # проверку авто по VIN через Telegram-боты (тот же класс, что и
     # is_vin_check_service, просто другая формулировка — см. фикс лексикона
     # там же).
-    "aaajapan.com", "auto-praktis.vercel.app",
+    "aaajapan.com",
+    "auto-praktis.vercel.app",
     # Найдено 17.08.2026 (пользователь: "перепроверь последнее добавление
     # компаний, есть боты, есть статьи"), батч id 82-105 с ежедневного
     # cron-прогона на VPS. Та же болезнь новостных/блог-статей, что и
@@ -1418,7 +1824,10 @@ BLACKLIST = ["avito","drom","auto.ru","drive2","vk.com","vk.ru","youtube","insta
     # сайт компании, а страница-рейтинг "лучшие компании по привозу авто
     # из Европы" (/ratings/...) — сторонний рейтинг-агрегатор, не сама
     # компания-импортёр.
-    "journal.sovcombank.ru", "zakon.ru", "top-autoimport.ru"]
+    "journal.sovcombank.ru",
+    "zakon.ru",
+    "top-autoimport.ru",
+]
 
 # Продающие фразы ниши — собраны 09.08.2026 по реальным сайтам/TG-каналам
 # компаний-импортёров авто (WESTMOTORS, Япония Транзит, KoreaBlizko, ASIA
@@ -1446,6 +1855,7 @@ SELLING_PHRASES = [
     # "пригон". Старые запросы такой формат пропускали.
     "автосалон авто под заказ из Европы Кореи США",
 ]
+
 
 def run_agent():
     print("Запускаю агента v2...")
@@ -1482,7 +1892,13 @@ def run_agent():
     # часто называют/описывают себя через выгоду ("без посредников",
     # "растаможка под ключ"), а не через направление, обычные запросы их
     # пропускают.
-    for q in ["импорт авто","авто из Кореи","авто из Китая","пригон авто","авто под заказ"] + SELLING_PHRASES:
+    for q in [
+        "импорт авто",
+        "авто из Кореи",
+        "авто из Китая",
+        "пригон авто",
+        "авто под заказ",
+    ] + SELLING_PHRASES:
         channels = search_tgstat(q)
         tg_channels.update(channels)
         print("  " + q + ": " + str(len(channels)) + " каналов")
@@ -1497,8 +1913,16 @@ def run_agent():
             skipped += 1
             continue
         text = info["description"]
-        has_auto = any(w in text.lower() for w in ["авто","машин","импорт","корея","китай","япония","пригон"])
-        if not has_auto or mentions_ukraine(text) or is_vin_check_service(text) or is_customs_broker(text):
+        has_auto = any(
+            w in text.lower()
+            for w in ["авто", "машин", "импорт", "корея", "китай", "япония", "пригон"]
+        )
+        if (
+            not has_auto
+            or mentions_ukraine(text)
+            or is_vin_check_service(text)
+            or is_customs_broker(text)
+        ):
             skipped += 1
             continue
         years = extract_years_experience(text)
@@ -1515,7 +1939,12 @@ def run_agent():
         insta, vk, social_verified = find_social_links(name, text, phone)
         avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
         extra = extract_extra_contacts_from_text(text)
-        maxm, youtube, rutube, whatsapp = extra["max"], extra["youtube"], extra["rutube"], extra["whatsapp"]
+        maxm, youtube, rutube, whatsapp = (
+            extra["max"],
+            extra["youtube"],
+            extra["rutube"],
+            extra["whatsapp"],
+        )
         # Карточки на площадках (если нашлись и подтвердились) сами по себе
         # часто содержат сайт/соцсети/мессенджеры компании — дозаполняем то,
         # что выше не нашли другими способами. Не только 2ГИС — по просьбе
@@ -1524,9 +1953,20 @@ def run_agent():
         if maps_verified and (gis2 or yandex):
             filled = backfill_from_sources(
                 [("2gis", gis2), ("yandex", yandex)],
-                {"site": site, "telegram": username, "vk": vk,
-                 "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
-                 "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
+                {
+                    "site": site,
+                    "telegram": username,
+                    "vk": vk,
+                    "instagram": insta,
+                    "avito": avito,
+                    "drom": drom,
+                    "autoru": autoru,
+                    "max": maxm,
+                    "youtube": youtube,
+                    "rutube": rutube,
+                    "whatsapp": whatsapp,
+                },
+            )
             site = filled["site"]
             vk = vk or filled["vk"]
             insta = insta or filled["instagram"]
@@ -1550,10 +1990,39 @@ def run_agent():
         # WhatsApp/VK тоже нет, а показать нечего кроме Instagram, кнопка
         # "Написать" на сайте ненадёжна.
         if insta and not whatsapp and not vk:
-            print(f"    ⚠️ {name}: единственный контакт для кнопки \"Написать\" — Instagram "
-                  f"(ненадёжно, требует входа в приложение), стоит доискать WhatsApp/личный TG вручную")
+            print(
+                f'    ⚠️ {name}: единственный контакт для кнопки "Написать" — Instagram '
+                f"(ненадёжно, требует входа в приложение), стоит доискать WhatsApp/личный TG вручную"
+            )
         next_id += 1
-        add_company(ws, {"name":name,"description":text or "Telegram канал @"+username,"directions":get_directions(text),"tags":get_tags(text),"telegram":username,"phone":phone,"site":site,"subscribers":info["subscribers"],"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp,"email":email}, next_id)
+        add_company(
+            ws,
+            {
+                "name": name,
+                "description": text or "Telegram канал @" + username,
+                "directions": get_directions(text),
+                "tags": get_tags(text),
+                "telegram": username,
+                "phone": phone,
+                "site": site,
+                "subscribers": info["subscribers"],
+                "years": str(years) if years else "1",
+                "yandex": yandex,
+                "google": google,
+                "gis2": gis2,
+                "instagram": insta,
+                "vk": vk,
+                "avito": avito,
+                "drom": drom,
+                "autoru": autoru,
+                "max": maxm,
+                "youtube": youtube,
+                "rutube": rutube,
+                "whatsapp": whatsapp,
+                "email": email,
+            },
+            next_id,
+        )
         existing.add(name.lower())
         existing.add(username.lower())
         found += 1
@@ -1563,30 +2032,54 @@ def run_agent():
     # Те же продающие фразы, что и в шаге 1 (SELLING_PHRASES) — здесь с
     # добавкой "Telegram канал"/"сайт", как и у остальных DDG-запросов,
     # чтобы вытягивать именно карточки компаний, а не общие статьи.
-    ddg_queries = ["импорт авто Telegram канал Россия","авто из Кореи Китая под заказ Telegram","пригон авто аукцион Япония сайт","авто США ОАЭ Европа под заказ","импорт авто официальный сайт Россия"]
+    ddg_queries = [
+        "импорт авто Telegram канал Россия",
+        "авто из Кореи Китая под заказ Telegram",
+        "пригон авто аукцион Япония сайт",
+        "авто США ОАЭ Европа под заказ",
+        "импорт авто официальный сайт Россия",
+    ]
     ddg_queries += [p + " Telegram канал" for p in SELLING_PHRASES]
     for query in ddg_queries:
         print("  " + query)
         for item in search_ddgs(query, 5):
-            title = item.get("title","")
-            snippet = item.get("snippet","")
-            link = item.get("link","")
+            title = item.get("title", "")
+            snippet = item.get("snippet", "")
+            link = item.get("link", "")
             text = title + " " + snippet
             sl = link.lower()
             nl = title.lower()
             if any(b in sl or b in nl for b in BLACKLIST):
                 skipped += 1
                 continue
-            has_auto = any(w in text.lower() for w in ["авто","импорт","машин","автомобил","пригон","корея","китай","япония"])
+            has_auto = any(
+                w in text.lower()
+                for w in [
+                    "авто",
+                    "импорт",
+                    "машин",
+                    "автомобил",
+                    "пригон",
+                    "корея",
+                    "китай",
+                    "япония",
+                ]
+            )
             tg = extract_telegram(text)
             phone = extract_phone(text)
-            if (not has_auto or mentions_ukraine(text) or is_vin_check_service(text)
-                    or is_customs_broker(text)
-                    or (not tg and phone == "-" and not link.startswith("http"))):
+            if (
+                not has_auto
+                or mentions_ukraine(text)
+                or is_vin_check_service(text)
+                or is_customs_broker(text)
+                or (not tg and phone == "-" and not link.startswith("http"))
+            ):
                 skipped += 1
                 continue
             domain = re.search(r"https?://(?:www\.)?([^/]+)", link)
-            domain_name = domain.group(1).replace(".ru","").replace(".com","").title() if domain else ""
+            domain_name = (
+                domain.group(1).replace(".ru", "").replace(".com", "").title() if domain else ""
+            )
             dom = base_domain(link)
             # Дедуп по домену, а не только по имени/точной ссылке — без
             # этого одна и та же компания под разными подстраницами сайта
@@ -1639,7 +2132,11 @@ def run_agent():
                     skipped += 1
                     continue
                 preview = fetch_telegram_preview(tg) if tg else None
-                name = (preview["title"] if preview and preview.get("title") else "") or tg or domain_name
+                name = (
+                    (preview["title"] if preview and preview.get("title") else "")
+                    or tg
+                    or domain_name
+                )
                 site_text = ""
             elif domain and domain.group(1).lower() in ("vk.com", "vk.ru", "instagram.com"):
                 # 14.08.2026, по просьбе пользователя: если у кандидата нет
@@ -1672,18 +2169,24 @@ def run_agent():
                     skipped += 1
                     continue
                 if looks_like_bot_wall(site_text):
-                    print(f"    🚧 {name or domain_name}: сайт {link} защищён антиботом/капчей — "
-                          f"автоматически не читается, нужен РУЧНОЙ ввод названия/соцсетей/ИНН/телефона")
+                    print(
+                        f"    🚧 {name or domain_name}: сайт {link} защищён антиботом/капчей — "
+                        f"автоматически не читается, нужен РУЧНОЙ ввод названия/соцсетей/ИНН/телефона"
+                    )
                     site_text = ""
                 brand_name = extract_brand_from_site(site_text)
                 name = brand_name or title_name or domain_name or title[:30]
                 if brand_name and brand_name != title_name:
-                    print(f"    имя со страницы сайта (og:site_name): '{brand_name}' (в выдаче было: '{title[:50]}')")
+                    print(
+                        f"    имя со страницы сайта (og:site_name): '{brand_name}' (в выдаче было: '{title[:50]}')"
+                    )
                 elif not title_name and not brand_name:
                     print(f"    ⚠️ имя взято из домена ({name}) — стоит проверить вручную")
                 # Сверка имени по независимым источникам (телеграм/VK/
                 # Instagram компании) — см. verify_company_name, 14.08.2026.
-                insta_check, vk_check = extract_social_from_text(site_text) if site_text else ("", "")
+                insta_check, vk_check = (
+                    extract_social_from_text(site_text) if site_text else ("", "")
+                )
                 name = verify_company_name(name, tg=tg, vk=vk_check, instagram=insta_check)
                 # Если с главной не хватает ИНН и телефона — пробуем
                 # догрузить "Контакты"/"О нас" (см. find_subpage_urls,
@@ -1695,7 +2198,9 @@ def run_agent():
                 if site_text and not (extract_inn(site_text) and extract_phone(site_text) != "-"):
                     extra_site_text = fetch_extra_site_text(site_text, link)
                     if extra_site_text:
-                        print(f"    догрузил доп. страницы (контакты/о нас): +{len(extra_site_text)} симв.")
+                        print(
+                            f"    догрузил доп. страницы (контакты/о нас): +{len(extra_site_text)} симв."
+                        )
                         site_text += extra_site_text
             if name.lower() in existing or (link and link.lower() in existing):
                 skipped += 1
@@ -1730,7 +2235,12 @@ def run_agent():
             insta, vk, social_verified = find_social_links(name, text + " " + site_text, phone)
             avito, drom, autoru, market_verified = find_marketplace_links(name, phone)
             extra = extract_extra_contacts_from_text(text + " " + site_text)
-            maxm, youtube, rutube, whatsapp = extra["max"], extra["youtube"], extra["rutube"], extra["whatsapp"]
+            maxm, youtube, rutube, whatsapp = (
+                extra["max"],
+                extra["youtube"],
+                extra["rutube"],
+                extra["whatsapp"],
+            )
             # Баг найден 10.08.2026: link тут может оказаться ссылкой на
             # t.me/telegram.me (DDG иногда отдаёт превью-страницу канала
             # как "сайт" в выдаче, отдельно от ветки с t.me в начале блока
@@ -1741,7 +2251,11 @@ def run_agent():
             # своя колонка). Нашли на реальном примере: "Прим Автодилер",
             # site оказался telegram.me/prim_autodealer.
             link_domain = domain_of(link)
-            site = link if link.startswith("http") and link_domain not in ("t.me", "telegram.me") else ""
+            site = (
+                link
+                if link.startswith("http") and link_domain not in ("t.me", "telegram.me")
+                else ""
+            )
             # Собственный сайт компании (уже загружен как site_text выше) —
             # тоже источник для маркетплейсов, если ссылки на них есть в
             # футере сайта (переиспользуем уже загруженный текст, не грузим
@@ -1770,9 +2284,20 @@ def run_agent():
             if maps_verified and (gis2 or yandex):
                 filled = backfill_from_sources(
                     [("2gis", gis2), ("yandex", yandex)],
-                    {"site": site, "telegram": tg, "vk": vk,
-                     "instagram": insta, "avito": avito, "drom": drom, "autoru": autoru,
-                     "max": maxm, "youtube": youtube, "rutube": rutube, "whatsapp": whatsapp})
+                    {
+                        "site": site,
+                        "telegram": tg,
+                        "vk": vk,
+                        "instagram": insta,
+                        "avito": avito,
+                        "drom": drom,
+                        "autoru": autoru,
+                        "max": maxm,
+                        "youtube": youtube,
+                        "rutube": rutube,
+                        "whatsapp": whatsapp,
+                    },
+                )
                 site = site or filled["site"]
                 tg = tg or filled["telegram"]
                 vk = vk or filled["vk"]
@@ -1790,7 +2315,9 @@ def run_agent():
             # Печатаем в лог, если независимого подтверждения нигде не нашлось
             # — для ручного контроля, не блокирует публикацию.
             if not (inn or maps_verified or social_verified or market_verified):
-                print(f"    ⚠️ {name}: подтвердилось только по исходному источнику, добавляю как есть")
+                print(
+                    f"    ⚠️ {name}: подтвердилось только по исходному источнику, добавляю как есть"
+                )
             # Найдено 14.08.2026 (живой отчёт пользователя про ТамСямAUTO):
             # если единственный контакт для кнопки "Написать" на сайте — это
             # Instagram (telegram_contact/whatsapp/vk все пустые), кнопка
@@ -1800,19 +2327,52 @@ def run_agent():
             # постфактум при ручной проверке — та же логика применима к
             # будущим направлениям агента, не только авто.
             if insta and not (telegram_contact or whatsapp or vk):
-                print(f"    ⚠️ {name}: единственный контакт для кнопки \"Написать\" — Instagram "
-                      f"(ненадёжно, требует входа в приложение), стоит доискать WhatsApp/личный TG вручную")
+                print(
+                    f'    ⚠️ {name}: единственный контакт для кнопки "Написать" — Instagram '
+                    f"(ненадёжно, требует входа в приложение), стоит доискать WhatsApp/личный TG вручную"
+                )
             next_id += 1
-            add_company(ws, {"name":name,"description":snippet[:200],"directions":get_directions(text),"tags":get_tags(text),"telegram":tg,"phone":phone,"site":site,"inn":inn,"years":str(years) if years else "1","yandex":yandex,"google":google,"gis2":gis2,"instagram":insta,"vk":vk,"avito":avito,"drom":drom,"autoru":autoru,"max":maxm,"youtube":youtube,"rutube":rutube,"whatsapp":whatsapp,"email":email,"telegram_contact":telegram_contact}, next_id)
+            add_company(
+                ws,
+                {
+                    "name": name,
+                    "description": snippet[:200],
+                    "directions": get_directions(text),
+                    "tags": get_tags(text),
+                    "telegram": tg,
+                    "phone": phone,
+                    "site": site,
+                    "inn": inn,
+                    "years": str(years) if years else "1",
+                    "yandex": yandex,
+                    "google": google,
+                    "gis2": gis2,
+                    "instagram": insta,
+                    "vk": vk,
+                    "avito": avito,
+                    "drom": drom,
+                    "autoru": autoru,
+                    "max": maxm,
+                    "youtube": youtube,
+                    "rutube": rutube,
+                    "whatsapp": whatsapp,
+                    "email": email,
+                    "telegram_contact": telegram_contact,
+                },
+                next_id,
+            )
             existing.add(name.lower())
-            if link: existing.add(link.lower())
-            if dom: existing.add(dom)
+            if link:
+                existing.add(link.lower())
+            if dom:
+                existing.add(dom)
             found += 1
             time.sleep(0.5)
         time.sleep(3)
 
     print("\nГотово! Добавлено: " + str(found) + ", пропущено: " + str(skipped))
     print("Запусти python3 update_site.py чтобы обновить сайт!")
+
 
 if __name__ == "__main__":
     run_agent()

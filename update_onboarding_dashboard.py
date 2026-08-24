@@ -26,6 +26,7 @@ bot_state.json лежит только на VPS (/var/www/myavto-agregator/) —
 
 Запуск: python3 update_onboarding_dashboard.py
 """
+
 import json
 import os
 
@@ -46,8 +47,15 @@ DASHBOARD_TITLE = "Онбординг"
 BOT_STATE_FILE = "bot_state.json"
 LOG_FILE = "onboarding_emails_log.json"
 
-HEADER = ["Компания", "Телефон", "Email", "TG-канал", "Личный TG-контакт",
-          "Email отправлен?", "Онбордился в боте?"]
+HEADER = [
+    "Компания",
+    "Телефон",
+    "Email",
+    "TG-канал",
+    "Личный TG-контакт",
+    "Email отправлен?",
+    "Онбордился в боте?",
+]
 
 
 def connect_spreadsheet():
@@ -71,6 +79,7 @@ emailed = set(load_json(LOG_FILE, []))
 
 rows = [HEADER]
 for row in all_values[1:]:
+
     def val(col):
         return row[col - 1].strip() if len(row) >= col else ""
 
@@ -113,5 +122,7 @@ emailed_count = sum(1 for r in rows[1:] if r[5] == "Да")
 print(f"Готово: вкладка '{DASHBOARD_TITLE}' обновлена — {len(rows) - 1} компаний.")
 print(f"Email отправлен: {emailed_count}. Онбордились: {onboarded_count}.")
 if not bot_state_present:
-    print(f"\n({BOT_STATE_FILE} не найден рядом — колонка 'Онбордился?' "
-          f"неточная, см. docstring про scp с VPS.)")
+    print(
+        f"\n({BOT_STATE_FILE} не найден рядом — колонка 'Онбордился?' "
+        f"неточная, см. docstring про scp с VPS.)"
+    )

@@ -11,6 +11,7 @@
 После — как обычно: python3 update_site.py, чтобы подтянуть ЕГРЮЛ-проверку
 для всех вновь найденных ИНН.
 """
+
 import time
 import gspread
 from google.oauth2.service_account import Credentials
@@ -34,7 +35,10 @@ INN_COL = 19
 
 
 def connect_sheets():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
     creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
     client = gspread.authorize(creds)
     return client.open_by_key(SHEET_ID).sheet1

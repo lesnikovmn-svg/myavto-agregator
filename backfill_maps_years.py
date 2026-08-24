@@ -13,10 +13,17 @@
 Может занять несколько минут — на каждую компанию до 3 поисковых запросов
 (Яндекс/Google/2ГИС) плюс пауза между ними, чтобы не долбить DuckDuckGo.
 """
+
 import time
 import gspread
 from google.oauth2.service_account import Credentials
-from company_agent import find_map_links, find_social_links, find_marketplace_links, extract_years_experience, fetch_site_text
+from company_agent import (
+    find_map_links,
+    find_social_links,
+    find_marketplace_links,
+    extract_years_experience,
+    fetch_site_text,
+)
 
 config = {}
 with open("agent_config.env") as f:
@@ -47,7 +54,10 @@ AUTORU_COL = 26
 
 
 def connect_sheets():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
     creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
     client = gspread.authorize(creds)
     return client.open_by_key(SHEET_ID).sheet1
@@ -107,7 +117,9 @@ def run():
                 gis2 = gi2
             if y2 or g2 or gi2:
                 updated_maps += 1
-                print(f"    карты: yandex={'✓' if y2 else '-'} google={'✓' if g2 else '-'} 2gis={'✓' if gi2 else '-'}")
+                print(
+                    f"    карты: yandex={'✓' if y2 else '-'} google={'✓' if g2 else '-'} 2gis={'✓' if gi2 else '-'}"
+                )
 
         # 1б) Instagram/VK — тоже только то, чего ещё нет.
         if not (insta and vk):
@@ -115,7 +127,9 @@ def run():
             if site and site.startswith("http"):
                 site_text_for_social = fetch_site_text(site)
             try:
-                i2, v2, _ = find_social_links(name, (desc or "") + " " + site_text_for_social, phone)
+                i2, v2, _ = find_social_links(
+                    name, (desc or "") + " " + site_text_for_social, phone
+                )
             except Exception as e:
                 print(f"    ошибка поиска соцсетей: {e}")
                 i2, v2 = "", ""
@@ -142,7 +156,9 @@ def run():
                 ws.update_cell(i, AUTORU_COL, ar2)
             if a2 or d2 or ar2:
                 updated_market += 1
-                print(f"    маркетплейсы: avito={'✓' if a2 else '-'} drom={'✓' if d2 else '-'} auto.ru={'✓' if ar2 else '-'}")
+                print(
+                    f"    маркетплейсы: avito={'✓' if a2 else '-'} drom={'✓' if d2 else '-'} auto.ru={'✓' if ar2 else '-'}"
+                )
 
         # 2) Стаж — только если ИНН нет (и значит, год по ЕГРЮЛ не узнать)
         # и в years сейчас похоже на дефолтную заглушку.
@@ -160,7 +176,9 @@ def run():
 
         time.sleep(1)
 
-    print(f"\nГотово. Карты дополнены у {updated_maps}, соцсети — у {updated_social}, маркетплейсы — у {updated_market}, стаж — у {updated_years}.")
+    print(
+        f"\nГотово. Карты дополнены у {updated_maps}, соцсети — у {updated_social}, маркетплейсы — у {updated_market}, стаж — у {updated_years}."
+    )
     print("Теперь прогони python3 update_site.py, чтобы пересобрать сайт с новыми данными.")
 
 

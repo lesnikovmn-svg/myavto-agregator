@@ -419,15 +419,15 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         try:
             if media_list:
                 try:
-                    await client.send_message(target, post_text, file=media_list, parse_mode="md")
+                    await client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False)
                 except MediaCaptionTooLongError:
                     # Подпись реально не влезла (Telegram сам так решил) — шлём
                     # фото/видео без подписи, текст отдельным сообщением следом.
                     logger.info("[%s#%s] подпись слишком длинная для медиа, шлю текст отдельным сообщением", source_username, ids)
                     await client.send_message(target, "", file=media_list)
-                    await client.send_message(target, post_text, parse_mode="md")
+                    await client.send_message(target, post_text, parse_mode="md", link_preview=False)
             else:
-                await client.send_message(target, post_text, parse_mode="md")
+                await client.send_message(target, post_text, parse_mode="md", link_preview=False)
             logger.info("[%s#%s] запощено в %s", source_username, ids, target)
         except Exception:
             logger.exception("[%s#%s] ошибка при постинге в %s", source_username, ids, target)

@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 
 from telethon import TelegramClient, events
 from telethon.tl.functions.messages import ImportChatInviteRequest
-from telethon.errors import UserAlreadyParticipantError
+from telethon.errors import UserAlreadyParticipantError, MediaCaptionTooLongError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,6 +74,15 @@ _DROP_PATTERNS = [
     re.compile(r"проверить\s+в\s+боте", re.I),  # чужая VIN-проверка источника — не наша фича
 ]
 
+_NO_LETTERS_RE = re.compile(r"[a-zA-Zа-яА-ЯёЁ]")
+
+
+def _is_decoration_only(line):
+    """Строка-разделитель без единой буквы (только эмодзи/символы) — чистая
+    визуальная линия у источника, у нас только раздувает подпись."""
+    stripped = line.strip()
+    return bool(stripped) and not _NO_LETTERS_RE.search(stripped)
+
 # Только для bezpokrasa: убираем построчную раскладку цены источника (инвойс/
 # таможня/готовая цена в Москве) — вместо неё вставляем одну итоговую строку
 # с нашей наценкой (см. CHINA_MARKUP_RUB), пользователь просил "показывать
@@ -82,7 +91,66 @@ _CHINA_PRICE_LINE_PATTERNS = [
     re.compile(r"инвойс", re.I),
     re.compile(r"^\s*таможн[а-я]*:", re.I),
     re.compile(r"цена\s*(под\s*ключ\s*)?в\s*москве", re.I),
+    re.compile(r"конфигурация.*сток", re.I),  # мёртвая ссылка на источник, нам не нужна
 ]
+
+# Раздел про состояние/повреждения — важная для покупателя информация,
+# сокращение опций его никогда не должно затрагивать.
+_CONDITION_SECTION_RE = re.compile(r"состояни|оригинальн[а-я]*\s*лкп|без\s*повреждени|ремонт", re.I)
+
+# Базовые ТТХ, которые у bezpokrasa всегда идут в начале и всегда нужны —
+# их не считаем "лишними опциями", даже если оформлены как "Label: value"
+# точно так же, как строки комфорта/опций.
+_CHINA_SPEC_LABEL_RE = re.compile(
+    r"^(дата\s*производства|пробег|комплектаци|тип\s*кузова|двигатель|коробка|привод|город\s*нахождени)",
+    re.I,
+)
+
+MAX_CHINA_FEATURE_LINES = 6
+
+
+def _condense_china_features(lines, max_lines=MAX_CHINA_FEATURE_LINES):
+    """У bezpokrasa список опций/комфорта — 15-20 строк (часто тоже в
+    формате "Label: value"), сильно раздувает подпись и часто выбивает её
+    за лимит Telegram. Оставляем заголовок, базовые ТТХ (VIN/дата/пробег/
+    комплектация/кузов/двигатель/коробка/привод/город) и первые max_lines
+    "лишних" строк опций — остальное заменяем одной пометкой. Раздел
+    "Честно о состоянии" (ремонт/повреждения) не трогаем — как только
+    встречаем его, дальше строки не считаем и не режем."""
+    result = []
+    feature_count = 0
+    truncated = False
+    in_features_zone = True
+    for line in lines:
+        stripped = line.strip()
+        if in_features_zone and _CONDITION_SECTION_RE.search(stripped):
+            in_features_zone = False
+        is_title_or_spec = bool(_CHINA_SPEC_LABEL_RE.match(stripped)) or "vin" in stripped.lower()
+        is_extra_feature_line = (
+            in_features_zone
+            and stripped
+            and not is_title_or_spec
+        )
+        if is_extra_feature_line:
+            feature_count += 1
+            if feature_count > max_lines:
+                truncated = True
+                continue
+        result.append(line)
+    if truncated:
+        result.append("…и другие опции")
+    return result
+
+
+def _collapse_blank_lines(lines):
+    """Не более одной пустой строки подряд — после вычистки декоративных
+    разделителей и опций в тексте могли остаться "дыры" в 2-3 строки."""
+    result = []
+    for line in lines:
+        if line.strip() == "" and result and result[-1].strip() == "":
+            continue
+        result.append(line)
+    return result
 
 
 def build_repost_text(raw_text, source_username=None, price_rub=None):
@@ -95,9 +163,16 @@ def build_repost_text(raw_text, source_username=None, price_rub=None):
 
     kept = []
     for line in raw_text.splitlines():
+        if _is_decoration_only(line):
+            continue
         if any(p.search(line) for p in drop_patterns):
             continue
         kept.append(line)
+
+    if source_username == "bezpokrasa":
+        kept = _condense_china_features(kept)
+    kept = _collapse_blank_lines(kept)
+
     while kept and not kept[-1].strip():
         kept.pop()
     body = "\n".join(kept).strip()
@@ -118,10 +193,11 @@ PRICE_HIGH = 6_000_000
 CHINA_MARKUP_RUB = 470_000
 
 # Telegram: подпись (caption) к фото/видео/альбому не может быть длиннее
-# этого — иначе MediaCaptionTooLongError. У bezpokrasa исходный текст
-# (подробные ТТХ) + наш футер часто превышают лимит, в отличие от коротких
-# постов artalexgroup.
-CAPTION_LIMIT = 1024
+# ~1024 символов (считает по отрендеренному тексту, не по сырой markdown-
+# разметке с [текст](ссылка) — поэтому точную длину заранее не посчитать).
+# Логика ниже сперва пробует отправить одним сообщением с подписью и
+# переключается на разбивку только если Telegram сам вернёт
+# MediaCaptionTooLongError — это надёжнее прикидки по сырой длине текста.
 
 
 def load_env(path="userbot_config.env"):
@@ -341,13 +417,15 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
 
     for target in send_targets:
         try:
-            if media_list and len(post_text) > CAPTION_LIMIT:
-                # Длинная подпись не влезает в лимит caption для медиа/альбома —
-                # шлём фото/видео без подписи, текст отдельным сообщением следом.
-                await client.send_message(target, "", file=media_list)
-                await client.send_message(target, post_text, parse_mode="md")
-            elif media_list:
-                await client.send_message(target, post_text, file=media_list, parse_mode="md")
+            if media_list:
+                try:
+                    await client.send_message(target, post_text, file=media_list, parse_mode="md")
+                except MediaCaptionTooLongError:
+                    # Подпись реально не влезла (Telegram сам так решил) — шлём
+                    # фото/видео без подписи, текст отдельным сообщением следом.
+                    logger.info("[%s#%s] подпись слишком длинная для медиа, шлю текст отдельным сообщением", source_username, ids)
+                    await client.send_message(target, "", file=media_list)
+                    await client.send_message(target, post_text, parse_mode="md")
             else:
                 await client.send_message(target, post_text, parse_mode="md")
             logger.info("[%s#%s] запощено в %s", source_username, ids, target)

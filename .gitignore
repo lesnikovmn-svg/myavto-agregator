@@ -1,3 +1,4 @@
+userbot_config.env
 credentials.json
 agent_config.env
 bot_config.env
@@ -14,3 +15,5 @@ main
 daily_update.log
 venv/
 node_modules/
+*.session
+*.session-journal

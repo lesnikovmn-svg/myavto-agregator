@@ -1,0 +1,22 @@
+[Unit]
+Description=MyAvtoAgregator userbot parser (T-77: artalexgroup/bezpokrasa -> MY_Avto5/My_Avto_Optimal)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+# Скрипт сам читает userbot_config.env (PROXY_URL, SOURCES, DRY_RUN и т.д.)
+# и открывает сессию myavto_userbot.session по относительному пути из
+# текущей директории — WorkingDirectory обязана совпадать с местом
+# деплоя (там же лежит userbot_login.py, которым сессия была создана).
+WorkingDirectory=/var/www/myavto-agregator
+ExecStart=/usr/bin/python3 userbot_parser.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=myavto-userbot
+
+[Install]
+WantedBy=multi-user.target

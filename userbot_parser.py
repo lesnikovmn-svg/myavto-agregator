@@ -74,21 +74,48 @@ _DROP_PATTERNS = [
     re.compile(r"проверить\s+в\s+боте", re.I),  # чужая VIN-проверка источника — не наша фича
 ]
 
+# Только для bezpokrasa: убираем построчную раскладку цены источника (инвойс/
+# таможня/готовая цена в Москве) — вместо неё вставляем одну итоговую строку
+# с нашей наценкой (см. CHINA_MARKUP_RUB), пользователь просил "показывать
+# только итоговую сумму".
+_CHINA_PRICE_LINE_PATTERNS = [
+    re.compile(r"инвойс", re.I),
+    re.compile(r"^\s*таможн[а-я]*:", re.I),
+    re.compile(r"цена\s*(под\s*ключ\s*)?в\s*москве", re.I),
+]
 
-def build_repost_text(raw_text):
-    """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер."""
+
+def build_repost_text(raw_text, source_username=None, price_rub=None):
+    """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
+    Для bezpokrasa дополнительно вычищает построчную раскладку цены источника
+    и вставляет одну итоговую строку с уже посчитанной (с наценкой) ценой."""
+    drop_patterns = list(_DROP_PATTERNS)
+    if source_username == "bezpokrasa":
+        drop_patterns += _CHINA_PRICE_LINE_PATTERNS
+
     kept = []
     for line in raw_text.splitlines():
-        if any(p.search(line) for p in _DROP_PATTERNS):
+        if any(p.search(line) for p in drop_patterns):
             continue
         kept.append(line)
     while kept and not kept[-1].strip():
         kept.pop()
     body = "\n".join(kept).strip()
+
+    if source_username == "bezpokrasa" and price_rub is not None:
+        price_str = f"{price_rub:,}".replace(",", " ")
+        price_line = f"Цена под ключ в Москве: {price_str} \u20bd"
+        body = f"{body}\n\n{price_line}" if body else price_line
+
     return f"{body}\n\n{OUR_FOOTER}" if body else OUR_FOOTER
 
 PRICE_LOW = 4_500_000
 PRICE_HIGH = 6_000_000
+
+# Фикс. наценка на автомобили из bezpokrasa (Суйфэньхэ): итоговая цена =
+# инвойс (стоимость авто) + таможня (пошлина) + эта наценка. Задано
+# пользователем 24.08.2026.
+CHINA_MARKUP_RUB = 470_000
 
 # Telegram: подпись (caption) к фото/видео/альбому не может быть длиннее
 # этого — иначе MediaCaptionTooLongError. У bezpokrasa исходный текст
@@ -208,7 +235,7 @@ def parse_china_invoice(text):
             val = val * 1000
         price_rub = val
     elif invoice_rub and customs_rub:
-        price_rub = clean_amount(invoice_rub.group(1)) + clean_amount(customs_rub.group(1))
+        price_rub = clean_amount(invoice_rub.group(1)) + clean_amount(customs_rub.group(1)) + CHINA_MARKUP_RUB
 
     if price_rub is None:
         return None
@@ -296,7 +323,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         return
 
     real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
-    post_text = build_repost_text(text)
+    post_text = build_repost_text(text, source_username, price_rub)
     media_list = [m.media for m in messages if m.media]
 
     if dry_run:

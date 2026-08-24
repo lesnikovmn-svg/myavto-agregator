@@ -237,11 +237,34 @@ def route_targets(price_rub, target_optimal, target_my_avto5):
     return [target_my_avto5]
 
 
-# --- Обработка одного сообщения -----------------------------------------
+# --- Группировка альбомов (несколько фото/видео в одном посте) ---------
+#
+# В альбоме Telegram подпись (текст) есть только у ОДНОГО сообщения из
+# группы (общий grouped_id), у остальных text пустой. Раньше это тихо
+# пропускалось (пустой text -> return без лога) — из-за этого backfill по
+# N последних СООБЩЕНИЙ мог не дать ни одного реального ПОСТА, если все N
+# оказались частью одного альбома без текстового элемента в выборке.
 
-async def handle_message(client, source_username, message, targets_cfg, eur_rub_rate, dry_run, test_group, state):
-    text = message.raw_text or ""
+def group_backfill_messages(messages):
+    """messages — список Message из iter_messages (любой порядок).
+    Возвращает список групп (списков Message), сохраняя порядок первого
+    появления группы; одиночные посты — группы из одного элемента."""
+    order = []
+    groups = {}
+    for m in messages:
+        key = m.grouped_id if m.grouped_id is not None else f"single-{m.id}"
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(m)
+    return [groups[k] for k in order]
+
+
+async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, dry_run, test_group, state):
+    ids = [m.id for m in messages]
+    text = next((m.raw_text for m in messages if m.raw_text and m.raw_text.strip()), "")
     if not text.strip():
+        logger.info("[%s#%s] группа без текста (альбом без подписи в выборке?) — пропускаю", source_username, ids)
         return
 
     parser = SOURCE_PARSERS.get(source_username)
@@ -251,16 +274,17 @@ async def handle_message(client, source_username, message, targets_cfg, eur_rub_
 
     parsed = parser(text)
     if parsed is None:
-        logger.info("[%s#%s] не распознан как объявление об авто — пропускаю", source_username, message.id)
+        logger.info("[%s#%s] не распознан как объявление об авто — пропускаю", source_username, ids)
         return
 
     price_rub = compute_price_rub(parsed, eur_rub_rate)
     if price_rub is None:
-        logger.info("[%s#%s] не удалось посчитать цену в рублях — пропускаю, не рискую с каналом", source_username, message.id)
+        logger.info("[%s#%s] не удалось посчитать цену в рублях — пропускаю, не рискую с каналом", source_username, ids)
         return
 
     real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
     post_text = build_repost_text(text)
+    media_list = [m.media for m in messages if m.media]
 
     if dry_run:
         send_targets = [test_group] if test_group else []
@@ -271,22 +295,22 @@ async def handle_message(client, source_username, message, targets_cfg, eur_rub_
 
     price_str = f"{price_rub:,}".replace(",", " ")
     logger.info(
-        "[%s#%s] цена=%s ₽%s\n%s",
-        source_username, message.id, price_str, note, post_text,
+        "[%s#%s] цена=%s ₽%s, медиа=%s\n%s",
+        source_username, ids, price_str, note, len(media_list), post_text,
     )
 
     for target in send_targets:
         try:
-            if message.media:
-                await client.send_message(target, post_text, file=message.media, parse_mode="md")
+            if media_list:
+                await client.send_message(target, post_text, file=media_list, parse_mode="md")
             else:
                 await client.send_message(target, post_text, parse_mode="md")
-            logger.info("[%s#%s] запощено в %s", source_username, message.id, target)
+            logger.info("[%s#%s] запощено в %s", source_username, ids, target)
         except Exception:
-            logger.exception("[%s#%s] ошибка при постинге в %s", source_username, message.id, target)
+            logger.exception("[%s#%s] ошибка при постинге в %s", source_username, ids, target)
 
     key = f"last_id:{source_username}"
-    state[key] = max(state.get(key, 0), message.id)
+    state[key] = max(state.get(key, 0), max(ids))
     save_state(state)
 
 
@@ -301,11 +325,6 @@ async def ensure_test_group(client, invite_url):
         logger.info("Вступил в тестовую группу: %s", chat.title)
         return chat
     except UserAlreadyParticipantError:
-        # уже участник — получаем сущность через диалоги
-        async for dialog in client.iter_dialogs():
-            if getattr(dialog.entity, "id", None) and invite_hash:
-                pass
-        # проще: Telethon сам разрулит по инвайт-ссылке даже если уже внутри
         entity = await client.get_entity(invite_url)
         return entity
 
@@ -320,7 +339,7 @@ async def main():
     target_my_avto5 = env.get("TARGET_MY_AVTO5", "@MY_Avto5")
     eur_rub_rate = float(env.get("EUR_RUB_RATE", "100"))
     dry_run = env.get("DRY_RUN", "true").strip().lower() != "false"
-    backfill_limit = int(env.get("TEST_BACKFILL_LIMIT", "5"))
+    backfill_limit = int(env.get("TEST_BACKFILL_LIMIT", "15"))
     test_group_invite = env.get("TEST_GROUP_INVITE", "").strip()
 
     if not (api_id and api_hash):
@@ -343,16 +362,39 @@ async def main():
     )
 
     if dry_run and backfill_limit > 0:
-        logger.info("--- Тестовый прогон по последним %s постам каждого источника ---", backfill_limit)
+        logger.info("--- Тестовый прогон по последним %s сообщениям каждого источника (с учётом альбомов) ---", backfill_limit)
         for source in sources:
-            async for message in client.iter_messages(source, limit=backfill_limit):
-                await handle_message(client, source, message, targets_cfg, eur_rub_rate, dry_run, test_group, state)
+            raw_messages = [m async for m in client.iter_messages(source, limit=backfill_limit)]
+            groups = group_backfill_messages(raw_messages)
+            logger.info("[%s] %s сообщений -> %s постов после склейки альбомов", source, len(raw_messages), len(groups))
+            for group in groups:
+                await handle_group(client, source, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
         logger.info("--- Конец тестового прогона, жду новые посты в реальном времени ---")
+
+    # Живой поток: элементы одного альбома прилетают отдельными событиями
+    # почти одновременно — копим по grouped_id и обрабатываем группой через
+    # небольшую паузу, а не поштучно.
+    pending_albums = {}
+    pending_tasks = {}
+
+    async def flush_album(gid, source_username):
+        await asyncio.sleep(2.0)
+        group = pending_albums.pop(gid, None)
+        pending_tasks.pop(gid, None)
+        if group:
+            await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
 
     @client.on(events.NewMessage(chats=sources))
     async def on_new_message(event):
         source_username = (event.chat.username or "").lower()
-        await handle_message(client, source_username, event.message, targets_cfg, eur_rub_rate, dry_run, test_group, state)
+        msg = event.message
+        if msg.grouped_id is None:
+            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, dry_run, test_group, state)
+            return
+        gid = msg.grouped_id
+        pending_albums.setdefault(gid, []).append(msg)
+        if gid not in pending_tasks:
+            pending_tasks[gid] = asyncio.create_task(flush_album(gid, source_username))
 
     await client.run_until_disconnected()
 

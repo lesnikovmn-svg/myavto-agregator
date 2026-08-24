@@ -8,3 +8,4 @@ requests
 ddgs
 gunicorn
 telethon
+python-socks

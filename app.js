@@ -591,6 +591,36 @@ function filterDir(el, dir) {
   document.getElementById('catalog')?.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
+// 24.08.2026 (по вопросу пользователя: "если компания записана на
+// английском, можно ли писать по-русски и предложит вариант компании на
+// английском"): раньше поиск был обычным substring-совпадением — запрос
+// на кириллице никак не находил компанию с латинским названием
+// (Westmotors, VladTD и т.п.). Добавлена простая транслитерация запроса
+// кириллица -> латиница (посимвольная, без словаря) — если введённый
+// текст на кириллице, пробуем ЕЩЁ и его латинскую транслитерацию против
+// названия/описания. Точность не 100% (русское "в" может значить и v, и
+// w, "х" — и h, и kh), но покрывает большинство обычных случаев ("вестмо
+// торс" -> "vestmotors" всё равно не совпадёт с "westmotors" — это
+// известное ограничение транслитерации, не баг).
+const TRANSLIT_MAP = {
+  а:'a', б:'b', в:'v', г:'g', д:'d', е:'e', ё:'e', ж:'zh', з:'z', и:'i',
+  й:'y', к:'k', л:'l', м:'m', н:'n', о:'o', п:'p', р:'r', с:'s', т:'t',
+  у:'u', ф:'f', х:'h', ц:'ts', ч:'ch', ш:'sh', щ:'sch', ъ:'', ы:'y',
+  ь:'', э:'e', ю:'yu', я:'ya',
+};
+function translit(s) {
+  return s.split('').map(ch => TRANSLIT_MAP[ch] ?? ch).join('');
+}
+function matchesQuery(c, q, qTranslit) {
+  const name = c.name.toLowerCase();
+  const desc = c.description.toLowerCase();
+  if (name.includes(q) || desc.includes(q) ||
+      c.directions.some(d=>d.toLowerCase().includes(q)) || c.tags.some(t=>t.toLowerCase().includes(q))) {
+    return true;
+  }
+  return qTranslit !== q && (name.includes(qTranslit) || desc.includes(qTranslit));
+}
+
 function applyFilters() {
   let list = COMPANIES;
   if (activeDir !== 'all' && DIR_MAP[activeDir]) list = list.filter(c=>c.directions.includes(DIR_MAP[activeDir]));
@@ -609,8 +639,7 @@ function applyFilters() {
   // обычный регистронезависимый substring-поиск через .includes(), в
   // JS toLowerCase()/includes() не завязаны на конкретный алфавит.
   const q = document.getElementById('mainSearch')?.value.toLowerCase().trim();
-  if (q) list = list.filter(c=>c.name.toLowerCase().includes(q)||c.description.toLowerCase().includes(q)||
-    c.directions.some(d=>d.toLowerCase().includes(q))||c.tags.some(t=>t.toLowerCase().includes(q)));
+  if (q) list = list.filter(c => matchesQuery(c, q, translit(q)));
   renderCompanies(list);
 }
 
@@ -625,11 +654,14 @@ function updateSearchSuggestions(rawQuery) {
   if (!box) return;
   const q = rawQuery.toLowerCase().trim();
   if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
-  const matches = COMPANIES.filter(c =>
-    c.name.toLowerCase().includes(q) ||
-    c.tags.some(t => t.toLowerCase().includes(q)) ||
-    c.directions.some(d => d.toLowerCase().includes(q))
-  ).slice(0, 8);
+  const qTranslit = translit(q);
+  const matches = COMPANIES.filter(c => {
+    const name = c.name.toLowerCase();
+    if (name.includes(q) ||
+        c.tags.some(t => t.toLowerCase().includes(q)) ||
+        c.directions.some(d => d.toLowerCase().includes(q))) return true;
+    return qTranslit !== q && name.includes(qTranslit);
+  }).slice(0, 8);
   if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.innerHTML = matches.map(c => {
     const meta = c.directions[0] ? `🌍 ${c.directions[0]}` : (c.tags[0] || '');

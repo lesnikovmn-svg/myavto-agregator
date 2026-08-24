@@ -49,18 +49,11 @@ OUR_FOOTER = """Почему именно MY_Avto?
 
 Фото/видео, осмотр после доставки, полный расчёт под ключ — пишите прямо сейчас!
 
-✈️ Telegram: My_Avto_Optimal
-✈️ Telegram: MY_Avto5
-✈️ Telegram: my_avto_opyt
-✈️ Максим: LesnikovM | +7 938 409-67-08
-✈️ Антон: Tohakmv | +7 963 383-79-28
-🌐 Сайт: my-avto.online
-🌐 Сайт: myavto-agregator.ru
-📸 Instagram: my_avto5
-💙 VK: my_avto5
-💬 MAX: Присоединиться
-📍 Яндекс: Профиль
-MY_Avto — ваш надёжный партнёр в выборе авто!"""
+✈️ Telegram: [My_Avto_Optimal](https://t.me/My_Avto_Optimal) ✈️ Telegram: [MY_Avto5](https://t.me/MY_Avto5) ✈️ Telegram: [my_avto_opyt](https://t.me/my_avto_opyt)
+✈️ Максим: [LesnikovM](https://t.me/LesnikovM) | +7 938 409-67-08 ✈️ Антон: [Tohakmv](https://t.me/Tohakmv) | +7 963 383-79-28
+🌐 Сайт: [my-avto.online](https://www.my-avto.online) 🌐 Сайт: [myavto-agregator.ru](https://myavto-agregator.ru)
+📸 Instagram: [my_avto5](https://www.instagram.com/my_avto5) 💙 VK: [my_avto5](https://vk.com/my_avto5) 💬 MAX: [Присоединиться](https://max.ru/join/DXEGJWNaZPpj8WYi3eIMqJLriw-T0hF5ddCfUN2tk7I) 📍 Яндекс: [Профиль](https://yandex.ru/profile/-/CTvFvXPa)
+MY_Avto — ваш надёжный партнёр в выборе авто! 🚗"""
 
 # Строки источника, которые вычищаем перед репостом — их собственные сайт/
 # контакты/CTA, чтобы покупатель писал нам, а не в источник.
@@ -284,9 +277,9 @@ async def handle_message(client, source_username, message, targets_cfg, eur_rub_
     for target in send_targets:
         try:
             if message.media:
-                await client.send_message(target, post_text, file=message.media)
+                await client.send_message(target, post_text, file=message.media, parse_mode="md")
             else:
-                await client.send_message(target, post_text)
+                await client.send_message(target, post_text, parse_mode="md")
             logger.info("[%s#%s] запощено в %s", source_username, message.id, target)
         except Exception:
             logger.exception("[%s#%s] ошибка при постинге в %s", source_username, message.id, target)

@@ -52,8 +52,8 @@ OUR_FOOTER = """Почему именно MY_Avto?
 ✈️ Telegram: [My_Avto_Optimal](https://t.me/My_Avto_Optimal)
 ✈️ Telegram: [MY_Avto5](https://t.me/MY_Avto5)
 ✈️ Telegram: [my_avto_opyt](https://t.me/my_avto_opyt)
-✈️ Максим: [LesnikovM](https://t.me/LesnikovM) | +7 938 409-67-08
-✈️ Антон: [Tohakmv](https://t.me/Tohakmv) | +7 963 383-79-28
+✈️ Максим: [LesnikovM](https://t.me/LesnikovM) | [+7 938 409-67-08](tel:+79384096708)
+✈️ Антон: [Tohakmv](https://t.me/Tohakmv) | [+7 963 383-79-28](tel:+79633837928)
 🌐 Сайт: [my-avto.online](https://www.my-avto.online)
 🌐 Сайт: [myavto-agregator.ru](https://myavto-agregator.ru)
 📸 Instagram: [my_avto5](https://www.instagram.com/my_avto5)
@@ -321,6 +321,10 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
     save_state(state)
 
 
+async def _collect_messages(client, source, limit):
+    return [m async for m in client.iter_messages(source, limit=limit)]
+
+
 async def ensure_test_group(client, invite_url):
     """Вступает в тестовую группу по инвайт-ссылке (+hash), если ещё не участник."""
     if not invite_url:
@@ -371,7 +375,15 @@ async def main():
     if dry_run and backfill_limit > 0:
         logger.info("--- Тестовый прогон по последним %s сообщениям каждого источника (с учётом альбомов) ---", backfill_limit)
         for source in sources:
-            raw_messages = [m async for m in client.iter_messages(source, limit=backfill_limit)]
+            logger.info("[%s] запрашиваю историю (таймаут 25с)...", source)
+            try:
+                raw_messages = await asyncio.wait_for(_collect_messages(client, source, backfill_limit), timeout=25)
+            except asyncio.TimeoutError:
+                logger.error("[%s] таймаут при получении истории — пропускаю источник, проверь сеть/прокси/доступ юзербота к каналу", source)
+                continue
+            except Exception:
+                logger.exception("[%s] ошибка при получении истории — пропускаю источник", source)
+                continue
             groups = group_backfill_messages(raw_messages)
             logger.info("[%s] %s сообщений -> %s постов после склейки альбомов", source, len(raw_messages), len(groups))
             for group in groups:

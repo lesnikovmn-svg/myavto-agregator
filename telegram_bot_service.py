@@ -94,6 +94,7 @@ company_name}; если компания действительно ответи
 import collections
 import functools
 import json
+import logging
 import os
 import re
 import smtplib
@@ -112,11 +113,29 @@ from flask import Flask, jsonify, request
 from sheets_client import SHEET_ID, connect_sheets
 
 # 12.08.2026: под systemd stdout не подключён к терминалу, поэтому Python
-# по умолчанию блочно буферизует print() — сообщения могут подолгу не
+# по умолчанию блочно буферизует вывод — сообщения могут подолгу не
 # доходить до journalctl, из-за чего живая диагностика вводила в
 # заблуждение (казалось, что поток вообще ничего не делает). Включаем
-# построчную буферизацию, чтобы print() был виден в логе сразу же.
+# построчную буферизацию, чтобы лог был виден сразу же.
 sys.stdout.reconfigure(line_buffering=True)
+
+# T-73 (21.08.2026): раньше все сообщения шли через голый print() —
+# в systemd journal всё летело одним потоком без уровней, нельзя было
+# штатно отфильтровать шум от реальных ошибок (poll_loop логировал КАЖДЫЙ
+# цикл опроса Telegram — "запрашиваю getUpdates"/"getUpdates ответил" —
+# это заливало журнал десятками строк в минуту, за которыми терялись
+# редкие настоящие ошибки). Теперь: INFO — по умолчанию видно (старт,
+# входящие сообщения, ошибки отправки), DEBUG — только если явно включить
+# (подробности каждого цикла поллинга), поднять уровень можно без правки
+# кода через переменную окружения LOG_LEVEL (например, `LOG_LEVEL=DEBUG
+# systemctl edit telegram-bot` для временной диагностики).
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("bot")
 
 BOT_CONFIG = {}
 with open("bot_config.env") as f:
@@ -188,7 +207,7 @@ def send_admin_email(subject, body):
     except Exception as e:
         # Сбой почты никогда не должен ронять сам бот — та же осторожность,
         # что и у tg_send() (try/except вокруг сетевого похода).
-        print(f"[bot] не удалось отправить email-уведомление: {e}")
+        logger.warning(f"не удалось отправить email-уведомление: {e}")
 
 
 def notify_admin(text):
@@ -287,7 +306,7 @@ def tg_send(chat_id, text):
         r = requests.post(f"{API}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=10, proxies=PROXIES)
         return r.json()
     except Exception as e:
-        print(f"[bot] не удалось отправить сообщение {chat_id}: {e}")
+        logger.warning(f"не удалось отправить сообщение {chat_id}: {e}")
         return None
 
 
@@ -602,7 +621,7 @@ def handle_reply(chat_id, text, state, reply_to_message_id=None):
 
 
 def poll_loop():
-    print("[bot] поллинг запущен")
+    logger.info("поллинг запущен")
     while True:
         # 12.08.2026: раньше исключение из handle_start()/handle_reply()
         # (например, сбой похода в Google Sheets внутри handle_start —
@@ -622,11 +641,11 @@ def poll_loop():
             with _state_lock:
                 state = load_state()
                 offset = state.get("last_update_id", 0) + 1
-            print(f"[bot] запрашиваю getUpdates, offset={offset}, proxies={PROXIES}")
+            logger.debug(f"запрашиваю getUpdates, offset={offset}, proxies={PROXIES}")
             try:
                 r = requests.get(f"{API}/getUpdates", params={"offset": offset, "timeout": 20}, timeout=25, proxies=PROXIES)
                 updates = r.json().get("result", [])
-                print(f"[bot] getUpdates ответил: status={r.status_code}, апдейтов={len(updates)}")
+                logger.debug(f"getUpdates ответил: status={r.status_code}, апдейтов={len(updates)}")
                 for u in updates:
                     # 12.08.2026: печатаем СЫРОЙ апдейт целиком, даже если
                     # это не обычное "message" (например, my_chat_member —
@@ -634,16 +653,16 @@ def poll_loop():
                     # Раньше такие апдейты молча пропускались (if not msg:
                     # continue) без единой строки в логе — не давало понять,
                     # что вообще происходит в группе.
-                    print(f"[bot] сырой апдейт: {json.dumps(u, ensure_ascii=False)}")
+                    logger.debug(f"сырой апдейт: {json.dumps(u, ensure_ascii=False)}")
             except Exception as e:
-                print(f"[bot] getUpdates ошибка: {e}")
+                logger.warning(f"getUpdates ошибка: {e}")
                 time.sleep(5)
                 continue
 
             if not updates:
                 continue
 
-            print(f"[bot] получено апдейтов: {len(updates)}")
+            logger.info(f"получено апдейтов: {len(updates)}")
 
             with _state_lock:
                 state = load_state()
@@ -659,8 +678,8 @@ def poll_loop():
                     # группы (владелец хочет получать туда переписку
                     # клиент<->компания) — печатаем тип/название чата для
                     # КАЖДОГО входящего сообщения, не только обработанных.
-                    print(f"[bot] сообщение из chat_id={chat_id}, type={msg['chat'].get('type')}, "
-                          f"title={msg['chat'].get('title', '')}, from=@{username}, text={text!r}")
+                    logger.info(f"сообщение из chat_id={chat_id}, type={msg['chat'].get('type')}, "
+                                f"title={msg['chat'].get('title', '')}, from=@{username}, text={text!r}")
                     try:
                         if text.startswith("/start"):
                             parts = text.split(maxsplit=1)
@@ -679,13 +698,13 @@ def poll_loop():
                         # поллинг — двигаем offset дальше (уже сделано
                         # выше, state["last_update_id"] обновлён) и просто
                         # логируем, чтобы было видно в journalctl.
-                        print(f"[bot] ошибка обработки апдейта {u.get('update_id')} от chat_id={chat_id}: {e}")
+                        logger.error(f"ошибка обработки апдейта {u.get('update_id')} от chat_id={chat_id}: {e}")
                 save_state(state)
         except Exception as e:
             # Последний рубеж — если упало что-то совсем неожиданное
             # (например, сама блокировка/файл состояния), цикл всё равно
             # не должен умирать молча.
-            print(f"[bot] неожиданная ошибка в poll_loop: {e}")
+            logger.error(f"неожиданная ошибка в poll_loop: {e}")
             time.sleep(5)
 
 

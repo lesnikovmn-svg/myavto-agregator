@@ -38,7 +38,11 @@ def check_site(url):
     try:
         r = requests.get(url, timeout=5, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
         return r.status_code == 200
-    except:
+    except Exception:
+        # T-73 (21.08.2026): было голое `except:` — ловило вообще всё,
+        # включая KeyboardInterrupt/SystemExit, из-за чего Ctrl+C во время
+        # прогона агента иногда "проглатывался" вместо остановки. Exception
+        # покрывает все реальные сетевые/парсинговые сбои, но не системные.
         return False
 
 def extract_phone(text):
@@ -1129,7 +1133,7 @@ def search_tgstat(query):
         r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code != 200: return []
         return list(set(re.findall(r"@([A-Za-z0-9_]{3,32})", r.text)))[:10]
-    except:
+    except Exception:  # T-73 (21.08.2026): было голое except:, см. check_site()
         return []
 
 def _extract_tgstat_title(html):
@@ -1162,7 +1166,7 @@ def parse_tgstat_channel(username):
         desc = re.sub(r"<[^>]+>","",desc_m.group(1)).strip()[:200] if desc_m else ""
         title = _extract_tgstat_title(html)
         return {"subscribers": subs, "description": desc, "title": title}
-    except:
+    except Exception:  # T-73 (21.08.2026): было голое except:, см. check_site()
         return None
 
 def fetch_telegram_preview(username):
@@ -1295,7 +1299,7 @@ def get_existing(ws):
                 if d:
                     ex.add(d)
         return ex
-    except:
+    except Exception:  # T-73 (21.08.2026): было голое except:, см. check_site()
         return set()
 
 def add_company(ws, data, row_num):

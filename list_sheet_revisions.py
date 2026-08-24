@@ -29,6 +29,7 @@ r = requests.get(
     f"https://www.googleapis.com/drive/v3/files/{SHEET_ID}/revisions",
     params={"fields": "revisions(id,modifiedTime,size,exportLinks)"},
     headers=headers,
+    timeout=15,  # T-73 (21.08.2026): без timeout запрос мог зависнуть навсегда
 )
 print("HTTP", r.status_code)
 data = r.json()

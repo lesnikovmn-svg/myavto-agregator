@@ -433,7 +433,7 @@ Sheets (владелец редактирует данные сам). Excel пр
   `dryrun_reverify_sites.py`, `export_revision.py`, `inspect_*.py`,
   `list_sheet_revisions.py`) — ниже риск, ниже частота использования, не
   стали трогать не глядя (см. похожую заметку у T-25).
-- [ ] **T-73. Нигде не используется `logging`, 170 сырых `print()` вместо него.**
+- [x] **T-73. Нигде не используется `logging`, 170 сырых `print()` вместо него.** ✅ 24.08.2026
   На VPS всё летит в systemd journal одним потоком без уровней
   (info/warning/error) — нельзя штатно отфильтровать шум от реальных
   ошибок. Плюс 4 голых `except:` в `company_agent.py` (строки 67, 1158,
@@ -441,6 +441,21 @@ Sheets (владелец редактирует данные сам). Excel пр
   тихие баги трудно поймать по логам. И пара `requests.get()` без
   `timeout=` в `export_revision.py`/`list_sheet_revisions.py` — теоретически
   могут зависнуть навсегда.
+  *Сделано:*
+  - `telegram_bot_service.py` переведён на `logging` (11 `print()` →
+    `logger.debug/info/warning/error`, уровень задаётся `LOG_LEVEL` в
+    env без изменения кода). Осознанно НЕ трогали остальные ~10
+    диагностических/одноразовых скриптов (`company_agent.py`,
+    `update_site.py`, `export_revision.py` и т.д.) — это ручные утилиты,
+    вызываемые человеком, где `print()` уместнее логов с уровнями; логи
+    ценны именно в единственном постоянно работающем systemd-сервисе.
+  - 4 голых `except:` в `company_agent.py` → `except Exception:` — ловит
+    все реальные ошибки, но больше не глотает `KeyboardInterrupt`/
+    `SystemExit`.
+  - Добавлен `timeout=15` в `requests.get()` в `export_revision.py` (2
+    вызова) и `list_sheet_revisions.py` (1 вызов); grep по всему репо
+    подтвердил — голых `requests.get()/post()` без `timeout=` не осталось.
+  - Проверено `python3 -m py_compile` на всех изменённых файлах.
 - [ ] **T-74. `index.html` — 1768 строк HTML+CSS+JS в одном файле.**
   Для текущего размера сайта уже на грани: 21.08.2026 несколько раз правили
   один и тот же файл по кускам через media-запросы, диффы трудно читать.

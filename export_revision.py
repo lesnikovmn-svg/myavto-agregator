@@ -41,6 +41,7 @@ meta = requests.get(
     f"https://www.googleapis.com/drive/v3/files/{SHEET_ID}/revisions/{revision_id}",
     params={"fields": "exportLinks,modifiedTime"},
     headers=headers,
+    timeout=15,  # T-73 (21.08.2026): без timeout запрос мог зависнуть навсегда
 ).json()
 print("Ревизия от", meta.get("modifiedTime"))
 export_links = meta.get("exportLinks", {})
@@ -50,7 +51,7 @@ if not csv_url:
     print(meta)
     raise SystemExit
 
-csv_resp = requests.get(csv_url, headers=headers)
+csv_resp = requests.get(csv_url, headers=headers, timeout=15)  # T-73: см. выше
 reader = csv.reader(io.StringIO(csv_resp.text))
 rows = list(reader)
 print(f"Строк в ревизии: {len(rows)}")

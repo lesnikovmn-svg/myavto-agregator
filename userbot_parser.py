@@ -40,10 +40,51 @@ logger = logging.getLogger("userbot_parser")
 
 STATE_PATH = Path("userbot_parser_state.json")
 
-CONTACTS = (
-    "📲 Максим: @LesnikovM | +7 938 409-67-08\n"
-    "📲 Антон: @Tohakmv | +7 963 383-79-28"
-)
+# Фирменный футер — тот же на каждом посте, задан пользователем 24.08.2026
+# по образцу реального поста на канале. Плейсхолдеры без ссылок (MAX,
+# Яндекс) — заполнить точными URL, когда пользователь их даст, пока просто
+# текст, как в оригинале.
+OUR_FOOTER = """Почему именно MY_Avto?
+Мы не просто продаём автомобили. Мы тщательно подбираем машину, которая на 100% соответствует вашим задачам, бюджету, стилю вождения и ожиданиям. Каждый экземпляр проходит полную проверку по всем параметрам.
+
+Фото/видео, осмотр после доставки, полный расчёт под ключ — пишите прямо сейчас!
+
+✈️ Telegram: My_Avto_Optimal
+✈️ Telegram: MY_Avto5
+✈️ Telegram: my_avto_opyt
+✈️ Максим: LesnikovM | +7 938 409-67-08
+✈️ Антон: Tohakmv | +7 963 383-79-28
+🌐 Сайт: my-avto.online
+🌐 Сайт: myavto-agregator.ru
+📸 Instagram: my_avto5
+💙 VK: my_avto5
+💬 MAX: Присоединиться
+📍 Яндекс: Профиль
+MY_Avto — ваш надёжный партнёр в выборе авто!"""
+
+# Строки источника, которые вычищаем перед репостом — их собственные сайт/
+# контакты/CTA, чтобы покупатель писал нам, а не в источник.
+_DROP_PATTERNS = [
+    re.compile(r"www\.", re.I),
+    re.compile(r"https?://", re.I),
+    re.compile(r"не нашли", re.I),
+    re.compile(r"заполните форму", re.I),
+    re.compile(r"primoryechinaexport", re.I),
+    re.compile(r"\+7\s*\(?995\)?\s*866[-\s]?40[-\s]?82"),
+]
+
+
+def build_repost_text(raw_text):
+    """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер."""
+    kept = []
+    for line in raw_text.splitlines():
+        if any(p.search(line) for p in _DROP_PATTERNS):
+            continue
+        kept.append(line)
+    while kept and not kept[-1].strip():
+        kept.pop()
+    body = "\n".join(kept).strip()
+    return f"{body}\n\n{OUR_FOOTER}" if body else OUR_FOOTER
 
 PRICE_LOW = 4_500_000
 PRICE_HIGH = 6_000_000
@@ -202,20 +243,6 @@ def route_targets(price_rub, target_optimal, target_my_avto5):
     return [target_my_avto5]
 
 
-def render_post(parsed, price_rub):
-    lines = [f"🚨 {parsed['title']}"]
-    if parsed.get("vin"):
-        lines.append(f"📑 VIN: {parsed['vin']}")
-    if parsed.get("mileage"):
-        lines.append(f"Пробег: {parsed['mileage']}")
-    if price_rub:
-        price_str = f"{price_rub:,}".replace(",", " ")
-        lines.append(f"💰 Цена: {price_str} ₽")
-    lines.append("")
-    lines.append(CONTACTS)
-    return "\n".join(lines)
-
-
 # --- Обработка одного сообщения -----------------------------------------
 
 async def handle_message(client, source_username, message, targets_cfg, eur_rub_rate, dry_run, test_group, state):
@@ -239,7 +266,7 @@ async def handle_message(client, source_username, message, targets_cfg, eur_rub_
         return
 
     real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
-    post_text = render_post(parsed, price_rub)
+    post_text = build_repost_text(text)
 
     if dry_run:
         send_targets = [test_group] if test_group else []

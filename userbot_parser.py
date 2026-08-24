@@ -64,6 +64,7 @@ _DROP_PATTERNS = [
     re.compile(r"заполните форму", re.I),
     re.compile(r"primoryechinaexport", re.I),
     re.compile(r"\+7\s*\(?995\)?\s*866[-\s]?40[-\s]?82"),
+    re.compile(r"проверить\s+в\s+боте", re.I),  # чужая VIN-проверка источника — не наша фича
 ]
 
 

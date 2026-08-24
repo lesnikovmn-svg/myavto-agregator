@@ -611,6 +611,17 @@ const TRANSLIT_MAP = {
 function translit(s) {
   return s.split('').map(ch => TRANSLIT_MAP[ch] ?? ch).join('');
 }
+
+// 24.08.2026 (репорт пользователя: "забиваю май авто и не находит"):
+// буквенная транслитерация выше не ловит ФОНЕТИЧЕСКОЕ написание — "MY"
+// произносится как английское "my" (рифмуется с "eye"), по-русски это
+// на слух "май", а не побуквенная транслитерация "м"+"ы". Для таких
+// случаев словарь ничем не заменить — точечно прописываем известные
+// произносимые не по правилам названия здесь по мере репортов
+// пользователей, ключ — точное название компании как в таблице.
+const SEARCH_ALIASES = {
+  'my avto': ['май авто', 'майавто'],
+};
 function matchesQuery(c, q, qTranslit) {
   const name = c.name.toLowerCase();
   const desc = c.description.toLowerCase();
@@ -618,7 +629,9 @@ function matchesQuery(c, q, qTranslit) {
       c.directions.some(d=>d.toLowerCase().includes(q)) || c.tags.some(t=>t.toLowerCase().includes(q))) {
     return true;
   }
-  return qTranslit !== q && (name.includes(qTranslit) || desc.includes(qTranslit));
+  if (qTranslit !== q && (name.includes(qTranslit) || desc.includes(qTranslit))) return true;
+  const aliases = SEARCH_ALIASES[name];
+  return !!aliases && aliases.some(a => a.includes(q) || q.includes(a));
 }
 
 function applyFilters() {
@@ -660,7 +673,9 @@ function updateSearchSuggestions(rawQuery) {
     if (name.includes(q) ||
         c.tags.some(t => t.toLowerCase().includes(q)) ||
         c.directions.some(d => d.toLowerCase().includes(q))) return true;
-    return qTranslit !== q && name.includes(qTranslit);
+    if (qTranslit !== q && name.includes(qTranslit)) return true;
+    const aliases = SEARCH_ALIASES[name];
+    return !!aliases && aliases.some(a => a.includes(q) || q.includes(a));
   }).slice(0, 8);
   if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.innerHTML = matches.map(c => {

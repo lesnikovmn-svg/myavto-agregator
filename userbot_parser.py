@@ -466,6 +466,11 @@ async def main():
     target_my_avto5 = env.get("TARGET_MY_AVTO5", "@MY_Avto5")
     eur_rub_rate = float(env.get("EUR_RUB_RATE", "100"))
     dry_run = env.get("DRY_RUN", "true").strip().lower() != "false"
+    # Бэкфилл при старте работает и в боевом режиме, не только в DRY_RUN —
+    # чтобы при первом запуске на реальные каналы сразу подтянуть немного
+    # свежего контента, а не просто ждать новых постов с нуля. Благодаря
+    # дедупу по state (last_id) это безопасно и при рестартах сервиса —
+    # повторно уже отправленные посты не полезут.
     backfill_limit = int(env.get("TEST_BACKFILL_LIMIT", "15"))
     test_group_invite = env.get("TEST_GROUP_INVITE", "").strip()
 
@@ -488,8 +493,8 @@ async def main():
         sources, target_optimal, target_my_avto5,
     )
 
-    if dry_run and backfill_limit > 0:
-        logger.info("--- Тестовый прогон по последним %s сообщениям каждого источника (с учётом альбомов) ---", backfill_limit)
+    if backfill_limit > 0:
+        logger.info("--- Стартовый бэкфилл: последние %s сообщений каждого источника (с учётом альбомов и уже отправленного ранее) ---", backfill_limit)
         for source in sources:
             logger.info("[%s] запрашиваю историю (таймаут 25с)...", source)
             try:
@@ -514,7 +519,7 @@ async def main():
                 await handle_group(client, source, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
             if skipped:
                 logger.info("[%s] %s из %s постов бэкфилла уже были обработаны раньше — пропущены", source, skipped, len(groups))
-        logger.info("--- Конец тестового прогона, жду новые посты в реальном времени ---")
+        logger.info("--- Конец стартового бэкфилла, жду новые посты в реальном времени ---")
 
     # Живой поток: элементы одного альбома прилетают отдельными событиями
     # почти одновременно — копим по grouped_id и обрабатываем группой через
@@ -526,14 +531,25 @@ async def main():
         await asyncio.sleep(2.0)
         group = pending_albums.pop(gid, None)
         pending_tasks.pop(gid, None)
-        if group:
-            await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
+        if not group:
+            return
+        ids = [m.id for m in group]
+        if max(ids) <= state.get(f"last_id:{source_username}", 0):
+            # Telegram иногда повторно доставляет событие после
+            # переподключения (нестабильная сеть на VPS уже такое
+            # устраивала) — этот пост уже был отправлен, не дублируем.
+            logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, ids)
+            return
+        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
 
     @client.on(events.NewMessage(chats=sources))
     async def on_new_message(event):
         source_username = (event.chat.username or "").lower()
         msg = event.message
         if msg.grouped_id is None:
+            if msg.id <= state.get(f"last_id:{source_username}", 0):
+                logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, [msg.id])
+                return
             await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, dry_run, test_group, state)
             return
         gid = msg.grouped_id

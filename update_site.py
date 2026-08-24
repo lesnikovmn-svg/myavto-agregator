@@ -260,10 +260,17 @@ for c in companies:
 
 js = 'const COMPANIES = ' + json.dumps(companies_out, ensure_ascii=False) + ';'
 
+# T-74 (24.08.2026): массив COMPANIES раньше лежал прямо внутри index.html
+# (искали 'const COMPANIES = [' по тексту всего файла). После выноса JS в
+# отдельный app.js (см. T-74 в TASKS.md) массив переехал туда же — здесь
+# просто меняем файл, который патчим, сама логика поиска/замены та же.
+app_js = open('app.js').read()
+s = app_js.find('const COMPANIES = [')
+e = app_js.find('];', s) + 2
+app_js = app_js[:s] + js + app_js[e:]
+open('app.js', 'w').write(app_js)
+
 html = open('index.html').read()
-s = html.find('const COMPANIES = [')
-e = html.find('];', s) + 2
-html = html[:s] + js + html[e:]
 
 count = len(companies)
 
@@ -308,11 +315,12 @@ print(f'Сайт обновлён! {count} компаний, {approved_total} р
 # (тихий провал git push из-за разошедшейся истории выглядел как успех).
 # Это была прямая причина git-конфликтов и lock-файлов, с которыми
 # разбирались весь день 21.08.2026 при параллельных ручных пушах с Мака.
-# Теперь: 1) коммитим только index.html — единственный файл, который этот
-# скрипт пишет; 2) ничего не коммитим, если реальных изменений нет (пустые
-# коммиты с одинаковым сообщением засоряли историю при каждом прогоне
-# cron, даже когда в таблице ничего не менялось); 3) перед push делаем
-# pull --no-rebase, чтобы забрать чужие изменения (например, ручной пуш с
+# Теперь: 1) коммитим только файлы, которые этот скрипт реально пишет
+# (index.html + app.js — см. T-74, массив COMPANIES переехал в app.js);
+# 2) ничего не коммитим, если реальных изменений нет (пустые коммиты с
+# одинаковым сообщением засоряли историю при каждом прогоне cron, даже
+# когда в таблице ничего не менялось); 3) перед push делаем pull
+# --no-rebase, чтобы забрать чужие изменения (например, ручной пуш с
 # Мака) и смёрджиться автоматически, а не молча разойтись; 4) при ЛЮБОЙ
 # ошибке печатаем её явно вместо тихого продолжения.
 def run_git(args):
@@ -321,17 +329,18 @@ def run_git(args):
         print(f"[git] ОШИБКА: git {' '.join(args)}\n{r.stderr.strip()}")
     return r
 
-diff_check = subprocess.run(['git', 'diff', '--quiet', 'index.html'])
+TRACKED_FILES = ['index.html', 'app.js']
+diff_check = subprocess.run(['git', 'diff', '--quiet'] + TRACKED_FILES)
 if diff_check.returncode == 0:
-    print('[git] index.html не изменился — коммит не нужен.')
+    print('[git] index.html/app.js не изменились — коммит не нужен.')
 else:
-    run_git(['add', 'index.html'])
+    run_git(['add'] + TRACKED_FILES)
     commit_r = run_git(['commit', '-m', f'update: sync {count} companies from Google Sheets ({verified_count} ЕГРЮЛ-verified)'])
     if commit_r.returncode == 0:
         pull_r = run_git(['pull', '--no-rebase'])
         if pull_r.returncode == 0:
             push_r = run_git(['push', 'origin', 'main'])
             if push_r.returncode == 0:
-                print('[git] index.html закоммичен и запушен.')
+                print('[git] index.html/app.js закоммичены и запушены.')
         else:
             print('[git] pull перед push не удался — push пропущен, разберитесь вручную (git status).')

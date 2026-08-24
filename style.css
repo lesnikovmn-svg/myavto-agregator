@@ -1,0 +1,475 @@
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --border: #e8e6e0;
+  --text: #1a1a18;
+  --muted: #6b6b62;
+  --hint: #9b9b90;
+  --accent: #1a6b3c;
+  --accent-light: #e8f5ee;
+  --accent2: #0f4f8a;
+  --accent2-light: #e6f0fa;
+  --gold: #b8860b;
+  --gold-light: #fdf8e6;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; }
+
+/* Nav */
+nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.logo { display: flex; align-items: center; gap: 8px; font-family: 'Manrope', sans-serif; font-size: 17px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+.logo span { color: var(--accent); }
+.logo-mark { height: 56px; width: auto; object-fit: contain; display: block; }
+.nav-links { display: flex; gap: 20px; align-items: center; }
+.nav-links a { font-size: 13px; color: var(--muted); text-decoration: none; }
+.nav-links a:hover { color: var(--text); }
+.nav-tg { background: #0088cc; color: #fff; padding: 7px 16px 7px 12px; border-radius: 20px; font-size: 13px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s; box-shadow: 0 2px 6px rgba(0,136,204,0.35); }
+.nav-tg:hover { background: #0077b3; }
+.nav-tg svg { width: 15px; height: 15px; fill: #fff; flex-shrink: 0; }
+.nav-rate { background: #fc3f1d; color: #fff !important; padding: 7px 16px; border-radius: 20px; font-size: 13px; text-decoration: none; font-weight: 500; }
+
+/* Hero */
+.hero { position: relative; padding: 56px 24px 40px; max-width: 800px; margin: 0 auto; text-align: center; overflow: hidden; }
+.hero > * { position: relative; z-index: 1; }
+.hero-bg-logo { position: absolute !important; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 460px; max-width: none; opacity: 0.15; pointer-events: none; z-index: 0 !important; }
+.hero-eyebrow { display: inline-block; background: var(--accent-light); color: var(--accent); font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 20px; letter-spacing: 0.5px; margin-bottom: 20px; text-transform: uppercase; }
+.hero h1 { font-family: 'Manrope', sans-serif; font-size: 42px; font-weight: 800; line-height: 1.15; letter-spacing: -1px; color: var(--text); margin-bottom: 16px; }
+.hero h1 em { color: var(--accent); font-style: normal; }
+.hero-sub { font-size: 16px; color: var(--muted); max-width: 560px; margin: 0 auto 28px; }
+
+/* Directions */
+.directions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 32px; }
+.dir { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; font-size: 13px; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+.dir:hover, .dir.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Search — 14.08.2026: раньше это было большое поле на всю ширину hero
+   ("слишком большого размера" по отзыву пользователя), теперь компактное
+   и живёт в шапке каталога (.companies-header-right), слева от сортировки. */
+.search-wrap { display: flex; gap: 6px; position: relative; }
+.search-wrap input { width: 200px; padding: 7px 12px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); font-size: 13px; color: var(--text); outline: none; font-family: 'Inter', sans-serif; transition: border-color 0.15s, width 0.15s; }
+.search-wrap input:focus { border-color: var(--accent); width: 240px; }
+.search-wrap input::placeholder { color: var(--hint); }
+/* Автоподсказки поиска — позиционируется под полем ввода внутри
+   .search-wrap (у него position:relative). */
+.search-suggestions { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; min-width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 20; max-height: 320px; overflow-y: auto; text-align: left; }
+.search-suggestion-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; font-size: 14px; }
+.search-suggestion-item:hover { background: var(--bg); }
+.search-suggestion-item + .search-suggestion-item { border-top: 1px solid var(--border); }
+.sugg-name { font-weight: 500; color: var(--text); }
+.sugg-meta { font-size: 12px; color: var(--hint); white-space: nowrap; }
+
+/* Stats bar */
+.stats-bar { background: var(--text); color: #fff; padding: 20px 24px; display: flex; justify-content: center; gap: 48px; }
+.stat { text-align: center; }
+.stat-n { font-family: 'Manrope', sans-serif; font-size: 24px; font-weight: 800; }
+.stat-l { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+
+/* Main layout */
+.main { max-width: 960px; margin: 0 auto; padding: 32px 24px; display: grid; grid-template-columns: 240px 1fr; gap: 24px; }
+
+/* Sidebar */
+.sidebar { }
+.mobile-filters-toggle { display: none; }
+
+/* T-12 (18.08.2026, аудит TASKS.md): #contact/#customs/#blog были свёрстаны
+   инлайн-стилями (style="..."). Инлайн выигрывает по specificity над
+   обычным классом, поэтому мобильная адаптация grid-раскладки контактов
+   уже потребовала !important (было #contact > div { ... !important }) —
+   каждая следующая мобильная правка так же требовала бы !important, это
+   растущий костыль. Вынесены в классы только те стили, что реально влияют
+   на раскладку (layout-критичные); мелкие декоративные inline-стили
+   (цвета, паддинги отдельных элементов) не трогали — риск визуальных
+   регрессий на большом объёме правок не оправдан этой задачей. */
+.section-wrap { max-width: 960px; margin: 0 auto 48px; padding: 40px 24px 0; clear: both; position: relative; z-index: 1; }
+.section-wrap-tight { max-width: 960px; margin: 0 auto 48px; padding: 0 24px; }
+.contact-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; align-items: start; }
+.sidebar-section { background: rgba(255,255,255,0.78); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.sidebar-title { font-size: 11px; font-weight: 600; color: var(--hint); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
+.filter-group { margin-bottom: 14px; }
+.filter-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+.filter-options { display: flex; flex-direction: column; gap: 4px; }
+.filter-opt { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; padding: 4px 0; }
+.filter-opt input { accent-color: var(--accent); }
+.filter-count { color: var(--hint); font-size: 12px; margin-left: auto; }
+
+/* Companies list */
+.companies-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.companies-header-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.companies-title { font-size: 18px; font-weight: 600; }
+.companies-sort { font-size: 13px; color: var(--muted); }
+.companies-sort select { border: 1px solid var(--border); background: var(--surface); padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--text); }
+.companies-city-filter select { border: 1px solid var(--border); background: var(--surface); padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--text); max-width: 160px; }
+
+/* Пагинация каталога — 18.08.2026, по запросу пользователя ("навигация
+   пролистывания каталога для быстрого перемещения"). */
+/* T-63 (21.08.2026, по запросу пользователя): "долго листать вниз" —
+   пагинация (T-62) разбила список карточек, но путь ОТ начала страницы
+   ДО каталога (мимо hero/калькулятора/промо-видео/формы заявки) остаётся
+   длинным. Плавающая кнопка появляется после того, как пользователь
+   проскроллил мимо hero, и умеет две вещи в зависимости от положения:
+   выше каталога — прыгает вниз к нему, внутри/ниже каталога — прыгает
+   наверх страницы. Видимость и текст переключает toggleQuickNav() в JS. */
+.quick-nav-btn { position: fixed; right: 20px; bottom: 24px; z-index: 500; display: none; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 24px; border: none; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer; box-shadow: var(--shadow); }
+.quick-nav-btn.visible { display: inline-flex; }
+.quick-nav-btn:hover { opacity: 0.92; }
+@media (max-width: 680px) { .quick-nav-btn { right: 14px; bottom: 16px; padding: 9px 14px; font-size: 12px; } }
+
+/* Пагинация дублируется сверху списка (см. renderPage()), чтобы менять
+   страницу не нужно было каждый раз скроллить в конец текущей — .pager-top
+   чуть плотнее прижат к шапке каталога, чем нижний. */
+.pager-top { margin: 8px 0 16px; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; margin: 24px 0 8px; }
+.pager-btn { min-width: 36px; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; font-family: 'Inter', sans-serif; cursor: pointer; }
+.pager-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pager-btn:disabled { opacity: 0.4; cursor: default; }
+.pager-btn.pager-current { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.pager-ellipsis { padding: 0 4px; color: var(--hint); }
+
+/* Company card */
+.company-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; box-shadow: var(--shadow); transition: box-shadow 0.15s; }
+.company-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.company-card.top { border-left: 3px solid var(--accent); }
+/* Видео-фон за 1-й/2-й карточкой каталога — 14.08.2026. Та же схема, что
+   у промо-блоков выше: видео абсолютно позиционировано на всю карточку
+   (object-fit:cover), поверх — полупрозрачный белый оверлей для
+   читаемости (текста на карточках больше и мельче, чем в промо-блоках,
+   поэтому оверлей светлее и плотнее — 0.82/0.9 вместо 0.55/0.75), контент
+   карточки — поверх всего через z-index. */
+/* 14.08.2026: раньше у каждой из первых двух карточек было своё видео
+   внутри — по запросу пользователя переделано на ОДНО общее видео на
+   высоту обеих карточек сразу, во всю ширину экрана (см. ниже
+   .companies-video-wrap) — сами карточки теперь просто полупрозрачные,
+   без собственного <video> внутри. */
+.company-card.card-video-bg { background: rgba(255,255,255,0.78); position: relative; z-index: 2; }
+/* .companies-video-wrap — обёртка общего видео-фона для 1-й/2-й карточки.
+   Карточки лежат глубоко внутри .main (grid, max-width:960px, padding:32px
+   24px) — чтобы видео было "во всю ширину экрана", а не только в рамках
+   этой колонки, используем приём "full-bleed": отрицательные отступы,
+   равные паддингу .main, растягивают обёртку до полной ширины страницы
+   (на мобильном, где сайдбар скрыт, это и есть вся ширина экрана; на
+   десктопе — до полной ширины .main). 100vw сознательно не используем —
+   он включает ширину скроллбара и уже создавал горизонтальную прокрутку
+   в этом проекте (см. PROJECT_STATE.md), отрицательные margin безопаснее. */
+.companies-video-wrap { position: relative; overflow: hidden; margin: 0 -24px 12px; padding: 20px 24px; }
+.companies-bg-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.companies-bg-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.35)); z-index: 1; }
+.companies-video-content { position: relative; z-index: 2; }
+.companies-video-content .company-card:last-child { margin-bottom: 0; }
+.card-header { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+.card-avatar { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 800; flex-shrink: 0; }
+.card-avatar.has-logo { background: #fff; border: 1px solid var(--border); padding: 3px; }
+.card-avatar.has-logo img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
+.av-green { background: var(--accent-light); color: var(--accent); }
+.av-blue { background: var(--accent2-light); color: var(--accent2); }
+.av-gold { background: var(--gold-light); color: var(--gold); }
+.av-gray { background: #f0ede8; color: #5a5a52; }
+.card-info { flex: 1; }
+.card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.card-name { font-size: 16px; font-weight: 600; color: var(--text); }
+.top-badge { background: var(--accent-light); color: var(--accent); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+.verified { background: var(--accent2-light); color: var(--accent2); font-size: 11px; padding: 2px 8px; border-radius: 20px; }
+.verified-basic { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.phone-reveal { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: none; }
+.phone-reveal.phone-revealed { color: var(--accent); border-color: var(--accent-light); background: var(--accent-light); }
+.review-links { display: flex; gap: 6px; }
+.review-icon-btn { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; text-decoration: none; color: #fff; flex-shrink: 0; overflow: hidden; }
+.review-yandex { background: transparent; }
+.review-google { background: transparent; }
+.review-2gis { background: transparent; }
+.review-instagram { background: linear-gradient(45deg, #f9ce34, #ee2a7b, #6228d7); }
+.review-vk { background: transparent; }
+.review-telegram { background: transparent; }
+.review-avito { background: #fff; border: 1px solid var(--border); }
+.review-drom { background: transparent; }
+.review-autoru { background: transparent; }
+.rate-us-btn { display: inline-block; margin-top: 18px; background: #fc3f1d; color: #fff; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 8px; text-decoration: none; }
+.rate-us-btn:hover { opacity: 0.9; }
+.card-desc { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; color: var(--muted); }
+.card-right { text-align: right; flex-shrink: 0; }
+.rating { font-size: 20px; font-weight: 700; color: var(--text); font-family: 'Manrope', sans-serif; }
+.stars { color: #f5a623; font-size: 13px; }
+/* T-06 (18.08.2026, аудит TASKS.md): 15+ полей форм были только с
+   placeholder, без <label> — ломает автозаполнение на мобильных,
+   скринридеры и клик по подписи (placeholder исчезает при вводе, для
+   людей с когнитивными затруднениями это реальная проблема). Визуально
+   ничего не меняем — .sr-only прячет текст с экрана, но оставляет его
+   доступным скринридерам и браузерному автозаполнению. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+/* T-21 (21.08.2026): honeypot-поле для форм mass-request/отзыва — обычные
+   посетители его не видят и не заполняют (off-screen, а не display:none —
+   часть спам-ботов пропускает поля с display:none как явную ловушку),
+   боты, читающие сырой HTML, часто заполняют все input подряд. Задний
+   бэкенд (telegram_bot_service.py, is_honeypot_filled()) тихо отбрасывает
+   заявку, если поле непустое. tabindex=-1 и aria-hidden — чтобы поле не
+   попадало в Tab-навигацию и не читалось скринридером. */
+.hp-field { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.reviews { font-size: 11px; color: var(--hint); margin-top: 2px; }
+.leave-review-btn { display: inline-block; padding: 7px 14px; border-radius: var(--radius); border: 1.5px solid var(--accent); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; font-family: inherit; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
+.leave-review-btn:hover { background: var(--accent); color: #fff; }
+
+/* Модалка отзывов — 17.08.2026, нативные отзывы вместо редиректа на
+   сторонние площадки (задача пользователя). Один общий оверлей на все
+   карточки, JS заполняет содержимое под конкретную компанию при открытии. */
+.review-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+.review-modal-overlay.open { display: flex; }
+.review-modal { background: var(--surface); border-radius: var(--radius); max-width: 480px; width: 100%; padding: 24px; position: relative; box-shadow: var(--shadow); }
+.review-modal-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--hint); line-height: 1; padding: 4px; }
+.review-modal-company { font-size: 17px; font-weight: 700; margin-bottom: 12px; padding-right: 24px; }
+.review-modal-list { max-height: 220px; overflow-y: auto; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px; }
+.review-modal-list:empty { display: none; }
+.review-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.review-item-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 4px; }
+.review-item-author { font-weight: 600; }
+.review-item-stars { color: #f5a623; font-size: 12px; }
+.review-item-text { font-size: 13px; color: var(--text); line-height: 1.4; }
+.review-item-date { font-size: 11px; color: var(--hint); margin-top: 4px; }
+.review-modal-form-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.review-modal-form { display: flex; flex-direction: column; gap: 8px; }
+.review-modal-form input[type=text], .review-modal-form textarea { border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 14px; font-family: inherit; width: 100%; box-sizing: border-box; }
+.review-modal-form textarea { min-height: 80px; resize: vertical; }
+.review-stars { font-size: 24px; letter-spacing: 4px; cursor: pointer; user-select: none; }
+.review-stars span { color: var(--border); transition: color .1s; }
+.review-stars span.on { color: #f5a623; }
+.review-modal-form button[type=submit] { margin-top: 4px; padding: 10px; border-radius: var(--radius); border: none; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.review-modal-note { font-size: 11px; color: var(--hint); text-align: center; }
+.review-modal-success { display: none; text-align: center; font-size: 14px; padding: 20px 0; }
+.review-modal-success.open { display: block; }
+.card-footer { border-top: 1px solid var(--border); padding-top: 12px; display: flex; align-items: center; justify-content: space-between; }
+.card-meta { display: flex; gap: 16px; }
+.meta-item { font-size: 12px; color: var(--muted); }
+.meta-item strong { color: var(--text); font-weight: 500; }
+.card-actions { display: flex; gap: 8px; }
+.btn-primary { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 8px 18px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; font-size: 13px; cursor: pointer; }
+
+/* Calc — .calc-standalone — 14.08.2026: обёртка для секции калькулятора
+   вне сайдбара (см. комментарий у HTML-блока), просто центрирует и
+   ограничивает ширину карточки, сама карточка (.calc-section и внутренности)
+   не менялась. */
+/* Видео-фон за калькулятором и формой массовой заявки — 14.08.2026.
+   .promo-video заполняет весь .promo-video-wrap (object-fit:cover —
+   обрезается по центру под контейнер, исходное видео портретное
+   448x672, поэтому cover обязателен, растягивать без обрезки было бы
+   криво). Оверлей — полупрозрачный градиент в фирменных цветах, чтобы
+   видео не спорило по контрасту с белыми карточками поверх него.
+   .promo-video-content — обычный поток (position:relative + z-index),
+   сами секции calc-standalone/mass-request внутри не менялись. */
+.promo-video-wrap { position: relative; overflow: hidden; padding: 40px 0; }
+.promo-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; z-index: 0; }
+.promo-video-overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(26,107,60,0.55), rgba(15,79,138,0.45)); z-index: 1; }
+.promo-video-content { position: relative; z-index: 2; }
+.calc-standalone { max-width: 480px; margin: 0 auto 32px; padding: 0; }
+.calc-section { background: rgba(255,255,255,0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.calc-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+.calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.calc-row select { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; }
+.calc-result { background: var(--accent-light); border-radius: var(--radius); padding: 12px 16px; }
+.calc-label { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
+.calc-price { font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; color: var(--accent); }
+.calc-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* Массовая заявка по всем компаниям (задача #49) — CloudPayments пока не
+   подключён, поэтому это заглушка: форма реально собирает данные заявки
+   и отправляет её в Telegram-бот (тот же приём, что и submitForm() для
+   заявок на размещение), а не проводит настоящий платёж. См. комментарий
+   у cloudPaymentsCheckout() в JS — там ровно то место, куда позже
+   вставляется реальный виджет. */
+.mass-request { max-width: 960px; margin: 0 auto; padding: 0 0 32px; }
+.mr-card { background: linear-gradient(135deg, rgba(232,245,238,0.8), rgba(255,255,255,0.8)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--accent); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); }
+.mr-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 18px; }
+.mr-title { font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+.mr-sub { font-size: 14px; color: var(--muted); max-width: 560px; }
+.mr-price-badge { background: var(--accent); color: #fff; padding: 10px 18px; border-radius: var(--radius); text-align: center; flex-shrink: 0; }
+.mr-price-badge .mr-price { font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; line-height: 1; }
+.mr-price-badge .mr-price-note { font-size: 11px; opacity: 0.85; margin-top: 3px; }
+/* T-20 (18.08.2026, по решению пользователя): касса — заглушка,
+   cloudPaymentsCheckout() ничего не списывает, а форма/оферта обещали
+   реальную оплату 990₽ с чеком по 54-ФЗ — юридический риск (обещание,
+   которое сайт не выполняет). Пока не подключена настоящая касса, услуга
+   честно бесплатна: старая цена зачёркнута, рядом — "Бесплатно". */
+.mr-price-old { font-size: 13px; text-decoration: line-through; opacity: 0.7; }
+.mr-price-free { color: #fff; }
+.mr-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* width:100% явно — 14.08.2026, найдено на реальном iPhone 16 Pro Max:
+   поля формы "Разослать запрос" вылезали за правый край, тогда как весь
+   остальной сайт держал ровный отступ. Причина — известный баг Safari/iOS:
+   <input>/<select>/<textarea> внутри CSS Grid не всегда растягиваются на
+   всю ширину колонки без явного width (в отличие от десктопных браузеров,
+   где стрейч по умолчанию работает и для форм-элементов). Это была
+   единственная секция на странице с "голыми" полями формы прямо в Grid. */
+.mr-form input:not([type="checkbox"]), .mr-form select, .mr-form textarea { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; background: var(--surface); }
+/* 14.08.2026: width:100% выше по ошибке задевал и чекбокс согласия
+   (input type=checkbox — тоже .mr-form input) — растягивал его на всю
+   ширину строки и отталкивал текст согласия далеко вправо. Явно
+   фиксируем чекбоксу нормальный маленький размер и запрет на сжатие. */
+.mr-consent input[type="checkbox"] { width: auto; flex-shrink: 0; margin-top: 2px; }
+.mr-form textarea { grid-column: 1 / -1; resize: vertical; min-height: 44px; }
+.mr-form .mr-full { grid-column: 1 / -1; }
+.mr-submit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.mr-submit-row button { background: var(--accent); color: #fff; border: none; padding: 12px 26px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; }
+.mr-note { font-size: 12px; color: var(--hint); }
+.mr-consent { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; cursor: pointer; }
+.mr-consent input { margin-top: 2px; flex-shrink: 0; }
+.mr-consent a { color: var(--accent); text-decoration: underline; }
+.mr-success { display: none; background: var(--accent-light); color: var(--accent); border-radius: 8px; padding: 12px 16px; font-size: 13px; margin-top: 14px; }
+@media (max-width: 720px) { .mr-form { grid-template-columns: 1fr; } }
+
+/* TG banner */
+.tg-section { background: linear-gradient(135deg, rgba(0,136,204,0.16), rgba(255,255,255,0.78)); border: 1px solid #0088cc30; border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.tg-inner { display: flex; align-items: center; gap: 12px; }
+.tg-ico { width: 40px; height: 40px; background: #0088cc; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tg-ico svg { fill: #fff; width: 22px; height: 22px; }
+.tg-text strong { font-size: 14px; font-weight: 600; display: block; margin-bottom: 2px; }
+.tg-text span { font-size: 12px; color: var(--muted); }
+.tg-btn { margin-left: auto; background: #0088cc; color: #fff; border: none; border-radius: 20px; padding: 8px 16px; font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+
+/* FAQ section — важно для нейросетей */
+.faq-section { max-width: 960px; margin: 0 auto 40px; padding: 0 24px; }
+.faq-title { font-family: 'Manrope', sans-serif; font-size: 24px; font-weight: 800; margin-bottom: 20px; }
+.faq-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 10px; cursor: pointer; }
+.faq-q { font-size: 15px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+.faq-a { font-size: 14px; color: var(--muted); margin-top: 10px; line-height: 1.65; display: none; }
+.faq-item.open .faq-a { display: block; }
+.faq-arrow { transition: transform 0.2s; color: var(--hint); font-size: 18px; }
+.faq-item.open .faq-arrow { transform: rotate(180deg); }
+
+/* About section — для GEO */
+.about-section { background: var(--text); color: #fff; padding: 40px 24px; }
+.about-inner { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+.about-title { font-family: 'Manrope', sans-serif; font-size: 26px; font-weight: 800; margin-bottom: 14px; }
+.about-text { font-size: 14px; color: rgba(255,255,255,0.65); line-height: 1.7; }
+.about-facts { display: flex; flex-direction: column; gap: 12px; }
+.fact { display: flex; gap: 12px; align-items: flex-start; }
+.fact-ico { font-size: 20px; flex-shrink: 0; }
+.fact-text strong { display: block; font-size: 14px; margin-bottom: 2px; }
+.fact-text span { font-size: 13px; color: rgba(255,255,255,0.5); }
+
+/* Footer */
+footer { background: var(--surface); border-top: 1px solid var(--border); padding: 24px; text-align: center; }
+.footer-text { font-size: 13px; color: var(--hint); }
+.footer-links { display: flex; justify-content: center; gap: 20px; margin-top: 8px; }
+.footer-links a { font-size: 12px; color: var(--muted); text-decoration: none; }
+
+/* T-10 (18.08.2026, аудит TASKS.md): раньше был только один брейкпоинт
+   (680px), написанный реактивно под конкретные телефонные баги —
+   планшетный диапазон (681-1024) не обрабатывался вообще: сайдбар
+   фиксированной ширины 240px на планшете в портретной ориентации
+   (768px) съедал почти треть экрана, карточкам оставалось мало места.
+   Не полный редизайн (это отдельная задача), а точечное расширение
+   сетки: планшет получает более узкий сайдбар вместо схлопывания в 1
+   колонку (это по-прежнему оправдано только на настоящем мобильном). */
+@media (max-width: 1024px) and (min-width: 681px) {
+  .main { grid-template-columns: 200px 1fr; gap: 16px; padding: 32px 16px; }
+  .sidebar-section { padding: 12px; }
+}
+
+@media (max-width: 680px) {
+  .hero h1 { font-size: 28px; }
+  .hero { padding: 32px 16px 28px; }
+  .main { grid-template-columns: 1fr; }
+  /* T-11: раньше .sidebar{display:none} насовсем — фильтры по направлению
+     пропадали с телефона целиком. Теперь скрыт только по умолчанию,
+     .mobile-open (ставит toggleMobileFilters()) его показывает — те же
+     чекбоксы, та же JS-логика, просто видимость управляется кнопкой. */
+  .sidebar { display: none; margin-bottom: 16px; }
+  .sidebar.mobile-open { display: block; }
+  .mobile-filters-toggle { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 12px; padding: 9px 16px; border-radius: 20px; border: 1.5px solid var(--accent); background: var(--accent-light); color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; }
+  .stats-bar { gap: 20px; }
+  .about-inner { grid-template-columns: 1fr; }
+  .calc-row { grid-template-columns: 1fr; }
+  .calc-standalone { padding: 0; }
+
+  /* 18.08.2026, по запросу пользователя (несколько итераций): сначала
+     пробовали показать видео как фон в отступах над/под карточками
+     (padding-top/bottom у .promo-video-wrap) — не устроило, видео всё
+     равно оставалось частично перекрыто. Финальная версия: на мобильном
+     видео вообще перестаёт быть фоном (position:absolute) и становится
+     обычным блоком в потоке — видно целиком, во всю ширину, а калькулятор
+     и форма заявки идут СТРОГО ПОСЛЕ него, не перекрывая. */
+  .promo-video-wrap { padding: 0 0 20px; }
+  /* 21.08.2026: без aspect-ratio блок видео до подгрузки метаданных занимал
+     дефолтные 300×150px (или 0, пока не готов poster), а после появления
+     реальных размеров (448×672, портрет) резко "прыгал" вниз — пользователь
+     видел это как "картинка съезжает" и мелькающую полосу под ней. С
+     aspect-ratio браузер сразу резервирует финальную высоту под poster,
+     скачка нет. */
+  .promo-video { position: static; width: 100%; height: auto; aspect-ratio: 448 / 672; display: block; }
+  .promo-video-content { padding-top: 16px; }
+
+  /* Нав — 14.08.2026: раньше это была одна нерастягиваемая строка из
+     логотипа + 8 текстовых ссылок + 2 кнопок-пилюль, на ширине iPhone
+     (~375-430px) она либо вылезала за экран, либо сплющивалась —
+     пользователь заметил как "кривая разметка". Теперь переносится на
+     вторую строку и сжимается, а не ломается. */
+  nav { flex-wrap: wrap; row-gap: 8px; padding: 10px 16px; }
+  .logo-mark { height: 40px; }
+  .nav-links { flex-wrap: wrap; justify-content: center; gap: 8px 12px; width: 100%; }
+  /* T-13 (18.08.2026, аудит TASKS.md): тач-таргеты были меньше нормы
+     (44×44px) — 12px шрифт и паддинг 6×12px у ссылок нава means частые
+     промахи пальцем. min-height вместо явной высоты — текст остаётся
+     вертикально по центру за счёт display:inline-flex, ширина не растёт
+     принудительно (короткие ссылки не становятся квадратными кнопками). */
+  .nav-links a { font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .nav-rate, .nav-tg { padding: 6px 14px; font-size: 12px; min-height: 44px; box-sizing: border-box; }
+
+  /* Поиск в шапке каталога (сегодняшняя правка) — на узком экране
+     занимает всю ширину под заголовком, а не сжимается рядом с ним.
+     14.08.2026, найдено живым скриншотом на проде: .companies-header
+     сама стала колонкой, но .companies-header-right (search+sort) внутри
+     оставалась строкой и вылезала за экран горизонтально (sort уезжал
+     вправо за пределы viewport) — теперь тоже колонка, во всю ширину. */
+  .companies-header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .companies-header-right { flex-direction: column; align-items: stretch; width: 100%; margin-left: 0; gap: 8px; }
+  .companies-city-filter select { max-width: none; width: 100%; }
+  .search-wrap { flex: 1; }
+  .search-wrap input { width: 100%; }
+  .search-wrap input:focus { width: 100%; }
+
+  /* Карточка компании — шапка (аватар+имя+кнопка отзыва) и подвал
+     (мета+кнопка написать) были нерастягиваемыми flex-рядами, на узком
+     экране текст/кнопки налезали друг на друга вместо переноса строки.
+     14.08.2026, найдено тем же скриншотом: .card-actions (иконки
+     соцсетей+карт + кнопка "Написать в TG") тоже не переносилась и
+     вылезала за правый край карточки/страницы — добавлен перенос и
+     туда, и в сам ряд иконок .review-links. */
+  .card-header { flex-wrap: wrap; }
+  .card-right { text-align: left; width: 100%; margin-top: 8px; }
+  .card-top { flex-wrap: wrap; row-gap: 4px; }
+  .card-footer { flex-wrap: wrap; gap: 10px; }
+  .card-meta { flex-wrap: wrap; row-gap: 4px; }
+  .card-actions { flex-wrap: wrap; width: 100%; }
+  .review-links { flex-wrap: wrap; }
+
+  /* 18.08.2026, по запросу пользователя: на мобильном текста поверх
+     "голого" видео нигде нет — весь текст сидит внутри карточек
+     (.calc-section, .company-card.card-video-bg), у которых своя
+     непрозрачная/полупрозрачная подложка, читаемость не зависит от
+     оверлея над видео. Поэтому цветной/белый тонирующий оверлей на
+     мобильном убираем — видео показывается в исходном виде, без
+     затемнения/подкраски. На десктопе оверлей остаётся как есть. */
+  .promo-video-overlay, .companies-bg-overlay { display: none; }
+
+  /* Секция "Связаться с нами" (#contact) — найдено тем же живым JS-тестом
+     на overflow: это 3-колоночная grid-сетка (форма + Контакты + Условия
+     размещения), написанная инлайн-стилями (style="..."), без вообще
+     никакой мобильной обработки. Инлайн-стиль побеждает по specificity
+     обычный класс/id-селектор, поэтому здесь нужен !important, чтобы
+     реально переопределить grid-template-columns на мобильном. */
+  .contact-grid { grid-template-columns: 1fr; }
+}
+
+/* T-10: узкие телефоны (iPhone SE и подобные, ≤480px, а не только ≤680) —
+   ещё немного ужимаем то, что на 680 всё ещё может вылезать за край. */
+@media (max-width: 480px) {
+  .hero h1 { font-size: 22px; }
+  .companies-title { font-size: 17px; }
+  .card-name { font-size: 15px; }
+  .mr-price-badge { padding: 8px 12px; }
+  .mr-price-badge .mr-price { font-size: 17px; }
+}

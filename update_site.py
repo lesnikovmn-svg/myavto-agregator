@@ -344,6 +344,30 @@ for c in companies:
     onboarded = c["onboarded"].upper() == "TRUE"
     c_reviews = reviews_by_company.get(c["name"].strip().lower(), [])
 
+    # 24.08.2026 (по запросу пользователя: людям, у которых был негативный
+    # опыт с недобросовестными импортёрами, важно видеть, что компания
+    # реально проверена отзывами, а не просто заявляет о себе). Тег
+    # честный и производный — НЕ ставится вручную и не хранится в таблице
+    # отдельной колонкой, а считается каждый раз заново по реальным
+    # approved-отзывам компании (см. c_reviews выше): есть хотя бы один
+    # отзыв, и ни один не негативный (рейтинг 1-2 из 5). Осознанно НЕ
+    # делаем противоположный тег для компаний с плохими отзывами —
+    # публично клеймить конкретные компании через тег репутационно и
+    # юридически рискованно, задача агрегатора вознаграждать честных
+    # игроков, а не устраивать чёрный список.
+    company_tags = list(tags)
+    if c_reviews:
+        try:
+            has_negative = any(float(r.get("rating") or 0) <= 2 for r in c_reviews)
+        except (TypeError, ValueError):
+            has_negative = False
+        if not has_negative:
+            # На карточке (renderPage() в app.js) показываются только
+            # ПЕРВЫЕ 2 тега (c.tags.slice(0,2)) — ставим этот тег в начало
+            # списка, а не в конец, иначе у компаний с уже заполненными
+            # ручными тегами он рискует не влезть и никогда не показаться.
+            company_tags.insert(0, "Без негативных отзывов")
+
     companies_out.append(
         {
             "id": cid,
@@ -354,7 +378,7 @@ for c in companies:
             "delivered": c["delivered"],
             "description": c["description"],
             "directions": dirs,
-            "tags": tags,
+            "tags": company_tags,
             "telegram": c["telegram"],
             "phone": c["phone"],
             "site": c["site"],

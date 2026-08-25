@@ -203,6 +203,23 @@ def _collapse_blank_lines(lines):
     return result
 
 
+# VIN — стандартно 17 символов, буквы+цифры без I/O/Q (чтобы не путать с
+# 1/0). T-81 (25.08.2026, запрошено пользователем — "смотри какая задача
+# из канала арталекс винкод если есть в тексте и на картинке, фото убираем
+# последние 5 цифр, закрываем звездочкой"): пока сделана только текстовая
+# часть для artalexgroup — маскировка VIN на ФОТО (табличка/шильд) отложена,
+# нужен OCR и реальные примеры фото для прототипа (см. TASKS.md).
+_VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b", re.IGNORECASE)
+
+
+def mask_vin(text):
+    """Заменяет последние 5 символов найденного VIN на звёздочки (не только
+    цифры — пользователь сказал "последние 5 цифр", но VIN на этой позиции
+    может содержать и буквы; маскируем последние 5 символов целиком, чтобы
+    не оставлять частичный VIN читаемым из-за буквы на пятой позиции)."""
+    return _VIN_RE.sub(lambda m: m.group(0)[:-5] + "*****", text)
+
+
 def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
     bezpokrasa — вычищает построчную раскладку цены источника, вставляет
@@ -231,6 +248,9 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
     while kept and not kept[-1].strip():
         kept.pop()
     body = "\n".join(kept).strip()
+
+    if source_username == "artalexgroup":
+        body = mask_vin(body)
 
     if source_username == "bezpokrasa" and price_rub is not None:
         price_str = f"{price_rub:,}".replace(",", " ")

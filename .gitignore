@@ -5,6 +5,9 @@ bot_config.env
 bot_config.env.save
 *.env.save
 bot_state.json
+feedback_bot_config.env
+feedback_bot_state.json
+userbot_parser_state.json
 mail_config.env
 onboarding_emails_log.json
 visits.json

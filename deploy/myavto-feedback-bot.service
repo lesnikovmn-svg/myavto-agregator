@@ -1,0 +1,20 @@
+[Unit]
+Description=MyAvtoAgregator feedback bot (лид-анкета из постов -> пересылка Максиму/Антону)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+# Скрипт сам читает feedback_bot_config.env по относительному пути из
+# текущей директории — WorkingDirectory обязана совпадать с местом деплоя.
+WorkingDirectory=/var/www/myavto-agregator
+ExecStart=/usr/bin/python3 feedback_bot.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=myavto-feedback-bot
+
+[Install]
+WantedBy=multi-user.target

@@ -10,18 +10,39 @@ AskUserQuestion в этом же диалоге):
     ответов по grouped_id) концептуально не связана с этим ботом,
     смешивать не стали.
 
+v2 (25.08.2026, запрошено пользователем — "заявку нужно подправить:
+придумай оптимальный вариант, чтоб клиент сразу сам решил для себя какой
+авто ему нужен", уточнено через AskUserQuestion: кнопки + бюджет/тип
+кузова/новое-с пробегом):
+  - Анкета переделана с одного расплывчатого текстового вопроса "какая
+    машина интересует" на три наводящих вопроса КНОПКАМИ (inline
+    keyboard): бюджет диапазоном, тип кузова, новое/с пробегом. Кнопки
+    заставляют клиента сразу сузить выбор до конкретных параметров вместо
+    произвольного текста — и попутно помогают ему самому определиться,
+    что именно ему нужно. Последний вопрос (контакт) остался текстовым —
+    для телефона/username кнопки не подходят.
+  - Технически это первое место в проекте, где боту нужно обрабатывать
+    callback_query (нажатия inline-кнопок), не только обычные text-
+    сообщения — добавлены tg_send_buttons/tg_answer_callback/
+    tg_strip_keyboard и отдельная ветка в poll_loop.
+
 Что делает:
 1. Поллинг Telegram Bot API (getUpdates), тот же паттерн, что уже
    используется в telegram_bot_service.py (requests + optional PROXY_URL,
    без сторонних библиотек вроде python-telegram-bot — их в проекте нет,
    не стали добавлять ради одного файла).
 2. /start (в т.ч. по диплинку из ссылки в футере постов) — начинает
-   анкету заново, три вопроса подряд (машина -> бюджет -> контакт),
-   после последнего ответа подтверждает клиенту и пересылает заявку всем
+   анкету заново: три вопроса кнопками (бюджет -> тип кузова ->
+   новое/с пробегом), затем текстовый вопрос про контакт. После
+   последнего ответа подтверждает клиенту и пересылает заявку всем
    chat_id из MANAGER_CHAT_IDS.
 3. Если пользователь пишет что-то без активной сессии (не через /start) —
    всё равно начинаем анкету с первого вопроса, не заставляем разбираться
    с командами.
+4. Если на "кнопочный" вопрос прислали текст вместо нажатия кнопки —
+   не пытаемся угадать ответ, просим воспользоваться кнопками ещё раз.
+   Если нажали кнопку от уже пройденного/устаревшего вопроса (например,
+   после двойного клика) — такое нажатие тихо игнорируется.
 
 Хранилище — feedback_bot_state.json (сессии по chat_id + offset
 getUpdates), НЕ в git (.gitignore), тот же принцип атомарной записи
@@ -37,15 +58,16 @@ MANAGER_CHAT_IDS — узнать свой chat_id: написать что уг
 запущенному боту, посмотреть в journalctl -u myavto-feedback-bot строку
 "[feedback_bot] сообщение из chat_id=...".
 
-Известные упрощения v1:
-- Анкета линейная, без кнопок/inline-клавиатуры — три текстовых вопроса
-  подряд, отменить/вернуться назад нельзя, только начать заново через
-  /start.
-- Нет валидации ответов (бюджет/контакт принимаются как есть, любой
-  текст) — сознательно просто, чтобы не отсеивать реальные заявки
-  неудачным парсингом свободного текста.
+Известные упрощения v2:
 - Rate limiting не реализован — тот же трейд-офф, что в
   telegram_bot_service.py (небольшой объём заявок, не критично).
+- Ответ на текстовый вопрос (контакт) без валидации — принимается как
+  есть, любой текст, сознательно просто, чтобы не отсеивать реальные
+  заявки неудачным парсингом свободного текста.
+- Кнопочные вопросы жёстко привязаны к порядку шага (callback_data вида
+  "<step_key>:<option_code>" сверяется с текущим шагом сессии) — если
+  клиент отвечает не по порядку (например, старой клавиатурой после
+  /start заново), нажатие просто игнорируется, а не ломает анкету.
 """
 import json
 import logging
@@ -89,16 +111,63 @@ if not MANAGER_CHAT_IDS:
 
 STATE_FILE = "feedback_bot_state.json"
 
-# Порядок анкеты: (ключ_в_answers, текст_вопроса).
-QUESTIONS = [
-    ("car", "Какая машина вас интересует? (модель, ссылка на объявление или просто опишите словами)"),
-    ("budget", "Какой у вас бюджет?"),
-    ("contact", "Как с вами удобнее связаться? Укажите телефон или @username в Telegram."),
+# Анкета: наводящие вопросы кнопками (клиент сам сужает выбор до
+# конкретного авто), последний шаг — контакт текстом.
+# key    — идентификатор шага (используется в callback_data и в answers).
+# label  — короткая подпись для заявки менеджеру.
+# type   — "buttons" (inline keyboard) или "text" (обычное сообщение).
+# options — только для type="buttons": список (текст_кнопки, код_варианта).
+STEPS = [
+    {
+        "key": "budget",
+        "label": "Бюджет",
+        "type": "buttons",
+        "question": "Какой у вас бюджет на автомобиль?",
+        "options": [
+            ("До 1.5 млн ₽", "lt1.5"),
+            ("1.5–2.5 млн ₽", "1.5-2.5"),
+            ("2.5–4 млн ₽", "2.5-4"),
+            ("От 4 млн ₽", "gt4"),
+            ("Пока не определился(-лась)", "unsure"),
+        ],
+    },
+    {
+        "key": "body_type",
+        "label": "Тип кузова",
+        "type": "buttons",
+        "question": "Какой тип кузова вам нужен?",
+        "options": [
+            ("Седан", "sedan"),
+            ("Кроссовер/внедорожник", "suv"),
+            ("Хэтчбек", "hatchback"),
+            ("Минивэн/универсал", "van"),
+            ("Не важно", "any"),
+        ],
+    },
+    {
+        "key": "condition",
+        "label": "Состояние",
+        "type": "buttons",
+        "question": "Какой автомобиль ищете — новый или с пробегом?",
+        "options": [
+            ("Новый", "new"),
+            ("С пробегом", "used"),
+            ("Не принципиально", "any"),
+        ],
+    },
+    {
+        "key": "contact",
+        "label": "Контакт",
+        "type": "text",
+        "question": "Как с вами удобнее связаться? Укажите телефон или @username в Telegram.",
+    },
 ]
 
-WELCOME_TEXT = (
-    "Здравствуйте! Это бот обратной связи MY_Avto — соберём короткую заявку "
-    "и менеджер свяжется с вами в ближайшее время.\n\n" + QUESTIONS[0][1]
+WELCOME_PREFIX = (
+    "Здравствуйте! Это бот обратной связи MY_Avto.\n"
+    "Ответьте на пару вопросов кнопками — это поможет вам самим быстрее "
+    "определиться с вариантом, а нам подобрать подходящие предложения "
+    "и связаться с вами."
 )
 
 DONE_TEXT = (
@@ -138,6 +207,66 @@ def tg_send(chat_id, text):
         return None
 
 
+def build_inline_keyboard(step_key, options, per_row=2):
+    rows = []
+    row = []
+    for label, code in options:
+        row.append({"text": label, "callback_data": f"{step_key}:{code}"})
+        if len(row) == per_row:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return {"inline_keyboard": rows}
+
+
+def tg_send_buttons(chat_id, text, step_key, options):
+    try:
+        r = requests.post(
+            f"{API}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "reply_markup": build_inline_keyboard(step_key, options),
+            },
+            timeout=10,
+            proxies=PROXIES,
+        )
+        return r.json()
+    except Exception as e:
+        logger.warning("не удалось отправить кнопки %s: %s", chat_id, e)
+        return None
+
+
+def tg_answer_callback(callback_query_id):
+    # Обязательно отвечать на callback_query, иначе у клиента кнопка
+    # виснет в состоянии "загрузка" в интерфейсе Telegram.
+    try:
+        requests.post(
+            f"{API}/answerCallbackQuery",
+            json={"callback_query_id": callback_query_id},
+            timeout=10,
+            proxies=PROXIES,
+        )
+    except Exception as e:
+        logger.warning("не удалось ответить на callback %s: %s", callback_query_id, e)
+
+
+def tg_strip_keyboard(chat_id, message_id):
+    # Убираем клавиатуру у уже отвеченного вопроса, чтобы повторный клик
+    # по старым кнопкам не создавал путаницу (обрабатывается это и так
+    # безопасно через сверку step_key в handle_callback, но так чище).
+    try:
+        requests.post(
+            f"{API}/editMessageReplyMarkup",
+            json={"chat_id": chat_id, "message_id": message_id, "reply_markup": {"inline_keyboard": []}},
+            timeout=10,
+            proxies=PROXIES,
+        )
+    except Exception as e:
+        logger.warning("не удалось убрать клавиатуру %s/%s: %s", chat_id, message_id, e)
+
+
 def notify_managers(text):
     for chat_id in MANAGER_CHAT_IDS:
         tg_send(chat_id, text)
@@ -146,10 +275,27 @@ def notify_managers(text):
 def format_lead(username, chat_id, answers):
     who = f"@{username}" if username else f"id {chat_id}"
     lines = [f"🚗 Новая заявка через бота обратной связи (от {who})"]
-    for key, question in QUESTIONS:
-        label = question.split("?")[0].split("(")[0].strip().rstrip(":")
-        lines.append(f"{label}: {answers.get(key, '—')}")
+    for step in STEPS:
+        lines.append(f"{step['label']}: {answers.get(step['key'], '—')}")
     return "\n".join(lines)
+
+
+def send_step(chat_id, step, prefix=None):
+    text = f"{prefix}\n\n{step['question']}" if prefix else step["question"]
+    if step["type"] == "buttons":
+        tg_send_buttons(chat_id, text, step["key"], step["options"])
+    else:
+        tg_send(chat_id, text)
+
+
+def advance_session(chat_id, username, session, state):
+    if session["step"] < len(STEPS):
+        send_step(chat_id, STEPS[session["step"]])
+    else:
+        tg_send(chat_id, DONE_TEXT)
+        lead_text = format_lead(username, chat_id, session["answers"])
+        logger.info("[lead] %s", lead_text.replace("\n", " | "))
+        notify_managers(lead_text)
 
 
 def handle_message(chat_id, username, text, state):
@@ -157,38 +303,65 @@ def handle_message(chat_id, username, text, state):
     key = str(chat_id)
     session = sessions.get(key)
 
-    if text.strip().startswith("/start"):
+    if text.strip().startswith("/start") or session is None:
+        # И явный /start, и первое сообщение без команды — начинаем анкету
+        # заново с первого (кнопочного) вопроса, не заставляем разбираться
+        # с командами.
         sessions[key] = {"step": 0, "answers": {}, "username": username}
-        tg_send(chat_id, WELCOME_TEXT)
+        send_step(chat_id, STEPS[0], prefix=WELCOME_PREFIX)
         return
 
-    if session is None:
-        # Написали без /start (например, сразу текстом) — не заставляем
-        # разбираться с командами, просто начинаем анкету с первого вопроса
-        # и засчитываем это сообщение как приветствие, а не как ответ —
-        # человек ещё не видел вопрос, отвечать ему рано.
-        sessions[key] = {"step": 0, "answers": {}, "username": username}
-        tg_send(chat_id, WELCOME_TEXT)
-        return
-
-    step = session["step"]
-    if step >= len(QUESTIONS):
+    step_idx = session["step"]
+    if step_idx >= len(STEPS):
         # Анкета уже завершена в этой сессии, а пользователь написал ещё
         # что-то — не переспрашиваем заново молча, направляем к /start.
         tg_send(chat_id, "Заявка уже отправлена менеджеру. Чтобы оставить новую — отправьте /start.")
         return
 
-    field_key, _ = QUESTIONS[step]
-    session["answers"][field_key] = text.strip()
-    session["step"] = step + 1
+    step = STEPS[step_idx]
+    if step["type"] == "buttons":
+        # На кнопочный вопрос прислали текст вместо нажатия — не пытаемся
+        # угадать ответ по свободному тексту, просим воспользоваться
+        # кнопками (и присылаем их ещё раз на случай, если предыдущее
+        # сообщение потерялось из истории чата).
+        send_step(chat_id, step, prefix="Пожалуйста, выберите один из вариантов кнопками 👇")
+        return
 
-    if session["step"] < len(QUESTIONS):
-        tg_send(chat_id, QUESTIONS[session["step"]][1])
-    else:
-        tg_send(chat_id, DONE_TEXT)
-        lead_text = format_lead(username, chat_id, session["answers"])
-        logger.info("[lead] %s", lead_text.replace("\n", " | "))
-        notify_managers(lead_text)
+    # Текстовый шаг (контакт).
+    session["answers"][step["key"]] = text.strip()
+    session["step"] = step_idx + 1
+    advance_session(chat_id, username, session, state)
+
+
+def handle_callback(chat_id, username, data, state):
+    sessions = state.setdefault("sessions", {})
+    key = str(chat_id)
+    session = sessions.get(key)
+    if session is None or ":" not in data:
+        return
+
+    step_idx = session["step"]
+    if step_idx >= len(STEPS):
+        return
+
+    step = STEPS[step_idx]
+    if step["type"] != "buttons":
+        return
+
+    step_key, option_code = data.split(":", 1)
+    if step_key != step["key"]:
+        # Нажата кнопка от уже пройденного или устаревшего вопроса
+        # (например, двойной клик или клавиатура от анкеты до /start) —
+        # тихо игнорируем, сессия не портится.
+        return
+
+    label = next((opt_label for opt_label, opt_code in step["options"] if opt_code == option_code), None)
+    if label is None:
+        return
+
+    session["answers"][step["key"]] = label
+    session["step"] = step_idx + 1
+    advance_session(chat_id, username, session, state)
 
 
 def poll_loop():
@@ -218,18 +391,31 @@ def poll_loop():
             for u in updates:
                 state["last_update_id"] = u["update_id"]
                 msg = u.get("message")
-                if not msg or "text" not in msg:
-                    continue
-                chat_id = msg["chat"]["id"]
-                username = msg["from"].get("username", "")
-                text = msg["text"]
-                logger.info("сообщение из chat_id=%s, from=@%s, text=%r", chat_id, username, text)
-                try:
-                    handle_message(chat_id, username, text, state)
-                except Exception as e:
-                    # Одно сбойное сообщение не должно ронять весь поллинг —
-                    # тот же принцип, что в telegram_bot_service.py.
-                    logger.error("ошибка обработки сообщения от chat_id=%s: %s", chat_id, e)
+                cb = u.get("callback_query")
+
+                if msg and "text" in msg:
+                    chat_id = msg["chat"]["id"]
+                    username = msg["from"].get("username", "")
+                    text = msg["text"]
+                    logger.info("сообщение из chat_id=%s, from=@%s, text=%r", chat_id, username, text)
+                    try:
+                        handle_message(chat_id, username, text, state)
+                    except Exception as e:
+                        # Одно сбойное сообщение не должно ронять весь поллинг —
+                        # тот же принцип, что в telegram_bot_service.py.
+                        logger.error("ошибка обработки сообщения от chat_id=%s: %s", chat_id, e)
+                elif cb:
+                    chat_id = cb["message"]["chat"]["id"]
+                    username = cb.get("from", {}).get("username", "")
+                    data = cb.get("data", "")
+                    message_id = cb["message"]["message_id"]
+                    logger.info("callback от chat_id=%s, from=@%s, data=%r", chat_id, username, data)
+                    tg_answer_callback(cb["id"])
+                    tg_strip_keyboard(chat_id, message_id)
+                    try:
+                        handle_callback(chat_id, username, data, state)
+                    except Exception as e:
+                        logger.error("ошибка обработки callback от chat_id=%s: %s", chat_id, e)
             save_state(state)
         except Exception as e:
             logger.error("неожиданная ошибка в poll_loop: %s", e)

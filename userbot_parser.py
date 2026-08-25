@@ -17,17 +17,24 @@ TEST_BACKFILL_LIMIT постов каждого источника — не ну
 Известные упрощения v1 (см. T-77 в TASKS.md):
 - Альбомы (несколько фото в одном посте) обрабатываются по первому
   найденному медиа-файлу поста, не всей группой.
-- Курс EUR/RUB — константа в конфиге, обновлять вручную.
+- Курс EUR/RUB и USD/RUB — константы в конфиге, обновлять вручную.
 - Наценка на итоговую цену — грубая оценка (сумма уже данных в посте
   составляющих), не точный калькулятор растаможки.
+- winner_auto_club (добавлен 25.08.2026): с фото автоматически убирается
+  водяной знак канала (согласовано с собственником, template matching +
+  inpaint, см. remove_watermark ниже); видео с тем же знаком НЕ
+  обрабатывается — публикуется как есть.
 """
 import asyncio
+import io
 import json
 import logging
 import re
 from pathlib import Path
 from urllib.parse import urlparse
 
+import numpy as np
+import cv2
 from telethon import TelegramClient, events
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.errors import UserAlreadyParticipantError, MediaCaptionTooLongError
@@ -106,6 +113,23 @@ _CHINA_SPEC_LABEL_RE = re.compile(
     re.I,
 )
 
+# Только для winner_auto_club: собственные контакты/соцсети источника и
+# его строка цены (вставляем свою итоговую строку в рублях, см. ниже) —
+# те же общие _DROP_PATTERNS не ловят их (в тексте это голые домены/
+# юзернеймы без "http(s)://" и "www.").
+_WAC_DROP_PATTERNS = [
+    re.compile(r"@Art_WAC", re.I),
+    re.compile(r"instagram\.com", re.I),
+    re.compile(r"wa\.me", re.I),
+    re.compile(r"whats\s*app", re.I),
+    re.compile(r"tik\s*tok", re.I),
+    re.compile(r"winner[_.\s]*auto[_.\s]*club", re.I),
+    re.compile(r"^\s*[💸]?\s*\**\s*[Цц]ена", re.I),
+    re.compile(r"официальн[а-я]*\s*(дилер|партнёр)", re.I),
+    re.compile(r"репутаци", re.I),
+    re.compile(r"гарант[а-я]*\s*сделк", re.I),
+]
+
 MAX_CHINA_FEATURE_LINES = 6
 
 
@@ -153,13 +177,20 @@ def _collapse_blank_lines(lines):
     return result
 
 
+# Источники, у которых мы вычищаем построчную цену источника и вставляем
+# свою готовую строку в рублях вместо неё.
+_PRICE_LINE_SOURCES = {"bezpokrasa", "winner_auto_club"}
+
+
 def build_repost_text(raw_text, source_username=None, price_rub=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
-    Для bezpokrasa дополнительно вычищает построчную раскладку цены источника
-    и вставляет одну итоговую строку с уже посчитанной (с наценкой) ценой."""
+    Для bezpokrasa/winner_auto_club дополнительно вычищает построчную
+    раскладку цены источника и вставляет одну итоговую строку в рублях."""
     drop_patterns = list(_DROP_PATTERNS)
     if source_username == "bezpokrasa":
         drop_patterns += _CHINA_PRICE_LINE_PATTERNS
+    elif source_username == "winner_auto_club":
+        drop_patterns += _WAC_DROP_PATTERNS
 
     kept = []
     for line in raw_text.splitlines():
@@ -177,9 +208,15 @@ def build_repost_text(raw_text, source_username=None, price_rub=None):
         kept.pop()
     body = "\n".join(kept).strip()
 
-    if source_username == "bezpokrasa" and price_rub is not None:
+    if source_username in _PRICE_LINE_SOURCES and price_rub is not None:
         price_str = f"{price_rub:,}".replace(",", " ")
-        price_line = f"Цена под ключ в Москве: {price_str} \u20bd"
+        if source_username == "bezpokrasa":
+            price_line = f"Цена под ключ в Москве: {price_str} \u20bd"
+        else:
+            # winner_auto_club: только конверсия по курсу, без наценки за
+            # доставку/растаможку (в отличие от bezpokrasa) — формулировка
+            # не должна намекать на "под ключ".
+            price_line = f"Цена: {price_str} \u20bd (по курсу)"
         body = f"{body}\n\n{price_line}" if body else price_line
 
     return f"{body}\n\n{OUR_FOOTER}" if body else OUR_FOOTER
@@ -307,6 +344,7 @@ def parse_eu_wholesale(text):
         "vin": vin.group(1) if vin else None,
         "mileage": None,
         "price_eur_total": netto_v + export_v + customs_v,
+        "price_usd_total": None,
         "price_rub": None,  # считается отдельно, нужен курс
     }
 
@@ -349,19 +387,58 @@ def parse_china_invoice(text):
         "vin": vin.group(1) if vin else None,
         "mileage": mileage_str,
         "price_eur_total": None,
+        "price_usd_total": None,
         "price_rub": price_rub,
+    }
+
+
+def parse_winner_auto_club(text):
+    """Формат winner_auto_club: метки по-русски (Год выпуска/Пробег/Цена),
+    цена в $ (формат "54.500$" — точка как разделитель тысяч, знак после
+    числа). VIN в этом источнике обычно не публикуется — просто None,
+    ничего не выдумываем."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    title = None
+    for line in lines:
+        stripped = line.strip(" ❗️🚨🚘🔥‼️➡️➖—-*")
+        if stripped:
+            title = stripped
+            break
+
+    vin = re.search(r"vin[:\s]*([A-Za-z0-9]{5,20})", text, re.I)
+    mileage = re.search(r"[Пп]робег:?\s*\**\s*([\d.,\s]+)\s*км", text, re.I)
+    price = re.search(r"[Цц]ена:?\s*\**\s*([\d.,\s]+)\s*\$", text)
+
+    price_usd = clean_amount(price.group(1)) if price else None
+    if price_usd is None:
+        return None
+
+    mileage_str = None
+    if mileage:
+        mileage_str = f"{clean_amount(mileage.group(1))} км"
+
+    return {
+        "title": title or "Автомобиль",
+        "vin": vin.group(1) if vin else None,
+        "mileage": mileage_str,
+        "price_eur_total": None,
+        "price_usd_total": price_usd,
+        "price_rub": None,
     }
 
 
 SOURCE_PARSERS = {
     "artalexgroup": parse_eu_wholesale,
     "bezpokrasa": parse_china_invoice,
+    "winner_auto_club": parse_winner_auto_club,
 }
 
 
-def compute_price_rub(parsed, eur_rub_rate):
+def compute_price_rub(parsed, eur_rub_rate, usd_rub_rate=None):
     if parsed["price_rub"] is not None:
         return parsed["price_rub"]
+    if parsed.get("price_usd_total") is not None and usd_rub_rate:
+        return round(parsed["price_usd_total"] * usd_rub_rate)
     if parsed["price_eur_total"] is not None and eur_rub_rate:
         return round(parsed["price_eur_total"] * eur_rub_rate)
     return None
@@ -400,7 +477,127 @@ def group_backfill_messages(messages):
     return [groups[k] for k in order]
 
 
-async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, dry_run, test_group, state):
+# --- Удаление водяного знака (только winner_auto_club) ------------------
+#
+# Согласовано с собственником канала лично пользователем (24.08.2026,
+# "с собственником переговорили он не против") — без этого согласия
+# правку чужих фото делать было бы нельзя, даже технически возможную.
+#
+# Подход: multi-scale template matching (cv2.matchTemplate,
+# TM_CCOEFF_NORMED) находит бейдж "WINNER AUTO CLUB" на фото в неизвестном
+# заранее масштабе/позиции, затем cv2.inpaint (INPAINT_TELEA) заполняет
+# найденную область на основе окружающей текстуры — по прямому визуальному
+# сравнению с обычным блюром это даёт заметно более естественный результат
+# (не выглядит как затёртый прямоугольник). Если знак не найден с уверенным
+# совпадением — фото не трогаем и шлём как есть, чтобы не портить кадр
+# ложным срабатыванием.
+#
+# v1 сознательно ограничен фото — видео с этим бейджем не обрабатываются
+# (см. TASKS.md), нужен отдельный подход (кадр за кадром/трекинг).
+
+WATERMARK_TEMPLATE_PATH = Path(__file__).parent / "watermark_templates" / "winner_auto_club.png"
+_WATERMARK_MATCH_THRESHOLD = 0.6
+_WATERMARK_SCALES = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
+_WATERMARK_PAD = 8  # px, отступ вокруг найденного бокса перед inpaint
+
+_watermark_template_gray = None
+
+
+def _load_watermark_template():
+    global _watermark_template_gray
+    if _watermark_template_gray is None:
+        tmpl = cv2.imread(str(WATERMARK_TEMPLATE_PATH), cv2.IMREAD_GRAYSCALE)
+        if tmpl is None:
+            raise RuntimeError(f"Не удалось загрузить шаблон водяного знака: {WATERMARK_TEMPLATE_PATH}")
+        _watermark_template_gray = tmpl
+    return _watermark_template_gray
+
+
+def _find_watermark_box(image_gray, template_gray):
+    """Перебирает несколько масштабов шаблона — бейдж на разных фото может
+    быть разного размера в зависимости от разрешения кадра у источника.
+    Возвращает (x, y, w, h, score) лучшего совпадения."""
+    best = None
+    th, tw = template_gray.shape[:2]
+    for scale in _WATERMARK_SCALES:
+        w, h = int(tw * scale), int(th * scale)
+        if w < 8 or h < 8 or w > image_gray.shape[1] or h > image_gray.shape[0]:
+            continue
+        resized = cv2.resize(template_gray, (w, h))
+        result = cv2.matchTemplate(image_gray, resized, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        if best is None or max_val > best[4]:
+            best = (max_loc[0], max_loc[1], w, h, max_val)
+    return best
+
+
+def remove_watermark(image_bytes):
+    """Убирает бейдж WINNER AUTO CLUB с фото (JPEG/PNG-байты на входе и
+    выходе). Если знак не найден уверенно — возвращает исходные байты
+    без изменений."""
+    template_gray = _load_watermark_template()
+    arr = np.frombuffer(image_bytes, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return image_bytes
+
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    box = _find_watermark_box(img_gray, template_gray)
+    if box is None or box[4] < _WATERMARK_MATCH_THRESHOLD:
+        logger.info("Водяной знак не найден уверенно (score=%s) — фото без изменений", box[4] if box else None)
+        return image_bytes
+
+    x, y, w, h, score = box
+    pad = _WATERMARK_PAD
+    x0, y0 = max(0, x - pad), max(0, y - pad)
+    x1, y1 = min(img.shape[1], x + w + pad), min(img.shape[0], y + h + pad)
+
+    mask = np.zeros(img.shape[:2], dtype=np.uint8)
+    mask[y0:y1, x0:x1] = 255
+    result = cv2.inpaint(img, mask, 7, cv2.INPAINT_TELEA)
+
+    ok, encoded = cv2.imencode(".jpg", result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+    if not ok:
+        return image_bytes
+    return encoded.tobytes()
+
+
+# Источники, чьи фото нужно скачать/обработать перед отправкой (а не просто
+# переслать оригинальный Telegram-media-хэндл, как для остальных).
+PHOTO_PROCESSORS = {
+    "winner_auto_club": remove_watermark,
+}
+
+
+async def _prepare_media_list(client, source_username, messages):
+    """Для большинства источников просто передаём Telegram media как есть —
+    без перекачки. Для источников из PHOTO_PROCESSORS фото скачиваем,
+    прогоняем через процессор (сейчас — удаление водяного знака) и шлём уже
+    новыми байтами; видео не трогаем (см. комментарий выше)."""
+    processor = PHOTO_PROCESSORS.get(source_username)
+    media_list = []
+    for m in messages:
+        if not m.media:
+            continue
+        if processor and m.photo:
+            try:
+                raw = await client.download_media(m, file=bytes)
+                processed = processor(raw)
+                bio = io.BytesIO(processed)
+                bio.name = f"{m.id}.jpg"
+                media_list.append(bio)
+            except Exception:
+                logger.exception(
+                    "[%s#%s] ошибка при обработке фото (водяной знак) — шлю оригинал",
+                    source_username, m.id,
+                )
+                media_list.append(m.media)
+        else:
+            media_list.append(m.media)
+    return media_list
+
+
+async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state):
     ids = [m.id for m in messages]
     text = next((m.raw_text for m in messages if m.raw_text and m.raw_text.strip()), "")
     if not text.strip():
@@ -417,14 +614,14 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         logger.info("[%s#%s] не распознан как объявление об авто — пропускаю", source_username, ids)
         return
 
-    price_rub = compute_price_rub(parsed, eur_rub_rate)
+    price_rub = compute_price_rub(parsed, eur_rub_rate, usd_rub_rate)
     if price_rub is None:
         logger.info("[%s#%s] не удалось посчитать цену в рублях — пропускаю, не рискую с каналом", source_username, ids)
         return
 
     real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
     post_text = build_repost_text(text, source_username, price_rub)
-    media_list = [m.media for m in messages if m.media]
+    media_list = await _prepare_media_list(client, source_username, messages)
 
     if dry_run:
         send_targets = [test_group] if test_group else []
@@ -442,12 +639,21 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
     for target in send_targets:
         try:
             if media_list:
+                # BytesIO (обработанные фото winner_auto_club) — курсор после
+                # предыдущей отправки в конце файла, перематываем перед
+                # каждой новой целью, иначе Telegram получит пустой файл.
+                for item in media_list:
+                    if isinstance(item, io.BytesIO):
+                        item.seek(0)
                 try:
                     await client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False)
                 except MediaCaptionTooLongError:
                     # Подпись реально не влезла (Telegram сам так решил) — шлём
                     # фото/видео без подписи, текст отдельным сообщением следом.
                     logger.info("[%s#%s] подпись слишком длинная для медиа, шлю текст отдельным сообщением", source_username, ids)
+                    for item in media_list:
+                        if isinstance(item, io.BytesIO):
+                            item.seek(0)
                     await client.send_message(target, "", file=media_list)
                     await client.send_message(target, post_text, parse_mode="md", link_preview=False)
             else:
@@ -484,10 +690,15 @@ async def main():
     api_id = env.get("API_ID")
     api_hash = env.get("API_HASH")
     proxy = build_proxy(env.get("PROXY_URL"))
-    sources = [s.strip().lstrip("@") for s in env.get("SOURCES", "artalexgroup,bezpokrasa").split(",") if s.strip()]
+    # .lower() — источники и ключи SOURCE_PARSERS/PHOTO_PROCESSORS/state
+    # должны совпадать регистронезависимо (winner_auto_club пишется в ТГ с
+    # заглавных букв: @Winner_Auto_Club); event.chat.username в живом потоке
+    # уже приводится к нижнему регистру ниже, теперь и здесь для бэкфилла.
+    sources = [s.strip().lstrip("@").lower() for s in env.get("SOURCES", "artalexgroup,bezpokrasa").split(",") if s.strip()]
     target_optimal = env.get("TARGET_OPTIMAL", "@My_Avto_Optimal")
     target_my_avto5 = env.get("TARGET_MY_AVTO5", "@MY_Avto5")
     eur_rub_rate = float(env.get("EUR_RUB_RATE", "100"))
+    usd_rub_rate = float(env.get("USD_RUB_RATE", "80"))
     dry_run = env.get("DRY_RUN", "true").strip().lower() != "false"
     # Бэкфилл при старте работает и в боевом режиме, не только в DRY_RUN —
     # чтобы при первом запуске на реальные каналы сразу подтянуть немного
@@ -538,7 +749,7 @@ async def main():
                     # проверки каждый рестарт заново постил бы весь бэкфилл).
                     skipped += 1
                     continue
-                await handle_group(client, source, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
+                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state)
             if skipped:
                 logger.info("[%s] %s из %s постов бэкфилла уже были обработаны раньше — пропущены", source, skipped, len(groups))
         logger.info("--- Конец стартового бэкфилла, жду новые посты в реальном времени ---")
@@ -562,7 +773,7 @@ async def main():
             # устраивала) — этот пост уже был отправлен, не дублируем.
             logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, ids)
             return
-        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, dry_run, test_group, state)
+        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state)
 
     @client.on(events.NewMessage(chats=sources))
     async def on_new_message(event):
@@ -572,7 +783,7 @@ async def main():
             if _already_sent(state, source_username, [msg.id]):
                 logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, [msg.id])
                 return
-            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, dry_run, test_group, state)
+            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state)
             return
         gid = msg.grouped_id
         pending_albums.setdefault(gid, []).append(msg)

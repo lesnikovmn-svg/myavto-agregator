@@ -9,3 +9,8 @@ ddgs
 gunicorn
 telethon
 python-socks
+# T-77 (25.08.2026): удаление водяного знака с фото winner_auto_club —
+# headless-сборка opencv, т.к. на VPS нет дисплея/GUI-либ (opencv-python
+# тянет их и не ставится на голом сервере).
+opencv-python-headless
+numpy

@@ -14,6 +14,17 @@ TEST_BACKFILL_LIMIT постов каждого источника — не ну
 постов, чтобы проверить парсинг.
 Переключить на боевой режим: DRY_RUN=false в userbot_config.env.
 
+VIDEO_DRY_RUN=true (по умолчанию, T-79, 25.08.2026) — НЕЗАВИСИМЫЙ от
+DRY_RUN переключатель именно для постов, где есть видео: пока он true,
+такие посты всегда уходят в тестовую группу, даже если общий DRY_RUN уже
+false (боевой режим для фото/текста). Альбом публикуется ЦЕЛИКОМ в одно
+место — фото и видео одного поста никогда не разбиваются по разным
+каналам. Причина: снятие водяного знака с видео (winner_auto_club) ещё
+не встроено в этот файл (см. /tmp/video_watermark_prototype.py в сессии
+25.08.2026 — рабочий прототип, не интегрирован), публиковать видео с
+чужим логотипом в боевые нельзя. Когда прототип встроят и подтвердят на
+реальных постах — выключить VIDEO_DRY_RUN=false в userbot_config.env.
+
 Известные упрощения v1 (см. T-77 в TASKS.md):
 - Альбомы (несколько фото в одном посте) обрабатываются по первому
   найденному медиа-файлу поста, не всей группой.
@@ -23,7 +34,8 @@ TEST_BACKFILL_LIMIT постов каждого источника — не ну
 - winner_auto_club (добавлен 25.08.2026): с фото автоматически убирается
   водяной знак канала (согласовано с собственником, template matching +
   inpaint, см. remove_watermark ниже); видео с тем же знаком НЕ
-  обрабатывается — публикуется как есть.
+  обрабатывается — публикуется как есть, и поэтому такие посты пока
+  принудительно идут в тестовую группу через VIDEO_DRY_RUN (см. выше).
 """
 import asyncio
 import io
@@ -666,7 +678,7 @@ async def _prepare_media_list(client, source_username, messages):
     return media_list
 
 
-async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username=None):
+async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username=None):
     ids = [m.id for m in messages]
     text = next((m.raw_text for m in messages if m.raw_text and m.raw_text.strip()), "")
     if not text.strip():
@@ -692,7 +704,20 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
     post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username)
     media_list = await _prepare_media_list(client, source_username, messages)
 
-    if dry_run:
+    # 25.08.2026 (решение пользователя): фото/текст уже можно в боевые группы,
+    # а видео — пока нет (для winner_auto_club водяной знак с видео ещё не
+    # снимается, публиковать с логотипом источника в боевые нельзя). Поэтому
+    # DRY_RUN и video_dry_run — теперь ДВА независимых переключателя:
+    # пост с видео всегда идёт в тестовую группу, пока video_dry_run не
+    # выключат отдельно (когда обработка видео подтвердится на реальных
+    # постах), независимо от общего DRY_RUN. Пост без видео — как обычно,
+    # по общему DRY_RUN. Альбом (фото+видео вместе) публикуется ЦЕЛИКОМ в
+    # одно место — не разбиваем медиа одного поста на разные группы.
+    has_video = any(getattr(m, "video", None) for m in messages)
+    if has_video and video_dry_run:
+        send_targets = [test_group] if test_group else []
+        note = f" (видео -> тестовая, боевые цели были бы: {real_targets})"
+    elif dry_run:
         send_targets = [test_group] if test_group else []
         note = f" (боевые цели были бы: {real_targets})"
     else:
@@ -773,6 +798,12 @@ async def main():
     # задан — футер как раньше, без строки про бота.
     feedback_bot_username = env.get("FEEDBACK_BOT_USERNAME", "").strip().lstrip("@")
     dry_run = env.get("DRY_RUN", "true").strip().lower() != "false"
+    # T-79 (25.08.2026, решение пользователя): фото/текст уже можно в
+    # боевые группы, видео — пока нет (снятие вотемарка с видео ещё не
+    # подключено в проде). Отдельный переключатель именно для постов с
+    # видео — держим true (тестовая группа), пока video-пайплайн не
+    # подтвердится на реальных постах, независимо от общего DRY_RUN.
+    video_dry_run = env.get("VIDEO_DRY_RUN", "true").strip().lower() != "false"
     # Бэкфилл при старте работает и в боевом режиме, не только в DRY_RUN —
     # чтобы при первом запуске на реальные каналы сразу подтянуть немного
     # свежего контента, а не просто ждать новых постов с нуля. Благодаря
@@ -791,12 +822,16 @@ async def main():
     await client.start()
 
     test_group = None
-    if dry_run and test_group_invite:
+    # Тестовая группа нужна, если её вообще может использовать хоть один из
+    # двух режимов — общий DRY_RUN ИЛИ video_dry_run (посты с видео теперь
+    # могут уходить в тест, даже когда общий режим уже боевой).
+    if (dry_run or video_dry_run) and test_group_invite:
         test_group = await ensure_test_group(client, test_group_invite)
 
     logger.info(
-        "Режим: %s | источники: %s | цели: %s / %s",
+        "Режим: %s | видео: %s | источники: %s | цели: %s / %s",
         "DRY_RUN -> тестовая группа" if dry_run else "БОЕВОЙ",
+        "DRY_RUN -> тестовая группа" if video_dry_run else "БОЕВОЙ",
         sources, target_optimal, target_my_avto5,
     )
 
@@ -822,7 +857,7 @@ async def main():
                     # проверки каждый рестарт заново постил бы весь бэкфилл).
                     skipped += 1
                     continue
-                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username)
+                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username)
             if skipped:
                 logger.info("[%s] %s из %s постов бэкфилла уже были обработаны раньше — пропущены", source, skipped, len(groups))
         logger.info("--- Конец стартового бэкфилла, жду новые посты в реальном времени ---")
@@ -846,7 +881,7 @@ async def main():
             # устраивала) — этот пост уже был отправлен, не дублируем.
             logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, ids)
             return
-        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username)
+        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username)
 
     @client.on(events.NewMessage(chats=sources))
     async def on_new_message(event):
@@ -856,7 +891,7 @@ async def main():
             if _already_sent(state, source_username, [msg.id]):
                 logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, [msg.id])
                 return
-            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username)
+            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username)
             return
         gid = msg.grouped_id
         pending_albums.setdefault(gid, []).append(msg)

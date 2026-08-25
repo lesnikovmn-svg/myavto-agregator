@@ -177,15 +177,13 @@ def _collapse_blank_lines(lines):
     return result
 
 
-# Источники, у которых мы вычищаем построчную цену источника и вставляем
-# свою готовую строку в рублях вместо неё.
-_PRICE_LINE_SOURCES = {"bezpokrasa", "winner_auto_club"}
-
-
-def build_repost_text(raw_text, source_username=None, price_rub=None):
+def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
-    Для bezpokrasa/winner_auto_club дополнительно вычищает построчную
-    раскладку цены источника и вставляет одну итоговую строку в рублях."""
+    bezpokrasa — вычищает построчную раскладку цены источника, вставляет
+    готовую строку в рублях (с наценкой за доставку под ключ). winner_auto_club
+    (решение пользователя 25.08.2026) — цену оставляем в $, без конвертации в
+    рубли: это цена в Грузии, за точной ценой к моменту сделки просят писать
+    в личку менеджерам (курс/доставка/растаможка не фиксированы заранее)."""
     drop_patterns = list(_DROP_PATTERNS)
     if source_username == "bezpokrasa":
         drop_patterns += _CHINA_PRICE_LINE_PATTERNS
@@ -208,15 +206,13 @@ def build_repost_text(raw_text, source_username=None, price_rub=None):
         kept.pop()
     body = "\n".join(kept).strip()
 
-    if source_username in _PRICE_LINE_SOURCES and price_rub is not None:
+    if source_username == "bezpokrasa" and price_rub is not None:
         price_str = f"{price_rub:,}".replace(",", " ")
-        if source_username == "bezpokrasa":
-            price_line = f"Цена под ключ в Москве: {price_str} \u20bd"
-        else:
-            # winner_auto_club: только конверсия по курсу, без наценки за
-            # доставку/растаможку (в отличие от bezpokrasa) — формулировка
-            # не должна намекать на "под ключ".
-            price_line = f"Цена: {price_str} \u20bd (по курсу)"
+        price_line = f"Цена под ключ в Москве: {price_str} \u20bd"
+        body = f"{body}\n\n{price_line}" if body else price_line
+    elif source_username == "winner_auto_club" and price_usd is not None:
+        price_str = f"{price_usd:,}"
+        price_line = f"Цена: ${price_str} (цена в Грузии). За точной ценой на момент сделки — пишите в личку."
         body = f"{body}\n\n{price_line}" if body else price_line
 
     return f"{body}\n\n{OUR_FOOTER}" if body else OUR_FOOTER
@@ -620,7 +616,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         return
 
     real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
-    post_text = build_repost_text(text, source_username, price_rub)
+    post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"))
     media_list = await _prepare_media_list(client, source_username, messages)
 
     if dry_run:

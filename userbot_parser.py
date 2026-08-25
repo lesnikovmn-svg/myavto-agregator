@@ -506,28 +506,40 @@ def group_backfill_messages(messages):
 # v1 сознательно ограничен фото — видео с этим бейджем не обрабатываются
 # (см. TASKS.md), нужен отдельный подход (кадр за кадром/трекинг).
 
-WATERMARK_TEMPLATE_PATH = Path(__file__).parent / "watermark_templates" / "winner_auto_club.png"
+# Канал использует несколько разных дизайнов бейджа (минимум два подтверждено
+# на практике: светлый шаблон с горой и тёмный/текстурный шаблон — см.
+# TASKS.md T-77) — перебираем все известные шаблоны из watermark_templates/
+# и берём лучшее совпадение по всем сразу.
+WATERMARK_TEMPLATES_DIR = Path(__file__).parent / "watermark_templates"
+WATERMARK_TEMPLATE_GLOB = "winner_auto_club*.png"
 _WATERMARK_MATCH_THRESHOLD = 0.6
 _WATERMARK_SCALES = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 _WATERMARK_PAD = 8  # px, отступ вокруг найденного бокса перед inpaint
 
-_watermark_template_gray = None
+_watermark_templates_gray = None
 
 
-def _load_watermark_template():
-    global _watermark_template_gray
-    if _watermark_template_gray is None:
-        tmpl = cv2.imread(str(WATERMARK_TEMPLATE_PATH), cv2.IMREAD_GRAYSCALE)
-        if tmpl is None:
-            raise RuntimeError(f"Не удалось загрузить шаблон водяного знака: {WATERMARK_TEMPLATE_PATH}")
-        _watermark_template_gray = tmpl
-    return _watermark_template_gray
+def _load_watermark_templates():
+    global _watermark_templates_gray
+    if _watermark_templates_gray is None:
+        paths = sorted(WATERMARK_TEMPLATES_DIR.glob(WATERMARK_TEMPLATE_GLOB))
+        templates = []
+        for p in paths:
+            tmpl = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+            if tmpl is None:
+                logger.warning("Не удалось загрузить шаблон водяного знака: %s — пропускаю", p)
+                continue
+            templates.append(tmpl)
+        if not templates:
+            raise RuntimeError(f"Не найдено ни одного шаблона водяного знака в {WATERMARK_TEMPLATES_DIR}")
+        _watermark_templates_gray = templates
+    return _watermark_templates_gray
 
 
 def _find_watermark_box(image_gray, template_gray):
     """Перебирает несколько масштабов шаблона — бейдж на разных фото может
     быть разного размера в зависимости от разрешения кадра у источника.
-    Возвращает (x, y, w, h, score) лучшего совпадения."""
+    Возвращает (x, y, w, h, score) лучшего совпадения для ОДНОГО шаблона."""
     best = None
     th, tw = template_gray.shape[:2]
     for scale in _WATERMARK_SCALES:
@@ -542,18 +554,30 @@ def _find_watermark_box(image_gray, template_gray):
     return best
 
 
+def _find_best_watermark_box(image_gray, templates_gray):
+    """Прогоняет image_gray через все известные шаблоны и возвращает лучший
+    результат (по score) среди них — так один вызов ловит любой из
+    известных дизайнов бейджа."""
+    best = None
+    for template_gray in templates_gray:
+        box = _find_watermark_box(image_gray, template_gray)
+        if box is not None and (best is None or box[4] > best[4]):
+            best = box
+    return best
+
+
 def remove_watermark(image_bytes):
     """Убирает бейдж WINNER AUTO CLUB с фото (JPEG/PNG-байты на входе и
-    выходе). Если знак не найден уверенно — возвращает исходные байты
-    без изменений."""
-    template_gray = _load_watermark_template()
+    выходе). Если знак не найден уверенно ни одним из известных шаблонов —
+    возвращает исходные байты без изменений."""
+    templates_gray = _load_watermark_templates()
     arr = np.frombuffer(image_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
         return image_bytes
 
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    box = _find_watermark_box(img_gray, template_gray)
+    box = _find_best_watermark_box(img_gray, templates_gray)
     if box is None or box[4] < _WATERMARK_MATCH_THRESHOLD:
         logger.info("Водяной знак не найден уверенно (score=%s) — фото без изменений", box[4] if box else None)
         return image_bytes

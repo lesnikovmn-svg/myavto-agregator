@@ -51,12 +51,14 @@ STATE_PATH = Path("userbot_parser_state.json")
 # по образцу реального поста на канале. Плейсхолдеры без ссылок (MAX,
 # Яндекс) — заполнить точными URL, когда пользователь их даст, пока просто
 # текст, как в оригинале.
-OUR_FOOTER = """Почему именно MY_Avto?
+# Разбит на intro/contacts (25.08.2026, T-78), чтобы вставить строку с
+# ботом обратной связи МЕЖДУ ними — см. build_footer() ниже.
+_OUR_FOOTER_INTRO = """Почему именно MY_Avto?
 Мы не просто продаём автомобили. Мы тщательно подбираем машину, которая на 100% соответствует вашим задачам, бюджету, стилю вождения и ожиданиям. Каждый экземпляр проходит полную проверку по всем параметрам.
 
-Фото/видео, осмотр после доставки, полный расчёт под ключ — пишите прямо сейчас!
+Фото/видео, осмотр после доставки, полный расчёт под ключ — пишите прямо сейчас!"""
 
-✈️ Telegram: [My_Avto_Optimal](https://t.me/My_Avto_Optimal)
+_OUR_FOOTER_CONTACTS = """✈️ Telegram: [My_Avto_Optimal](https://t.me/My_Avto_Optimal)
 ✈️ Telegram: [MY_Avto5](https://t.me/MY_Avto5)
 ✈️ Telegram: [my_avto_opyt](https://t.me/my_avto_opyt)
 ✈️ Максим: [LesnikovM](https://t.me/LesnikovM) | [+7 938 409-67-08](tel:+79384096708)
@@ -68,6 +70,18 @@ OUR_FOOTER = """Почему именно MY_Avto?
 💬 MAX: [Присоединиться](https://max.ru/join/DXEGJWNaZPpj8WYi3eIMqJLriw-T0hF5ddCfUN2tk7I)
 📍 Яндекс: [Профиль](https://yandex.ru/profile/-/CTvFvXPa)
 MY_Avto — ваш надёжный партнёр в выборе авто! 🚗"""
+
+OUR_FOOTER = f"{_OUR_FOOTER_INTRO}\n\n{_OUR_FOOTER_CONTACTS}"
+
+
+def build_footer(feedback_bot_username=None):
+    """Как OUR_FOOTER, но если задан FEEDBACK_BOT_USERNAME (T-78, бот
+    обратной связи) — вставляет ссылку на бота отдельной строкой перед
+    остальными контактами."""
+    if not feedback_bot_username:
+        return OUR_FOOTER
+    bot_line = f"📮 Оставить заявку боту: [Написать](https://t.me/{feedback_bot_username})"
+    return f"{_OUR_FOOTER_INTRO}\n\n{bot_line}\n{_OUR_FOOTER_CONTACTS}"
 
 # Строки источника, которые вычищаем перед репостом — их собственные сайт/
 # контакты/CTA, чтобы покупатель писал нам, а не в источник.
@@ -177,7 +191,7 @@ def _collapse_blank_lines(lines):
     return result
 
 
-def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None):
+def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
     bezpokrasa — вычищает построчную раскладку цены источника, вставляет
     готовую строку в рублях (с наценкой за доставку под ключ). winner_auto_club
@@ -215,7 +229,8 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
         price_line = f"Цена: ${price_str} (цена в Грузии). За точной ценой на момент сделки — пишите в личку."
         body = f"{body}\n\n{price_line}" if body else price_line
 
-    return f"{body}\n\n{OUR_FOOTER}" if body else OUR_FOOTER
+    footer = build_footer(feedback_bot_username)
+    return f"{body}\n\n{footer}" if body else footer
 
 PRICE_LOW = 4_500_000
 PRICE_HIGH = 6_000_000
@@ -593,7 +608,7 @@ async def _prepare_media_list(client, source_username, messages):
     return media_list
 
 
-async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state):
+async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username=None):
     ids = [m.id for m in messages]
     text = next((m.raw_text for m in messages if m.raw_text and m.raw_text.strip()), "")
     if not text.strip():
@@ -616,7 +631,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         return
 
     real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
-    post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"))
+    post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username)
     media_list = await _prepare_media_list(client, source_username, messages)
 
     if dry_run:
@@ -695,6 +710,10 @@ async def main():
     target_my_avto5 = env.get("TARGET_MY_AVTO5", "@MY_Avto5")
     eur_rub_rate = float(env.get("EUR_RUB_RATE", "100"))
     usd_rub_rate = float(env.get("USD_RUB_RATE", "80"))
+    # T-78 (25.08.2026): бот обратной связи — если задан в конфиге, в футер
+    # каждого поста добавляется ссылка на него (см. build_footer()). Не
+    # задан — футер как раньше, без строки про бота.
+    feedback_bot_username = env.get("FEEDBACK_BOT_USERNAME", "").strip().lstrip("@")
     dry_run = env.get("DRY_RUN", "true").strip().lower() != "false"
     # Бэкфилл при старте работает и в боевом режиме, не только в DRY_RUN —
     # чтобы при первом запуске на реальные каналы сразу подтянуть немного
@@ -745,7 +764,7 @@ async def main():
                     # проверки каждый рестарт заново постил бы весь бэкфилл).
                     skipped += 1
                     continue
-                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state)
+                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username)
             if skipped:
                 logger.info("[%s] %s из %s постов бэкфилла уже были обработаны раньше — пропущены", source, skipped, len(groups))
         logger.info("--- Конец стартового бэкфилла, жду новые посты в реальном времени ---")
@@ -769,7 +788,7 @@ async def main():
             # устраивала) — этот пост уже был отправлен, не дублируем.
             logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, ids)
             return
-        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state)
+        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username)
 
     @client.on(events.NewMessage(chats=sources))
     async def on_new_message(event):
@@ -779,7 +798,7 @@ async def main():
             if _already_sent(state, source_username, [msg.id]):
                 logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, [msg.id])
                 return
-            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state)
+            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, test_group, state, feedback_bot_username)
             return
         gid = msg.grouped_id
         pending_albums.setdefault(gid, []).append(msg)

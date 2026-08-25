@@ -156,6 +156,23 @@ _WAC_DROP_PATTERNS = [
     re.compile(r"гарант[а-я]*\s*сделк", re.I),
 ]
 
+# T-82 (25.08.2026, добавлен источник @TamSyam26, "с этой группы тоже
+# парсим объявления"). Строки с ценой источника вычищаем целиком (обе —
+# "под ключ до РФ" и "с доставкой в <город продавца>") и вставляем свою
+# одну строку под ключ с доставкой в Краснодар (решение пользователя:
+# "меняем на с доставкой на краснодар" / "локацию меняем на краснодар
+# (под ключ)"). Адрес офиса продавца и промо-блоки (кредит, свой канал в
+# MAX, CTA "купить консультацию") вычищаем как чужие контакты у других
+# источников (решение пользователя — "Вычищать"). "Доставка в Москву
+# +30000 т₽" пользователь попросил ОСТАВИТЬ как есть.
+_TAM_DROP_PATTERNS = [
+    re.compile(r"офис\s+находит", re.I),
+    re.compile(r"^\s*[✅]?\s*[Цц]ена", re.I),
+    re.compile(r"в\s+кредит", re.I),
+    re.compile(r"MAX\s*канал", re.I),
+    re.compile(r"[Кк]упить.*консультац", re.I),
+]
+
 MAX_CHINA_FEATURE_LINES = 6
 
 
@@ -232,6 +249,8 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
         drop_patterns += _CHINA_PRICE_LINE_PATTERNS
     elif source_username == "winner_auto_club":
         drop_patterns += _WAC_DROP_PATTERNS
+    elif source_username == "tamsyam26":
+        drop_patterns += _TAM_DROP_PATTERNS
 
     kept = []
     for line in raw_text.splitlines():
@@ -251,10 +270,19 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
 
     if source_username == "artalexgroup":
         body = mask_vin(body)
+    elif source_username == "tamsyam26":
+        # Продавец в Ставрополе, мы работаем из Краснодара — город продавца
+        # в оставшемся тексте (например, в строке про сроки доставки) не
+        # должен противоречить нашей же строке с ценой ниже.
+        body = re.sub(r"ставрополь", "Краснодар", body, flags=re.I)
 
     if source_username == "bezpokrasa" and price_rub is not None:
         price_str = f"{price_rub:,}".replace(",", " ")
         price_line = f"Цена под ключ в Москве: {price_str} \u20bd"
+        body = f"{body}\n\n{price_line}" if body else price_line
+    elif source_username == "tamsyam26" and price_rub is not None:
+        price_str = f"{price_rub:,}".replace(",", " ")
+        price_line = f"Цена под ключ в Краснодаре: {price_str} " + "₽"
         body = f"{body}\n\n{price_line}" if body else price_line
     elif source_username == "winner_auto_club" and price_usd is not None:
         price_str = f"{price_usd:,}"
@@ -470,10 +498,48 @@ def parse_winner_auto_club(text):
     }
 
 
+_TAM_TITLE_RE = re.compile(r"^[A-ZА-ЯЁ0-9][A-ZА-ЯЁ0-9\s\-]{1,30}$")
+
+
+def parse_tamsyam26(text):
+    """Формат TamSyam26 (T-82, добавлен 25.08.2026): свободный текст с
+    эмодзи-баннерами, модель/ТТХ отдельными строками, ДВЕ цены в рублях —
+    "под ключ до РФ (Владивосток-Уссурийск)" (не привязана к городу
+    продавца) и "с доставкой в <город продавца>" (не наша, это его город).
+    Решение пользователя: берём цену "под ключ", в репосте показываем как
+    доставку в Краснодар (см. build_repost_text()). Сэмпл — 1 реальный
+    пост, регэксп может потребовать правки на других форматах этого же
+    источника."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    # Модель у этого источника — отдельная строка КАПСОМ (например "TIGUAN"),
+    # а не первая строка с буквами вообще (первые строки обычно — эмодзи-
+    # баннер и рекламные фразы вроде "сделки проходят только по договору").
+    title = next((l for l in lines if _TAM_TITLE_RE.match(l)), "Автомобиль")
+
+    price_match = re.search(r"под\s+ключ.{0,150}?([\d][\d.,\s]{3,})\s*₽", text, re.I)
+    if price_match is None:
+        return None
+    price_rub = clean_amount(price_match.group(1))
+    if price_rub is None:
+        return None
+
+    mileage = re.search(r"[Пп]робег\s*([\d\s]+)\s*км", text)
+    mileage_str = f"{clean_amount(mileage.group(1))} км" if mileage else None
+
+    return {
+        "title": title,
+        "mileage": mileage_str,
+        "price_eur_total": None,
+        "price_usd_total": None,
+        "price_rub": price_rub,
+    }
+
+
 SOURCE_PARSERS = {
     "artalexgroup": parse_eu_wholesale,
     "bezpokrasa": parse_china_invoice,
     "winner_auto_club": parse_winner_auto_club,
+    "tamsyam26": parse_tamsyam26,
 }
 
 
@@ -698,7 +764,7 @@ async def _prepare_media_list(client, source_username, messages):
     return media_list
 
 
-async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username=None):
+async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username=None, test_only_sources=frozenset()):
     ids = [m.id for m in messages]
     text = next((m.raw_text for m in messages if m.raw_text and m.raw_text.strip()), "")
     if not text.strip():
@@ -707,21 +773,39 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
 
     parser = SOURCE_PARSERS.get(source_username)
     if parser is None:
-        logger.warning("Нет парсера для источника %s, пропускаю", source_username)
-        return
+        # T-82 (25.08.2026, запрошено пользователем — добавили @TamSyam26
+        # как источник: "с этой группы тоже парсим объявления", формат цены
+        # под парсер ещё не разбирали, пользователь сказал "пока в тест
+        # группу"). Раньше источник без парсера в SOURCE_PARSERS молча
+        # пропускался целиком — теперь вместо этого шлём пост как есть
+        # (общая чистка текста + футер, БЕЗ расчёта цены и строки с ценой)
+        # только в тестовую группу, никогда в боевые — пока не появится
+        # парсер под конкретный формат этого источника, роутинг по цене для
+        # него в принципе невозможен.
+        if not test_group:
+            logger.warning(
+                "Нет парсера для источника %s и не задана тестовая группа — пропускаю (нужен либо парсер, либо TEST_GROUP_INVITE)",
+                source_username,
+            )
+            return
+        parsed = None
+        price_rub = None
+        real_targets = []
+        post_text = build_repost_text(text, source_username, None, None, feedback_bot_username)
+    else:
+        parsed = parser(text)
+        if parsed is None:
+            logger.info("[%s#%s] не распознан как объявление об авто — пропускаю", source_username, ids)
+            return
 
-    parsed = parser(text)
-    if parsed is None:
-        logger.info("[%s#%s] не распознан как объявление об авто — пропускаю", source_username, ids)
-        return
+        price_rub = compute_price_rub(parsed, eur_rub_rate, usd_rub_rate)
+        if price_rub is None:
+            logger.info("[%s#%s] не удалось посчитать цену в рублях — пропускаю, не рискую с каналом", source_username, ids)
+            return
 
-    price_rub = compute_price_rub(parsed, eur_rub_rate, usd_rub_rate)
-    if price_rub is None:
-        logger.info("[%s#%s] не удалось посчитать цену в рублях — пропускаю, не рискую с каналом", source_username, ids)
-        return
+        real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
+        post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username)
 
-    real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
-    post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username)
     media_list = await _prepare_media_list(client, source_username, messages)
 
     # 25.08.2026 (решение пользователя): фото/текст уже можно в боевые группы,
@@ -734,7 +818,14 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
     # по общему DRY_RUN. Альбом (фото+видео вместе) публикуется ЦЕЛИКОМ в
     # одно место — не разбиваем медиа одного поста на разные группы.
     has_video = any(getattr(m, "video", None) for m in messages)
-    if has_video and video_dry_run:
+    if parser is None or source_username in test_only_sources:
+        # Источник без парсера (роутинг по цене невозможен в принципе) или
+        # явно в TEST_ONLY_SOURCES (парсер есть, но ещё не обкатан на
+        # реальном трафике, T-82) — всегда только тест, независимо от
+        # DRY_RUN/video_dry_run.
+        send_targets = [test_group] if test_group else []
+        note = " (нет парсера — показ как есть -> тестовая)" if parser is None else f" (источник ещё не проверен на боевом трафике -> тестовая, боевые цели были бы: {real_targets})"
+    elif has_video and video_dry_run:
         send_targets = [test_group] if test_group else []
         note = f" (видео -> тестовая, боевые цели были бы: {real_targets})"
     elif dry_run:
@@ -744,9 +835,9 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         send_targets = real_targets
         note = ""
 
-    price_str = f"{price_rub:,}".replace(",", " ")
+    price_str = (f"{price_rub:,}".replace(",", " ") + " ₽") if price_rub is not None else "не определена (нет парсера для источника)"
     logger.info(
-        "[%s#%s] цена=%s ₽%s, медиа=%s\n%s",
+        "[%s#%s] цена=%s%s, медиа=%s\n%s",
         source_username, ids, price_str, note, len(media_list), post_text,
     )
 
@@ -824,6 +915,13 @@ async def main():
     # видео — держим true (тестовая группа), пока video-пайплайн не
     # подтвердится на реальных постах, независимо от общего DRY_RUN.
     video_dry_run = env.get("VIDEO_DRY_RUN", "true").strip().lower() != "false"
+    # T-82 (25.08.2026, добавлен источник @TamSyam26 — "пока в тест
+    # группу"): источники в этом списке ВСЕГДА идут только в тестовую
+    # группу, независимо от общего DRY_RUN/video_dry_run — для новых
+    # источников, чей парсер/цена ещё не обкатаны на реальном трафике.
+    # Убрать источник из списка (или очистить весь список), когда
+    # результат в тесте устроит — тогда пойдёт по обычной логике DRY_RUN.
+    test_only_sources = {s.strip().lstrip("@").lower() for s in env.get("TEST_ONLY_SOURCES", "tamsyam26").split(",") if s.strip()}
     # Бэкфилл при старте работает и в боевом режиме, не только в DRY_RUN —
     # чтобы при первом запуске на реальные каналы сразу подтянуть немного
     # свежего контента, а не просто ждать новых постов с нуля. Благодаря
@@ -843,9 +941,10 @@ async def main():
 
     test_group = None
     # Тестовая группа нужна, если её вообще может использовать хоть один из
-    # двух режимов — общий DRY_RUN ИЛИ video_dry_run (посты с видео теперь
-    # могут уходить в тест, даже когда общий режим уже боевой).
-    if (dry_run or video_dry_run) and test_group_invite:
+    # режимов — общий DRY_RUN, video_dry_run (посты с видео) или
+    # test_only_sources (конкретные источники) — любой из них может увести
+    # пост в тест, даже когда общий режим уже боевой.
+    if (dry_run or video_dry_run or test_only_sources) and test_group_invite:
         test_group = await ensure_test_group(client, test_group_invite)
 
     logger.info(
@@ -877,7 +976,7 @@ async def main():
                     # проверки каждый рестарт заново постил бы весь бэкфилл).
                     skipped += 1
                     continue
-                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username)
+                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources)
             if skipped:
                 logger.info("[%s] %s из %s постов бэкфилла уже были обработаны раньше — пропущены", source, skipped, len(groups))
         logger.info("--- Конец стартового бэкфилла, жду новые посты в реальном времени ---")
@@ -901,7 +1000,7 @@ async def main():
             # устраивала) — этот пост уже был отправлен, не дублируем.
             logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, ids)
             return
-        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username)
+        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources)
 
     @client.on(events.NewMessage(chats=sources))
     async def on_new_message(event):
@@ -911,7 +1010,7 @@ async def main():
             if _already_sent(state, source_username, [msg.id]):
                 logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, [msg.id])
                 return
-            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username)
+            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources)
             return
         gid = msg.grouped_id
         pending_albums.setdefault(gid, []).append(msg)

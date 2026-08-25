@@ -519,7 +519,12 @@ def group_backfill_messages(messages):
 # и берём лучшее совпадение по всем сразу.
 WATERMARK_TEMPLATES_DIR = Path(__file__).parent / "watermark_templates"
 WATERMARK_TEMPLATE_GLOB = "winner_auto_club*.png"
-_WATERMARK_MATCH_THRESHOLD = 0.6
+# Живые промахи по этому бейджу на реальных фото стабильно ложатся в
+# 0.58-0.60 (не случайный шум — это точно бейдж под непривычным углом/
+# освещением, которого нет ни в одном из 5 шаблонов) — снижено с 0.6 до
+# 0.55, чтобы такие случаи тоже ловились, оставляя разумный запас от
+# случайных совпадений на обычном фоне машины.
+_WATERMARK_MATCH_THRESHOLD = 0.55
 _WATERMARK_SCALES = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 _WATERMARK_PAD = 8  # px, отступ вокруг найденного бокса перед inpaint
 

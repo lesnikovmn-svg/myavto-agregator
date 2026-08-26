@@ -14,3 +14,11 @@ python-socks
 # тянет их и не ставится на голом сервере).
 opencv-python-headless
 numpy
+# T-85 (26.08.2026): детект бейджа winner_auto_club переделан с template
+# matching на OCR (см. userbot_parser.py, remove_watermark). pytesseract —
+# это только Python-обвязка, САМ БИНАРЬ tesseract-ocr нужно ставить system
+# package manager'ом ОТДЕЛЬНО (pip его не поставит):
+#   apt install tesseract-ocr
+# Без этого шага на VPS remove_watermark() будет тихо пропускать все фото
+# (фото уходят как есть, без ошибки — см. TesseractNotFoundError в коде).
+pytesseract

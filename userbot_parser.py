@@ -794,13 +794,29 @@ def _ocr_badge_hits(gray, scale=3, psm=11):
 
 def _badge_corner_regions(img):
     """Нижние левый/правый углы кадра — единственное место, где бейдж
-    реально встречается на присланных пользователем фото (T-85)."""
+    реально встречается на присланных пользователем фото (T-85).
+
+    26.08.2026: полоса 0.62-0.88 была подобрана только по 5 исходным
+    Jeep-фото и оказалась слишком узкой — реальное фото Nissan Altima
+    (задний ракурс) показало бейдж на 0.597-0.636h, то есть ВЫШЕ нижней
+    границы старой полосы (0.62h). Расширяем до 0.55-0.92 — то же самое
+    значение, что уже проверено на видео (_badge_video_regions в
+    watermark_video.py) и покрывает оба случая с запасом."""
     h, w = img.shape[:2]
-    band_y0, band_y1 = int(h * 0.62), int(h * 0.88)
+    band_y0, band_y1 = int(h * 0.55), int(h * 0.92)
     return (
         (0, band_y0, int(w * 0.30), band_y1),
         (int(w * 0.70), band_y0, w, band_y1),
     )
+
+
+_BADGE_OCR_SCALES = (3, 2)  # 26.08.2026: одного scale=3 не хватило — на фото
+                             # Nissan Altima (передний ракурс, бейдж крупнее
+                             # в кадре, крупная область поиска) апскейл x3
+                             # давал слишком большое изображение и Tesseract
+                             # разваливался в шум, а x2 уверенно читал
+                             # "WINNER"/"CLUB". Пробуем оба, а не только x3,
+                             # чтобы не терять либо мелкий, либо крупный бейдж.
 
 
 def _find_badge_box(img, regions=None):
@@ -819,8 +835,9 @@ def _find_badge_box(img, regions=None):
             continue
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         for variant in (gray, 255 - gray):
-            for target, dist, x, y, ww, hh in _ocr_badge_hits(variant):
-                all_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
+            for scale in _BADGE_OCR_SCALES:
+                for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale):
+                    all_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
 
     if not all_hits:
         return None

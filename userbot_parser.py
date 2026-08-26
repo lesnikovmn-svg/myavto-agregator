@@ -31,6 +31,17 @@ T-83 (25.08.2026, обнаружено пользователем — "поче�
 bezpokrasa) видео не содержит чужого водяного знака, причины прятать его
 в тест нет, идёт по обычному DRY_RUN как фото/текст.
 
+T-84 (26.08.2026, запрошено пользователем — "постим с 8 до 21:30 по мск в
+май авто и май авто оптимал?"): посты в БОЕВЫЕ каналы (@My_Avto5 /
+@My_Avto_Optimal) отправляются только в окне 08:00–21:30 по Москве
+(POSTING_WINDOW_START/END). Вне окна пост НЕ отбрасывается — сохраняется в
+userbot_pending_queue.json и уходит, как только окно снова откроется (см.
+_pending_queue_flusher(), опрашивает раз в ~120с). Ограничение касается
+ТОЛЬКО боевых целей — тестовая группа (DRY_RUN/VIDEO_DRY_RUN/
+TEST_ONLY_SOURCES) публикуется в любое время суток, как и раньше. Москва —
+без перехода на летнее/зимнее время, поэтому время считается фиксированным
+смещением UTC+3 (см. _now_msk()) без зависимости от zoneinfo/pytz.
+
 Известные упрощения v1 (см. T-77 в TASKS.md):
 - Альбомы (несколько фото в одном посте) обрабатываются по первому
   найденному медиа-файлу поста, не всей группой.
@@ -48,6 +59,7 @@ import io
 import json
 import logging
 import re
+from datetime import datetime, timedelta, time as dtime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -361,6 +373,50 @@ def save_state(state):
     tmp = STATE_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(STATE_PATH)
+
+
+# --- T-84: окно постинга в боевые каналы + очередь отложенных постов ---
+#
+# Россия не переходит на летнее/зимнее время — фиксированное смещение
+# UTC+3 достаточно точно и не требует зависимости от zoneinfo/pytz.
+POSTING_WINDOW_START = dtime(8, 0)
+POSTING_WINDOW_END = dtime(21, 30)
+
+PENDING_QUEUE_PATH = Path("userbot_pending_queue.json")
+
+
+def _now_msk():
+    return datetime.utcnow() + timedelta(hours=3)
+
+
+def _in_posting_window(now_msk=None):
+    now_msk = now_msk or _now_msk()
+    return POSTING_WINDOW_START <= now_msk.time() <= POSTING_WINDOW_END
+
+
+def load_pending_queue():
+    if PENDING_QUEUE_PATH.exists():
+        return json.loads(PENDING_QUEUE_PATH.read_text(encoding="utf-8"))
+    return {"items": []}
+
+
+def save_pending_queue(queue):
+    tmp = PENDING_QUEUE_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(PENDING_QUEUE_PATH)
+
+
+def _queue_pending(source_username, ids):
+    """Кладёт пост (вне окна постинга, см. handle_group) в очередь
+    отложенных — без дублей, если он там уже лежит (например, событие
+    доставилось Telethon повторно)."""
+    queue = load_pending_queue()
+    ids_set = set(ids)
+    for item in queue["items"]:
+        if item["source_username"] == source_username and set(item["ids"]) == ids_set:
+            return
+    queue["items"].append({"source_username": source_username, "ids": sorted(ids_set)})
+    save_pending_queue(queue)
 
 
 # Дедуп по точному набору уже отправленных id сообщений, а не по "максимальному
@@ -812,8 +868,6 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
         post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username)
 
-    media_list = await _prepare_media_list(client, source_username, messages)
-
     # 25.08.2026 (решение пользователя): фото/текст уже можно в боевые группы,
     # а видео — пока нет (для winner_auto_club водяной знак с видео ещё не
     # снимается, публиковать с логотипом источника в боевые нельзя). Поэтому
@@ -823,6 +877,11 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
     # постах), независимо от общего DRY_RUN. Пост без видео — как обычно,
     # по общему DRY_RUN. Альбом (фото+видео вместе) публикуется ЦЕЛИКОМ в
     # одно место — не разбиваем медиа одного поста на разные группы.
+    #
+    # Роутинг решается ДО подготовки медиа (скачивание/удаление водяного
+    # знака) — если пост в итоге откладывается в очередь (T-84, окно
+    # постинга), незачем тратить время на обработку фото сейчас, это же
+    # самое handle_group сделает заново, когда очередь разберёт его позже.
     has_video = any(getattr(m, "video", None) for m in messages)
     if parser is None or source_username in test_only_sources:
         # Источник без парсера (роутинг по цене невозможен в принципе) или
@@ -841,9 +900,25 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
     elif dry_run:
         send_targets = [test_group] if test_group else []
         note = f" (боевые цели были бы: {real_targets})"
+    elif not _in_posting_window():
+        # T-84 (26.08.2026, запрошено пользователем — "постим с 8 до 21:30
+        # по мск в май авто и май авто оптимал?"): вне окна пост в БОЕВЫЕ
+        # каналы не отправляем — откладываем в userbot_pending_queue.json,
+        # _pending_queue_flusher() отправит его, когда окно снова откроется
+        # (не отбрасываем). Тестовую группу это ограничение не касается —
+        # она уже отфильтрована ветками выше и публикуется в любое время.
+        _queue_pending(source_username, ids)
+        logger.info(
+            "[%s#%s] вне окна постинга (%s–%s МСК, сейчас %s) — отложено в очередь, боевые цели: %s",
+            source_username, ids, POSTING_WINDOW_START, POSTING_WINDOW_END,
+            _now_msk().time().strftime("%H:%M"), real_targets,
+        )
+        return
     else:
         send_targets = real_targets
         note = ""
+
+    media_list = await _prepare_media_list(client, source_username, messages)
 
     price_str = (f"{price_rub:,}".replace(",", " ") + " ₽") if price_rub is not None else "не определена (нет парсера для источника)"
     logger.info(
@@ -879,6 +954,50 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
 
     _mark_sent(state, source_username, ids)
     save_state(state)
+
+
+async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, poll_seconds=120):
+    """T-84: фоновая задача, раз в poll_seconds проверяет, открыто ли окно
+    постинга (08:00-21:30 МСК) и, если да, разбирает userbot_pending_queue.json
+    — посты, которые в своё время попали туда из-за window-ограничения в
+    handle_group(). Очередь сразу очищается, а не после отправки: если
+    отправка какого-то элемента снова не удастся (не удалось получить
+    сообщения, окно закрылось прямо во время разбора и т.п.), он вернётся в
+    очередь сам — через _queue_pending() (при ошибке get_messages) или через
+    сам handle_group() (если увидит, что окно снова закрыто).
+    Критическая защита от дублей: перед повторной обработкой каждый элемент
+    проверяется через _already_sent() — на случай, если пост уже ушёл другим
+    путём (например, бэкфиллом после рестарта сервиса), пока сидел в очереди."""
+    while True:
+        await asyncio.sleep(poll_seconds)
+        try:
+            if not _in_posting_window():
+                continue
+            queue = load_pending_queue()
+            items = queue.get("items", [])
+            if not items:
+                continue
+            save_pending_queue({"items": []})
+            logger.info("--- Окно постинга открыто, разбираю очередь отложенных: %s поста(ов) ---", len(items))
+            for item in items:
+                source_username = item["source_username"]
+                ids = item["ids"]
+                if _already_sent(state, source_username, ids):
+                    logger.info("[%s#%s] уже отправлено другим путём, пока сидел в очереди — пропускаю", source_username, ids)
+                    continue
+                try:
+                    fetched = await client.get_messages(source_username, ids=ids)
+                    group = [m for m in fetched if m is not None]
+                except Exception:
+                    logger.exception("[%s#%s] не удалось получить сообщения из очереди отложенных — верну в очередь, попробую позже", source_username, ids)
+                    _queue_pending(source_username, ids)
+                    continue
+                if not group:
+                    logger.warning("[%s#%s] сообщения из очереди отложенных больше недоступны (удалены?) — убираю из очереди", source_username, ids)
+                    continue
+                await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources)
+        except Exception:
+            logger.exception("Ошибка в фоновой задаче отправки отложенных постов — продолжаю, попробую на следующем цикле")
 
 
 async def _collect_messages(client, source, limit):
@@ -964,6 +1083,17 @@ async def main():
     # пост в тест, даже когда общий режим уже боевой.
     if (dry_run or video_dry_run or test_only_sources) and test_group_invite:
         test_group = await ensure_test_group(client, test_group_invite)
+
+    # T-84: фоновая задача разбирает очередь постов, отложенных из-за окна
+    # постинга (08:00-21:30 МСК) — не блокирует ни бэкфилл, ни живой поток
+    # сообщений ниже, просто периодически (раз в ~120с) проверяет очередь.
+    # Запускаем ПОСЛЕ того, как test_group определена выше — иначе задача
+    # захватила бы в замыкании None и не смогла бы роутить в тест, если
+    # отложенный элемент внутри handle_group всё же попадёт в тестовую ветку.
+    asyncio.create_task(_pending_queue_flusher(
+        client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run,
+        test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources,
+    ))
 
     logger.info(
         "Режим: %s | видео: %s | источники: %s | цели: %s / %s",

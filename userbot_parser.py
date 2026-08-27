@@ -937,7 +937,14 @@ PHOTO_PROCESSORS = {"winner_auto_club": remove_watermark}
 # TEST_ONLY_SOURCES — до отдельного решения пользователя в боевые не уйдёт).
 # Прототип, проверен ПОЛНОСТЬЮ автоматически (без ручного отсмотра кадров)
 # только на одном реальном видео — см. TASKS.md T-86.
-AUTO_MONTAGE_SOURCES = {"winner_auto_club"}
+# T-95 (27.08.2026, ЭКСТРЕННО ОТКЛЮЧЕНО): авто-монтаж стабильно роняет
+# сервис по OOM-killer на этапе обработки видео winner_auto_club — не
+# исключение (try/except его не ловит, ОС убивает процесс целиком), а
+# самовоспроизводящийся краш-луп каждые ~5 минут (см. TASKS.md T-95,
+# лог с 07:10 по 07:38 27.08.2026 — 4+ OOM-kill подряд, tamsyam26 из-за
+# этого ни разу не добрался до бэкфилла). Пустое множество = видео идёт
+# как раньше, оригиналом, без монтажа — до разбора причины OOM.
+AUTO_MONTAGE_SOURCES = set()  # было {"winner_auto_club"}
 
 
 async def _prepare_media_list(client, source_username, messages, parsed=None):

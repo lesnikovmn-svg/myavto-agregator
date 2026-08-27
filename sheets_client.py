@@ -93,3 +93,32 @@ def connect_reviews_sheet():
         ws = sh.add_worksheet(title=REVIEWS_SHEET_TITLE, rows=500, cols=len(REVIEWS_HEADER))
         ws.append_row(REVIEWS_HEADER)
     return ws
+
+
+# T-92 (27.08.2026): отдельная вкладка "Статистика" — по запросу
+# пользователя, первая часть задачи "статистика активности компаний"
+# (критерий — рост подписчиков в соцсетях). Одна строка в день на
+# компанию (дата, id, название, подписчики TG/Instagram/VK) — накопится
+# история, дальше рост считается как разница между строками за период.
+# Пишет collect_social_stats.py, см. его докстринг про cron-расписание.
+STATS_SHEET_TITLE = "Статистика"
+STATS_HEADER = [
+    "date",
+    "company_id",
+    "company_name",
+    "telegram_subscribers",
+    "instagram_followers",
+    "vk_subscribers",
+]
+
+
+def connect_stats_sheet():
+    """Возвращает вкладку "Статистика" — создаёт её с заголовком, если это
+    первый запуск и вкладки ещё нет (тот же паттерн, что connect_reviews_sheet)."""
+    sh = get_client().open_by_key(SHEET_ID)
+    try:
+        ws = sh.worksheet(STATS_SHEET_TITLE)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title=STATS_SHEET_TITLE, rows=2000, cols=len(STATS_HEADER))
+        ws.append_row(STATS_HEADER)
+    return ws

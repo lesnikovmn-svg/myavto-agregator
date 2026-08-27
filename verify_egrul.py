@@ -124,8 +124,22 @@ def _fetch_itsoft(inn):
             "Referer": "https://egrul.itsoft.ru/",
         },
     )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read().decode("utf-8"))
+    # T-93 (27.08.2026): в реальном прогоне на VPS (27.08, лог деплоя) ~30%
+    # запросов к зеркалу падали по <urlopen error timed out> — не 403 (бот-
+    # блокировка), а именно таймаут, то есть похоже на нестабильность самого
+    # зеркала под нагрузкой, а не постоянную недоступность. Одна короткая
+    # повторная попытка почти ничего не стоит по времени (итак 1с sleep()
+    # между ИНН в lookup_inn), но должна отыграть заметную часть таймаутов.
+    last_err = None
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            last_err = e
+            if attempt == 0:
+                time.sleep(2)
+    raise last_err
 
 
 def _fetch_dadata(inn):

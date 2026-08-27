@@ -1630,6 +1630,66 @@ def fetch_telegram_preview(username):
         return None
 
 
+def fetch_vk_members(url):
+    """
+    Число подписчиков паблика VK — T-92 (27.08.2026, статистика активности
+    компаний по запросу пользователя: "рост подписчиков в соцсетях").
+    Официального публичного API без токена нет, поэтому парсим саму
+    HTML-страницу группы: число обычно зашито либо в инлайн-JSON
+    ("members_count":N — актуальная вёрстка VK), либо прямым текстом
+    ("12 345 подписчиков"/"12 345 участников" — старые/мобильные версии).
+    VK периодически меняет вёрстку — если ни один паттерн не сработал,
+    тихо возвращаем 0 (тот же safety-net принцип, что у остальных
+    extract_*/fetch_* в этом файле), не роняем весь прогон статистики
+    из-за одной несовпавшей компании.
+    """
+    if not url:
+        return 0
+    try:
+        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200:
+            return 0
+        html = r.text
+        m = re.search(r'"members_count"\s*:\s*(\d+)', html)
+        if m:
+            return int(m.group(1))
+        m = re.search(r"([\d\s\xa0]+)\s*(?:подписчик|участник)", html)
+        if m:
+            digits = re.sub(r"[^\d]", "", m.group(1))
+            return int(digits) if digits else 0
+        return 0
+    except Exception:
+        return 0
+
+
+def fetch_instagram_followers(url):
+    """
+    Число подписчиков Instagram — T-92 (27.08.2026). С 2020 года Meta
+    агрессивно блокирует скрапинг (login wall почти на все запросы без
+    авторизованной сессии) — это НЕ надёжный источник, best-effort через
+    og:description (исторический формат "N Followers, M Following, K
+    Posts", который иногда всё ещё отдаётся публичным профилям без
+    логина). Часто будет молча возвращать 0 — это ожидаемо для Instagram,
+    не баг конкретной компании, см. тот же safety-net принцип выше.
+    """
+    if not url:
+        return 0
+    try:
+        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200:
+            return 0
+        html = r.text
+        m = re.search(r'content="([\d.,]+)\s*([KkMm]?)\s*[Ff]ollowers', html)
+        if not m:
+            return 0
+        raw = m.group(1).replace(",", "")
+        suffix = m.group(2).lower()
+        mult = 1000 if suffix == "k" else 1000000 if suffix == "m" else 1
+        return int(float(raw) * mult)
+    except Exception:
+        return 0
+
+
 def fetch_url_og_title(url, use_proxy=False):
     """
     Универсальная выборка og:title с произвольной страницы (VK, Instagram,

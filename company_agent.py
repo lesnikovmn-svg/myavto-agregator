@@ -242,6 +242,7 @@ def fetch_site_text(url):
     # Отдельно от check_site: тут нужен именно текст страницы, чтобы
     # поискать в нём ИНН/реквизиты компании. Если не получилось — не страшно,
     # просто не найдём ИНН для этой компании сейчас.
+    html = ""
     try:
         r = requests.get(
             url, timeout=6, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}
@@ -260,10 +261,84 @@ def fetch_site_text(url):
             content_type = r.headers.get("Content-Type", "")
             if "charset" not in content_type.lower():
                 r.encoding = r.apparent_encoding
-            return r.text
+            html = r.text
     except Exception:
         pass
-    return ""
+    # T-89 (27.08.2026, по репорту пользователя: Delivery Cars/Fast Wheel/
+    # Todes-Avto — телефон/email/telegram реально есть на сайте, но агент
+    # их не видит): если голый requests.get() вернул похожий на пустой
+    # SPA-каркас React/Next.js (см. _looks_like_js_shell) — пробуем
+    # добрать содержимое headless-браузером (Playwright), который
+    # реально дожидается отрисовки JS. Дороже по времени, поэтому НЕ
+    # используется по умолчанию для всех сайтов подряд, только как
+    # прицельный fallback для этого конкретного симптома.
+    if _looks_like_js_shell(html):
+        rendered = fetch_site_text_rendered(url)
+        if rendered and len(rendered) > len(html):
+            return rendered
+    return html
+
+
+# Признаки того, что requests.get() вернул не реальную страницу, а почти
+# пустой каркас SPA (React/Next.js/Vue) — контакты/телефон/футер
+# дорисовываются JS-ом уже в браузере, их просто нет в исходном HTML.
+# ОТЛИЧАЕТСЯ от BOT_WALL_MARKERS ниже: там сайт СОЗНАТЕЛЬНО отдаёт
+# заглушку ботам, здесь же сайт технически всегда так работает, для
+# людей в браузере тоже — просто requests не выполняет JS вообще.
+_SPA_ROOT_MARKER = re.compile(r'id=["\'](?:root|__next|app|__nuxt)["\']', re.IGNORECASE)
+
+
+def _looks_like_js_shell(html):
+    """True, если html похож на пустой SPA-каркас: есть характерный
+    div#root/__next/app, но текста внутри почти нет (реальный контент
+    добавляется JS-ом после загрузки, здесь его ещё не было)."""
+    if not html or not _SPA_ROOT_MARKER.search(html):
+        return False
+    no_scripts = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+    text_only = re.sub(r"<[^>]+>", " ", no_scripts)
+    text_only = re.sub(r"\s+", " ", text_only).strip()
+    return len(text_only) < 400
+
+
+def fetch_site_text_rendered(url):
+    """
+    T-89 (27.08.2026): то же самое, что fetch_site_text(), но через
+    headless Chromium (Playwright) вместо голого HTTP-запроса — реально
+    открывает страницу и ждёт отрисовки JS, поэтому видит контакты,
+    которые обычный requests.get() не видит на сайтах-SPA.
+
+    Требует предустановленных playwright + браузера Chromium:
+        pip install playwright --break-system-packages
+        playwright install --with-deps chromium
+    Если playwright не установлен, браузера нет, или страница не
+    открылась — тихо возвращает "" (тот же принцип "ничего не нашли —
+    оставляем как было", что и у всех extract_*/fetch_* в этом файле).
+    Пока не оптимизировано под массовый прогон: на каждый вызов заново
+    поднимается и закрывается браузер (заметные накладные расходы) — это
+    осознанный компромисс первой версии, вызывается только для явно
+    подозрительных SPA-каркасов (см. _looks_like_js_shell), не на каждый
+    сайт подряд. Если в проде окажется, что таких сайтов много и агент
+    работает слишком медленно — следующий шаг: один браузер на весь
+    прогон run_agent(), а не на каждый fetch отдельно.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("    ⚠️ playwright не установлен — пропускаю рендер JS для " + url)
+        return ""
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(user_agent="Mozilla/5.0")
+                page.goto(url, timeout=15000, wait_until="networkidle")
+                html = page.content()
+            finally:
+                browser.close()
+            return html
+    except Exception as e:
+        print("    ⚠️ Playwright не смог открыть " + url + ": " + str(e))
+        return ""
 
 
 # Признаки того, что вместо реального содержимого страницы мы получили
@@ -404,7 +479,24 @@ def extract_brand_from_site(html):
     # через BLACKLIST, но мало ли где ещё проскочит) отдают og:site_name
     # буквально "Telegram" — это НЕ бренд компании, а название платформы.
     # Такое значение отбрасываем, как будто его вообще не нашли.
-    generic_brands = {"telegram", "вконтакте", "vkontakte", "instagram", "youtube"}
+    # T-90 (27.08.2026): та же болезнь нашлась у трёх живых карточек —
+    # "Яндекс" (id 135, реальный сайт компании — estransit-premium.ru, но
+    # og:site_name был взят со страницы-хаба на yandex.ru), "MAX" (id 122,
+    # max.ru/dolgov_auto1 — реальное название "Долгов Авто", но og:site_name
+    # мессенджера везде буквально "MAX") и "Tgsearch.Org" (id 120,
+    # tgsearch.org/channel/... — это каталог-агрегатор тг-каналов, его
+    # og:site_name везде "Tgsearch.Org", а не название конкретного канала).
+    # Во всех трёх случаях страница-источник — не сайт самой компании, а
+    # виджет/директория/мессенджер, чей og:site_name/apple-title указывает
+    # на САМУ ПЛАТФОРМУ. Расширяем список так же, как раньше сделали для
+    # Telegram/VK/Instagram/YouTube — если бренд буквально совпал с
+    # известной платформой, откатываемся на title_name/domain_name.
+    generic_brands = {
+        "telegram", "вконтакте", "vkontakte", "instagram", "youtube",
+        "яндекс", "yandex", "max", "макс", "tgsearch.org", "tgsearch",
+        "2гис", "2gis", "авито", "avito", "дром", "drom",
+        "авто.ру", "auto.ru", "autoru", "вк", "vk",
+    }
     m = re.search(r'<meta property="og:site_name" content="([^"]+)"', html)
     if m and m.group(1).strip() and m.group(1).strip().lower() not in generic_brands:
         return m.group(1).strip()
@@ -661,7 +753,11 @@ DIRECT_CONTACT_PATTERNS = {
     # (оба используют именно этот формат вместо короткого wa.me/, старый
     # регэксп его вообще не ловил, WhatsApp этих компаний был бы пропущен
     # даже несмотря на явное присутствие на сайте).
-    "whatsapp": r"https?://(?:chat\.whatsapp\.com/[A-Za-z0-9]+|wa\.me/\d+|api\.whatsapp\.com/send\?phone=\d+[^\"'\s]*)",
+    # wa.me/message/<код> добавлено 27.08.2026 (кейс Fast Wheel,
+    # fast-wheel.ru) — это отдельный формат короткой ссылки WhatsApp
+    # Business (не номер телефона и не chat.whatsapp.com/код), тоже не
+    # ловился ни одним из трёх старых вариантов.
+    "whatsapp": r"https?://(?:chat\.whatsapp\.com/[A-Za-z0-9]+|wa\.me/message/[A-Za-z0-9]+|wa\.me/\d+|api\.whatsapp\.com/send\?phone=\d+[^\"'\s]*)",
     "yandex": r"https?://(?:www\.)?yandex\.\w+/maps/org/[A-Za-z0-9_\-]+/\d+",
     "gis2": r"https?://(?:www\.)?2gis\.\w+/[a-z\-]+/firm/\d+",
 }
@@ -1901,6 +1997,17 @@ BLACKLIST = [
     # а не компания, но остальной av.by трогать не за что.
     "dzen.ru",
     "liautoofficial.ru",  # официальный сайт бренда Lixiang/Li Auto — не "импорт под заказ"
+    # Найдено 27.08.2026 (пользователь продолжил ручную сверку живых карточек
+    # на сайте, отдельными сообщениями): "rusdtp.ru" — автомобильный
+    # новостной портал (попала статья про ужесточение ввоза Минпромторгом),
+    # тот же класс, что autonews.ru/ixbt.com/vc.ru/dzen.ru выше — портал не
+    # компания-импортёр. "autoimport.trade" — несмотря на говорящее название
+    # домена, это B2B-поставщик расходников/электроники/автохимии для
+    # автосалонов (укрывные материалы, автохимия) с офисами в Москве и
+    # Казани — НЕ занимается импортом/пригоном автомобилей под заказ,
+    # проверено вручную по /produkt.
+    "rusdtp.ru",
+    "autoimport.trade",
 ]
 
 # Продающие фразы ниши — собраны 09.08.2026 по реальным сайтам/TG-каналам

@@ -31,3 +31,17 @@ pytesseract
 # вызове ffmpeg — в отличие от remove_watermark()/tesseract, здесь нет
 # отдельного safety-net на случай отсутствия бинаря, ошибка попадёт в лог
 # ("ошибка при авто-монтаже видео — шлю оригинал", видео уйдёт необработанным).
+# T-89 (27.08.2026): fetch_site_text_rendered() в company_agent.py — сайты
+# на React/Next.js/Vue отдают обычному requests.get() почти пустой
+# каркас (телефон/email/telegram дорисовывает JS уже в браузере), это
+# headless-браузер (Chromium через Playwright) как прицельный fallback
+# именно для таких сайтов. Как и с tesseract/ffmpeg выше — pip ставит
+# только Python-обвязку, САМ браузер нужно поставить ОТДЕЛЬНОЙ командой:
+#   pip install playwright --break-system-packages
+#   playwright install --with-deps chromium
+# "--with-deps" сам подтянет системные библиотеки Chromium через apt —
+# без него на голом VPS браузер не запустится (не хватит .so-библиотек).
+# Если этот шаг пропустить — не ошибка и не падение, fetch_site_text_
+# rendered() просто напечатает предупреждение и вернёт "" (тот же
+# безопасный fallback-принцип, что и у остальных extract_*/fetch_*).
+playwright

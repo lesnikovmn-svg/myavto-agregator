@@ -140,6 +140,27 @@ EMAIL_JUNK_LOCAL_PREFIXES = {
 }
 
 
+def clean_snippet_prefix(s):
+    """
+    Найдено 27.08.2026 (пользователь прогнал ручную сверку по всему
+    каталогу): сниппеты Google/DDG для статей и Telegram-каталогов часто
+    начинаются со служебного префикса перед реальным текстом — дата
+    ("Jan 31, 2026 · Официальный дилер...") или число подписчиков
+    ("9 587 subscribers Мы профессионально..."). Ни то ни другое не
+    описание компании — обрезаем префикс, если он есть, остальной текст
+    не трогаем.
+    """
+    if not s:
+        return s
+    s = re.sub(
+        r"^\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}\s*[·\-–]\s*",
+        "",
+        s,
+    )
+    s = re.sub(r"^\s*[\d\s ]+\s*subscribers\s*", "", s, flags=re.IGNORECASE)
+    return s.strip()
+
+
 def extract_email(text):
     """
     Первый похожий на реальный контактный email в тексте. Возвращает ""
@@ -627,7 +648,12 @@ DIRECT_CONTACT_PATTERNS = {
     "avito": r"https?://(?:www\.)?avito\.ru/[A-Za-z0-9_/\-]+",
     "drom": r"https?://(?:www\.)?[a-z0-9\-]+\.drom\.ru/[A-Za-z0-9_/\-]*",
     "autoru": r"https?://(?:www\.)?auto\.ru/[A-Za-z0-9_/\-]+",
-    "max": r"https?://(?:www\.)?max\.ru/[A-Za-z0-9_.\-]+",
+    # "+" добавлено 26.08.2026 (кейс Delivery Cars, delivery-cars.ru):
+    # у части компаний ссылка на MAX — не юзернейм, а номер телефона вида
+    # "max.ru/+79895653943", старая регулярка такие URL не матчила вообще
+    # (в MAX_RESERVED_PATHS это тоже не попадает — это не служебный путь,
+    # а просто другой формат профиля).
+    "max": r"https?://(?:www\.)?max\.ru/[A-Za-z0-9_.+\-]+",
     "youtube": r"https?://(?:www\.)?youtube\.com/(?:@|channel/|c/)[A-Za-z0-9_.\-]+",
     "rutube": r"https?://(?:www\.)?rutube\.ru/(?:channel|u)/[A-Za-z0-9_.\-]+",
     # api.whatsapp.com/send?phone=... добавлено 14.08.2026 — реальный
@@ -800,7 +826,7 @@ def is_real_profile_url(link_lower):
             if seg in INSTAGRAM_RESERVED_PATHS:
                 return False
     if "max.ru" in link_lower:
-        m = re.search(r"max\.ru/([a-z0-9_.\-]+)", link_lower)
+        m = re.search(r"max\.ru/([a-z0-9_.+\-]+)", link_lower)
         if m:
             seg = m.group(1).split("?")[0].rstrip("/")
             if seg in MAX_RESERVED_PATHS:
@@ -1862,6 +1888,19 @@ BLACKLIST = [
     "avtogermes.ru",
     "iphones.ru",
     "tadviser.ru",
+    # Найдено 27.08.2026 (пользователь прогнал ручную сверку по ВСЕМ 134
+    # карточкам каталога, не только по новым): "dzen.ru" — попала статья
+    # "Основные способы проверки реального пробега авто с аукциона"
+    # (карточка называлась буквально "Dzen" — имя платформы вместо
+    # компании), тот же класс, что vc.ru/ixbt.com/autonews.ru выше — сама
+    # платформа не компания-импортёр, просто там иногда публикуют статьи
+    # про авто. "av.by" добавлен НЕ целиком (это крупный настоящий
+    # каталог объявлений в Беларуси, весь домен блокировать нельзя) — см.
+    # вместо этого точечное удаление конкретной страницы av.by/vin в
+    # fix_manual_data_2026_08_27_batch2.py: это инструмент проверки VIN,
+    # а не компания, но остальной av.by трогать не за что.
+    "dzen.ru",
+    "liautoofficial.ru",  # официальный сайт бренда Lixiang/Li Auto — не "импорт под заказ"
 ]
 
 # Продающие фразы ниши — собраны 09.08.2026 по реальным сайтам/TG-каналам
@@ -2034,7 +2073,7 @@ def run_agent():
             ws,
             {
                 "name": name,
-                "description": text or "Telegram канал @" + username,
+                "description": clean_snippet_prefix(text) or "Telegram канал @" + username,
                 "directions": get_directions(text),
                 "tags": get_tags(text),
                 "telegram": username,
@@ -2379,7 +2418,7 @@ def run_agent():
                 ws,
                 {
                     "name": name,
-                    "description": snippet[:200],
+                    "description": clean_snippet_prefix(snippet)[:200],
                     "directions": get_directions(text),
                     "tags": get_tags(text),
                     "telegram": tg,

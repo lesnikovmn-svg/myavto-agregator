@@ -923,12 +923,25 @@ def remove_watermark(image_bytes):
 # (как это уже было для tamsyam26, см. TASKS.md T-82/T-85).
 PHOTO_PROCESSORS = {"winner_auto_club": remove_watermark}
 
+# T-86 (27.08.2026, запрошено пользователем — "давай в автомат ставь видео
+# монтаж не в ручной режим"): источники, для которых видео автоматически
+# перемонтируется в короткий вертикальный ролик (auto_montage.build_short) —
+# см. докстринг auto_montage.py про сам алгоритм и договорённость с
+# пользователем "сначала в тестовую" (winner_auto_club и так уже целиком в
+# TEST_ONLY_SOURCES — до отдельного решения пользователя в боевые не уйдёт).
+# Прототип, проверен ПОЛНОСТЬЮ автоматически (без ручного отсмотра кадров)
+# только на одном реальном видео — см. TASKS.md T-86.
+AUTO_MONTAGE_SOURCES = {"winner_auto_club"}
 
-async def _prepare_media_list(client, source_username, messages):
+
+async def _prepare_media_list(client, source_username, messages, parsed=None):
     """Для большинства источников просто передаём Telegram media как есть —
     без перекачки. Для источников из PHOTO_PROCESSORS фото скачиваем,
     прогоняем через процессор (сейчас — удаление водяного знака) и шлём уже
-    новыми байтами; видео не трогаем (см. комментарий выше).
+    новыми байтами. Для источников из AUTO_MONTAGE_SOURCES видео скачиваем и
+    перемонтируем в короткий вертикальный ролик (T-86, auto_montage.py) —
+    остальные источники видео не трогают (пересылают как есть, см. докстринг
+    модуля наверху про VIDEO_DRY_RUN).
 
     T-85 (26.08.2026): processor теперь делает OCR (Tesseract) вместо
     простого template matching — заметно медленнее (секунды, не доли
@@ -936,8 +949,10 @@ async def _prepare_media_list(client, source_username, messages):
     loop'е — с OCR это надолго блокировало бы ВЕСЬ asyncio event loop
     (другие каналы/очередь отложенных постов ждали бы), особенно на
     альбомах из нескольких фото. Поэтому вызов вынесен в отдельный поток
-    через `asyncio.to_thread`."""
+    через `asyncio.to_thread`. T-86: то же самое для видео-монтажа — это
+    минуты CPU (см. auto_montage.build_short), тоже через to_thread."""
     processor = PHOTO_PROCESSORS.get(source_username)
+    auto_montage_on = source_username in AUTO_MONTAGE_SOURCES
     media_list = []
     for m in messages:
         if not m.media:
@@ -952,6 +967,30 @@ async def _prepare_media_list(client, source_username, messages):
             except Exception:
                 logger.exception(
                     "[%s#%s] ошибка при обработке фото (водяной знак) — шлю оригинал",
+                    source_username, m.id,
+                )
+                media_list.append(m.media)
+        elif auto_montage_on and m.video:
+            try:
+                import tempfile
+                import os
+                import auto_montage  # локальный импорт — избегаем циклического
+                                      # импорта на верхнем уровне модуля
+                                      # (auto_montage -> watermark_video ->
+                                      # userbot_parser)
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    in_path = os.path.join(tmpdir, f"{m.id}_in.mp4")
+                    out_path = os.path.join(tmpdir, f"{m.id}_short.mp4")
+                    await client.download_media(m, file=in_path)
+                    await asyncio.to_thread(auto_montage.build_short, in_path, parsed, out_path, logger.info)
+                    with open(out_path, "rb") as f:
+                        processed = f.read()
+                bio = io.BytesIO(processed)
+                bio.name = f"{m.id}_short.mp4"
+                media_list.append(bio)
+            except Exception:
+                logger.exception(
+                    "[%s#%s] ошибка при авто-монтаже видео — шлю оригинал",
                     source_username, m.id,
                 )
                 media_list.append(m.media)
@@ -1052,7 +1091,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         send_targets = real_targets
         note = ""
 
-    media_list = await _prepare_media_list(client, source_username, messages)
+    media_list = await _prepare_media_list(client, source_username, messages, parsed)
 
     price_str = (f"{price_rub:,}".replace(",", " ") + " ₽") if price_rub is not None else "не определена (нет парсера для источника)"
     logger.info(

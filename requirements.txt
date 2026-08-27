@@ -22,3 +22,12 @@ numpy
 # Без этого шага на VPS remove_watermark() будет тихо пропускать все фото
 # (фото уходят как есть, без ошибки — см. TesseractNotFoundError в коде).
 pytesseract
+# T-86 (27.08.2026): авто-монтаж коротких роликов из видео winner_auto_club
+# (auto_montage.py) зовёт системный бинарь ffmpeg через subprocess (склейка,
+# вертикальная раскладка, сведение звука) — ставится ТОЖЕ system package
+# manager'ом, pip его не поставит:
+#   apt install ffmpeg
+# Без этого шага build_short() упадёт с FileNotFoundError при первом же
+# вызове ffmpeg — в отличие от remove_watermark()/tesseract, здесь нет
+# отдельного safety-net на случай отсутствия бинаря, ошибка попадёт в лог
+# ("ошибка при авто-монтаже видео — шлю оригинал", видео уйдёт необработанным).

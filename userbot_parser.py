@@ -921,6 +921,12 @@ def remove_watermark(image_bytes):
 # группу, в боевые каналы не публикуется, пока пользователь не проверит
 # результат на живом трафике и не подтвердит перевод источника в боевые
 # (как это уже было для tamsyam26, см. TASKS.md T-82/T-85).
+# T-93 (27.08.2026): ретрай для бэкфилла истории — диагностика показала
+# плавающий сетевой сбой (см. комментарий у места использования ниже).
+_BACKFILL_TIMEOUT = 25
+_BACKFILL_RETRIES = 3
+_BACKFILL_RETRY_DELAY = 5
+
 PHOTO_PROCESSORS = {"winner_auto_club": remove_watermark}
 
 # T-86 (27.08.2026, запрошено пользователем — "давай в автомат ставь видео
@@ -1286,14 +1292,29 @@ async def main():
     if backfill_limit > 0:
         logger.info("--- Стартовый бэкфилл: последние %s сообщений каждого источника (с учётом альбомов и уже отправленного ранее) ---", backfill_limit)
         for source in sources:
-            logger.info("[%s] запрашиваю историю (таймаут 25с)...", source)
-            try:
-                raw_messages = await asyncio.wait_for(_collect_messages(client, source, backfill_limit), timeout=25)
-            except asyncio.TimeoutError:
-                logger.error("[%s] таймаут при получении истории — пропускаю источник, проверь сеть/прокси/доступ юзербота к каналу", source)
-                continue
-            except Exception:
-                logger.exception("[%s] ошибка при получении истории — пропускаю источник", source)
+            # T-93 (27.08.2026): диагностика на VPS (см. TASKS.md T-93 —
+            # debug-лог telethon) показала, что таймаут get_entity/
+            # iter_messages — плавающий, самоустраняющийся сбой (один и тот
+            # же канал то виснет на все 25-60с, то через минуту отвечает за
+            # 0.1с), не постоянная проблема с конкретным каналом и не
+            # нехватка таймаута. Поэтому лечим ретраем с паузой, а не
+            # увеличением таймаута.
+            raw_messages = None
+            for attempt in range(1, _BACKFILL_RETRIES + 1):
+                logger.info("[%s] запрашиваю историю (попытка %s/%s, таймаут %sс)...", source, attempt, _BACKFILL_RETRIES, _BACKFILL_TIMEOUT)
+                try:
+                    raw_messages = await asyncio.wait_for(_collect_messages(client, source, backfill_limit), timeout=_BACKFILL_TIMEOUT)
+                    break
+                except asyncio.TimeoutError:
+                    if attempt < _BACKFILL_RETRIES:
+                        logger.warning("[%s] таймаут при получении истории (попытка %s/%s) — жду %sс и пробую снова", source, attempt, _BACKFILL_RETRIES, _BACKFILL_RETRY_DELAY)
+                        await asyncio.sleep(_BACKFILL_RETRY_DELAY)
+                    else:
+                        logger.error("[%s] таймаут при получении истории — все %s попытки исчерпаны, пропускаю источник, проверь сеть/прокси/доступ юзербота к каналу", source, _BACKFILL_RETRIES)
+                except Exception:
+                    logger.exception("[%s] ошибка при получении истории (попытка %s/%s) — пропускаю источник", source, attempt, _BACKFILL_RETRIES)
+                    break
+            if raw_messages is None:
                 continue
             groups = group_backfill_messages(raw_messages)
             logger.info("[%s] %s сообщений -> %s постов после склейки альбомов", source, len(raw_messages), len(groups))

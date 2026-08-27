@@ -1630,36 +1630,50 @@ def fetch_telegram_preview(username):
         return None
 
 
+def _extract_vk_members(html):
+    if not html:
+        return 0
+    m = re.search(r'"members_count"\s*:\s*(\d+)', html)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"([\d\s\xa0]+)\s*(?:подписчик|участник)", html)
+    if m:
+        digits = re.sub(r"[^\d]", "", m.group(1))
+        return int(digits) if digits else 0
+    return 0
+
+
 def fetch_vk_members(url):
     """
     Число подписчиков паблика VK — T-92 (27.08.2026, статистика активности
     компаний по запросу пользователя: "рост подписчиков в соцсетях").
     Официального публичного API без токена нет, поэтому парсим саму
     HTML-страницу группы: число обычно зашито либо в инлайн-JSON
-    ("members_count":N — актуальная вёрстка VK), либо прямым текстом
-    ("12 345 подписчиков"/"12 345 участников" — старые/мобильные версии).
-    VK периодически меняет вёрстку — если ни один паттерн не сработал,
-    тихо возвращаем 0 (тот же safety-net принцип, что у остальных
-    extract_*/fetch_* в этом файле), не роняем весь прогон статистики
-    из-за одной несовпавшей компании.
+    ("members_count":N), либо прямым текстом ("12 345 подписчиков"/
+    "12 345 участников" — старые/мобильные версии).
+
+    Найдено на реальном прогоне 27.08.2026: из 61 компании с VK-ссылкой
+    обычный requests.get() дал ненулевой результат только у ОДНОЙ — то
+    есть VK, как и React/Next.js-сайты в T-89, требует JS для отрисовки
+    этого числа в подавляющем большинстве случаев (проверено вручную
+    через живой браузер: "members_count" реально есть в DOM ПОСЛЕ
+    рендера, но не в сыром HTML с сервера). Поэтому та же тактика, что в
+    fetch_site_text() — сначала дешёвый обычный запрос, и только если он
+    не дал числа, дорогой Playwright-рендер как fallback (не платим
+    стоимостью браузера, когда обычный запрос уже сработал).
     """
     if not url:
         return 0
     try:
         r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200:
-            return 0
-        html = r.text
-        m = re.search(r'"members_count"\s*:\s*(\d+)', html)
-        if m:
-            return int(m.group(1))
-        m = re.search(r"([\d\s\xa0]+)\s*(?:подписчик|участник)", html)
-        if m:
-            digits = re.sub(r"[^\d]", "", m.group(1))
-            return int(digits) if digits else 0
-        return 0
+        html = r.text if r.status_code == 200 else ""
     except Exception:
-        return 0
+        html = ""
+    count = _extract_vk_members(html)
+    if count:
+        return count
+    rendered = fetch_site_text_rendered(url)
+    return _extract_vk_members(rendered)
 
 
 def fetch_instagram_followers(url):

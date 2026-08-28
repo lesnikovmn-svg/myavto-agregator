@@ -214,6 +214,13 @@ _TAM_DROP_PATTERNS = [
     re.compile(r"в\s+кредит", re.I),
     re.compile(r"MAX\s*канал", re.I),
     re.compile(r"[Кк]упить.*консультац", re.I),
+    # T-96 (28.08.2026, честный fallback для постов без "под ключ" —
+    # см. parse_tamsyam26): строка-цена без метки "Цена" (просто число+₽,
+    # как в примере GMC Sierra: "5.900.000₽.") и отдельная строка про
+    # город доставки ("с Доставкой до Ставрополя") — обе заменяются нашей
+    # собранной строкой ниже, оставлять исходные не нужно (дублирование).
+    re.compile(r"^\s*[\d][\d.,\s]*\s*₽\.?\s*$"),
+    re.compile(r"^\s*с\s+[Дд]оставкой\s+до\s+\S+"),
 ]
 
 MAX_CHINA_FEATURE_LINES = 6
@@ -280,7 +287,7 @@ def mask_vin(text):
     return _VIN_RE.sub(lambda m: m.group(0)[:-5] + "*****", text)
 
 
-def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None, price_eur=None):
+def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None, price_eur=None, price_approximate=False, delivery_city=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
     bezpokrasa — вычищает построчную раскладку цены источника, вставляет
     готовую строку в рублях (с наценкой за доставку под ключ). winner_auto_club
@@ -316,8 +323,13 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
     elif source_username == "tamsyam26":
         # Продавец в Ставрополе, мы работаем из Краснодара — город продавца
         # в оставшемся тексте (например, в строке про сроки доставки) не
-        # должен противоречить нашей же строке с ценой ниже.
-        body = re.sub(r"ставрополь", "Краснодар", body, flags=re.I)
+        # должен противоречить нашей же строке с ценой ниже. T-96
+        # (28.08.2026): но это верно только для "под ключ"-цены (наша
+        # строка "под ключ в Краснодаре" ниже) — для честного fallback-
+        # варианта (price_approximate=True) город продавца оставляем как
+        # есть, подменять его на Краснодар как раз и было бы нечестно.
+        if not price_approximate:
+            body = re.sub(r"ставрополь", "Краснодар", body, flags=re.I)
         # 26.08.2026 (пользователь увидел реальные посты в тесте — "буквы т
         # зачем? убрать"): в исходнике источника лишняя "т" приклеена прямо
         # к числу перед единицей — "32300т км" (пробег) и "+30000 т₽"
@@ -332,7 +344,15 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
         body = f"{body}\n\n{price_line}" if body else price_line
     elif source_username == "tamsyam26" and price_rub is not None:
         price_str = f"{price_rub:,}".replace(",", " ")
-        price_line = f"Цена под ключ в Краснодаре: {price_str} " + "₽"
+        if price_approximate:
+            # T-96 (28.08.2026, решение пользователя — "показывать честно"):
+            # нет "под ключ"-цены в посте, только ориентировочная с
+            # доставкой в город продавца — не подписываем как "под ключ в
+            # Краснодаре" (было бы неверно), показываем как есть.
+            city_part = f", доставка до {delivery_city}" if delivery_city else ""
+            price_line = f"Цена ориентировочная{city_part}: {price_str} ₽"
+        else:
+            price_line = f"Цена под ключ в Краснодаре: {price_str} " + "₽"
         body = f"{body}\n\n{price_line}" if body else price_line
     elif source_username == "winner_auto_club" and (price_usd is not None or price_eur is not None):
         # T-96 (28.08.2026): цена может быть и в $, и в € — раньше символ
@@ -617,24 +637,51 @@ def parse_tamsyam26(text):
     "под ключ до РФ (Владивосток-Уссурийск)" (не привязана к городу
     продавца) и "с доставкой в <город продавца>" (не наша, это его город).
     Решение пользователя: берём цену "под ключ", в репосте показываем как
-    доставку в Краснодар (см. build_repost_text()). Сэмпл — 1 реальный
-    пост, регэксп может потребовать правки на других форматах этого же
-    источника."""
+    доставку в Краснодар (см. build_repost_text()).
+
+    T-96 (28.08.2026, реальный пост GMC Sierra без фразы "под ключ" вообще
+    — только "ЦЕНА ориентировочная ... с Доставкой до Ставрополя ...
+    5.900.000₽." — раньше такие посты тихо считались "не распознан").
+    Fallback: если "под ключ" не нашли, берём цену рядом со словом "цена"
+    и, если есть, город доставки — помечаем price_approximate=True и
+    показываем честно (решение пользователя — "показывать честно", не
+    выдавать чужой город продавца за наш "под ключ в Краснодаре")."""
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     # Модель у этого источника — отдельная строка КАПСОМ (например "TIGUAN"),
     # а не первая строка с буквами вообще (первые строки обычно — эмодзи-
     # баннер и рекламные фразы вроде "сделки проходят только по договору").
     title = next((l for l in lines if _TAM_TITLE_RE.match(l)), "Автомобиль")
 
-    price_match = re.search(r"под\s+ключ.{0,150}?([\d][\d.,\s]{3,})\s*₽", text, re.I)
-    if price_match is None:
+    mileage = re.search(r"[Пп]робег\s*([\d\s]+)\s*км", text)
+    mileage_str = f"{clean_amount(mileage.group(1))} км" if mileage else None
+
+    # DOTALL: цена в реальных постах бывает на другой строке, чем "под
+    # ключ"/"цена" (см. пример GMC Sierra ниже в docstring) — без DOTALL
+    # "." не пересекает перенос строки, и regex тихо не находит цену.
+    price_match = re.search(r"под\s+ключ.{0,150}?([\d][\d.,\s]{3,})\s*₽", text, re.I | re.DOTALL)
+    if price_match is not None:
+        price_rub = clean_amount(price_match.group(1))
+        if price_rub is None:
+            return None
+        return {
+            "title": title,
+            "mileage": mileage_str,
+            "price_eur_total": None,
+            "price_usd_total": None,
+            "price_rub": price_rub,
+            "price_approximate": False,
+            "delivery_city": None,
+        }
+
+    approx_match = re.search(r"[Цц][Ее][Нн][Аа].{0,150}?([\d][\d.,\s]{3,})\s*₽", text, re.DOTALL)
+    if approx_match is None:
         return None
-    price_rub = clean_amount(price_match.group(1))
+    price_rub = clean_amount(approx_match.group(1))
     if price_rub is None:
         return None
 
-    mileage = re.search(r"[Пп]робег\s*([\d\s]+)\s*км", text)
-    mileage_str = f"{clean_amount(mileage.group(1))} км" if mileage else None
+    city_match = re.search(r"[Дд]оставк\w*\s+до\s+([A-ZА-ЯЁ][a-zа-яё]+)", text)
+    delivery_city = city_match.group(1) if city_match else None
 
     return {
         "title": title,
@@ -642,6 +689,8 @@ def parse_tamsyam26(text):
         "price_eur_total": None,
         "price_usd_total": None,
         "price_rub": price_rub,
+        "price_approximate": True,
+        "delivery_city": delivery_city,
     }
 
 
@@ -1068,7 +1117,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
             return
 
         real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
-        post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username, price_eur=parsed.get("price_eur_total"))
+        post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username, price_eur=parsed.get("price_eur_total"), price_approximate=parsed.get("price_approximate", False), delivery_city=parsed.get("delivery_city"))
 
     # 25.08.2026 (решение пользователя): фото/текст уже можно в боевые группы,
     # а видео — пока нет (для winner_auto_club водяной знак с видео ещё не

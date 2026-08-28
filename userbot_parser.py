@@ -280,7 +280,7 @@ def mask_vin(text):
     return _VIN_RE.sub(lambda m: m.group(0)[:-5] + "*****", text)
 
 
-def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None):
+def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None, price_eur=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
     bezpokrasa — вычищает построчную раскладку цены источника, вставляет
     готовую строку в рублях (с наценкой за доставку под ключ). winner_auto_club
@@ -334,9 +334,15 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
         price_str = f"{price_rub:,}".replace(",", " ")
         price_line = f"Цена под ключ в Краснодаре: {price_str} " + "₽"
         body = f"{body}\n\n{price_line}" if body else price_line
-    elif source_username == "winner_auto_club" and price_usd is not None:
-        price_str = f"{price_usd:,}"
-        price_line = f"Цена: ${price_str} (цена в Грузии). За точной ценой на момент сделки — пишите в личку."
+    elif source_username == "winner_auto_club" and (price_usd is not None or price_eur is not None):
+        # T-96 (28.08.2026): цена может быть и в $, и в € — раньше символ
+        # был захардкожен как "$", из-за чего евровая цена показалась бы
+        # пользователю как долларовая (в 1.1+ раза дешевле реальной).
+        if price_usd is not None:
+            price_str, symbol = f"{price_usd:,}", "$"
+        else:
+            price_str, symbol = f"{price_eur:,}", "€"
+        price_line = f"Цена: {symbol}{price_str} (цена в Грузии). За точной ценой на момент сделки — пишите в личку."
         body = f"{body}\n\n{price_line}" if body else price_line
 
     footer = build_footer(feedback_bot_username)
@@ -559,9 +565,16 @@ def parse_china_invoice(text):
 
 def parse_winner_auto_club(text):
     """Формат winner_auto_club: метки по-русски (Год выпуска/Пробег/Цена),
-    цена в $ (формат "54.500$" — точка как разделитель тысяч, знак после
-    числа). VIN в этом источнике обычно не публикуется — просто None,
-    ничего не выдумываем."""
+    цена в формате "54.500$"/"73.500€" (точка как разделитель тысяч, знак
+    валюты после числа). VIN в этом источнике обычно не публикуется —
+    просто None, ничего не выдумываем.
+
+    T-96 (28.08.2026, реальный пропущенный пост "Mercedes-Benz V 300" —
+    цена была в €, старый регэксп ловил только "$", пост тихо считался
+    "не распознан как объявление об авто"): канал публикует цены и в $, и
+    в € — ловим оба, кладём в соответствующее поле (price_usd_total ИЛИ
+    price_eur_total), compute_price_rub() уже умеет считать рубли из
+    любого из них."""
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     title = None
     for line in lines:
@@ -572,11 +585,14 @@ def parse_winner_auto_club(text):
 
     vin = re.search(r"vin[:\s]*([A-Za-z0-9]{5,20})", text, re.I)
     mileage = re.search(r"[Пп]робег:?\s*\**\s*([\d.,\s]+)\s*км", text, re.I)
-    price = re.search(r"[Цц]ена:?\s*\**\s*([\d.,\s]+)\s*\$", text)
+    price = re.search(r"[Цц]ена:?\s*\**\s*([\d.,\s]+)\s*([$€])", text)
 
-    price_usd = clean_amount(price.group(1)) if price else None
-    if price_usd is None:
+    if price is None:
         return None
+    amount = clean_amount(price.group(1))
+    if amount is None:
+        return None
+    currency = price.group(2)
 
     mileage_str = None
     if mileage:
@@ -586,8 +602,8 @@ def parse_winner_auto_club(text):
         "title": title or "Автомобиль",
         "vin": vin.group(1) if vin else None,
         "mileage": mileage_str,
-        "price_eur_total": None,
-        "price_usd_total": price_usd,
+        "price_eur_total": amount if currency == "€" else None,
+        "price_usd_total": amount if currency == "$" else None,
         "price_rub": None,
     }
 
@@ -1052,7 +1068,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
             return
 
         real_targets = route_targets(price_rub, targets_cfg["optimal"], targets_cfg["my_avto5"])
-        post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username)
+        post_text = build_repost_text(text, source_username, price_rub, parsed.get("price_usd_total"), feedback_bot_username, price_eur=parsed.get("price_eur_total"))
 
     # 25.08.2026 (решение пользователя): фото/текст уже можно в боевые группы,
     # а видео — пока нет (для winner_auto_club водяной знак с видео ещё не

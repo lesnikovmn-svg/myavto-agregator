@@ -44,6 +44,20 @@ TEST_ONLY_SOURCES) публикуется в любое время суток, �
 без перехода на летнее/зимнее время, поэтому время считается фиксированным
 смещением UTC+3 (см. _now_msk()) без зависимости от zoneinfo/pytz.
 
+T-99 (30.08.2026, запрошено пользователем — "давай проверим почему не
+автопостит?"): отдельная очередь userbot_manual_queue.json для постов БЕЗ
+исходного сообщения в отслеживаемом канале (например, ролик, собранный
+вручную из чужого скринкаста, с текстом, написанным руками) —
+_pending_queue_flusher() выше для такого не подходит, он умеет только
+заново СКАЧАТЬ уже существующее сообщение источника по id, а тут скачивать
+неоткуда. queue_manual_post(text, media_paths, targets) кладёт готовый
+пост в очередь, _manual_queue_flusher() разбирает её раз в ~60с и шлёт
+через ТОТ ЖЕ живой client, что и остальной пайплайн — второй
+Telethon-сессии не открывается, конфликтов с боевым сервисом нет. Файлы
+из media_paths должны заранее лежать на этом же сервере (флашер их
+никуда не скачивает). См. queue_manual_post.py — CLI-обёртка для запуска
+прямо на сервере юзербота.
+
 T-85 (26.08.2026, пользователь прислал реальные фото из тестового прогона —
 "фиаско полное, посмотри какие огромные закраски бейджа"): template-matching
 детект бейджа winner_auto_club (v1) ни разу не нашёл настоящий бейдж на
@@ -80,6 +94,7 @@ import io
 import json
 import logging
 import re
+import uuid
 from datetime import datetime, timedelta, time as dtime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -485,6 +500,41 @@ def _queue_pending(source_username, ids):
             return
     queue["items"].append({"source_username": source_username, "ids": sorted(ids_set)})
     save_pending_queue(queue)
+
+
+# --- T-99 (30.08.2026): очередь ручных постов (без исходного сообщения источника) ---
+
+MANUAL_QUEUE_PATH = Path("userbot_manual_queue.json")
+
+
+def load_manual_queue():
+    if MANUAL_QUEUE_PATH.exists():
+        return json.loads(MANUAL_QUEUE_PATH.read_text(encoding="utf-8"))
+    return {"items": []}
+
+
+def save_manual_queue(queue):
+    tmp = MANUAL_QUEUE_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(MANUAL_QUEUE_PATH)
+
+
+def queue_manual_post(text, media_paths, targets):
+    """Кладёт вручную собранный пост (готовый текст + пути к файлам,
+    уже лежащим на этом сервере) в очередь на отправку через уже живую
+    сессию юзербота. targets — список юзернеймов каналов, например
+    ["@My_Avto_Optimal", "@MY_Avto5"]. Разбирает _manual_queue_flusher()."""
+    queue = load_manual_queue()
+    item = {
+        "id": str(uuid.uuid4()),
+        "text": text,
+        "media": list(media_paths),
+        "targets": list(targets),
+        "queued_at": datetime.utcnow().isoformat(),
+    }
+    queue["items"].append(item)
+    save_manual_queue(queue)
+    return item["id"]
 
 
 # Дедуп по точному набору уже отправленных id сообщений, а не по "максимальному
@@ -894,15 +944,28 @@ _BADGE_OCR_SCALES = (3, 2)  # 26.08.2026: одного scale=3 не хватил
                              # чтобы не терять либо мелкий, либо крупный бейдж.
 
 
-def _find_badge_box(img, regions=None):
+def _find_badge_box(img, regions=None, scales=None, psm=11):
     """Ищет бейдж WINNER AUTO CLUB по тексту в заданных областях кадра
     (по умолчанию — нижние углы, см. _badge_corner_regions; видео-пайплайн
     передаёт другой набор регионов — там бейдж встречается и по центру
     низа кадра, не только по углам). Возвращает плотный (x, y, w, h) вокруг
     распознанных слов, либо None, если уверенного совпадения нет — тогда
-    кадр/фото не трогаем."""
+    кадр/фото не трогаем.
+
+    28.08.2026 (T-98): scales/psm теперь параметризуемы — не трогает
+    поведение для фото (default None/11 = как раньше, _BADGE_OCR_SCALES и
+    psm=11), но видео-пайплайн передаёт свои значения. Причина: у видео
+    регион поиска — вся ширина кадра (см. _badge_video_regions в
+    watermark_video.py), а не узкие угловые кропы, как у фото. На реальном
+    тесте (IMG_0901) штатные scale=(3,2)+psm=11 при апскейле такой широкой
+    области (2560-3840px) разваливались в шум и НЕ находили даже крупный
+    чёткий анфас-бейдж (кадр 0 того видео) — тот же класс проблемы, что уже
+    описан в комментарии у _BADGE_OCR_SCALES про фото, только острее из-за
+    большей ширины региона."""
     if regions is None:
         regions = _badge_corner_regions(img)
+    if scales is None:
+        scales = _BADGE_OCR_SCALES
     all_hits = []
     for sx0, sy0, sx1, sy1 in regions:
         crop = img[sy0:sy1, sx0:sx1]
@@ -910,8 +973,8 @@ def _find_badge_box(img, regions=None):
             continue
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         for variant in (gray, 255 - gray):
-            for scale in _BADGE_OCR_SCALES:
-                for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale):
+            for scale in scales:
+                for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale, psm=psm):
                     all_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
 
     if not all_hits:
@@ -1261,6 +1324,57 @@ async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate
             logger.exception("Ошибка в фоновой задаче отправки отложенных постов — продолжаю, попробую на следующем цикле")
 
 
+async def _manual_queue_flusher(client, poll_seconds=60):
+    """T-99 (30.08.2026, запрошено пользователем — "давай проверим почему
+    не автопостит?"): аналог _pending_queue_flusher(), но для постов без
+    исходного сообщения в отслеживаемом канале-источнике (например,
+    видео, собранное вручную из чужого скринкаста, с текстом, написанным
+    руками) — там нечего заново скачивать по id, текст и пути к файлам
+    уже готовы и лежат прямо в очереди (userbot_manual_queue.json,
+    queue_manual_post()). Файлы должны физически лежать на этом же
+    сервере ДО постановки в очередь — сам флашер их никуда не скачивает.
+    Отправка — тем же живым client, что и у остального пайплайна: никакой
+    второй Telethon-сессии не открывается, поэтому безопасно работает
+    параллельно с боевым сервисом."""
+    while True:
+        await asyncio.sleep(poll_seconds)
+        try:
+            queue = load_manual_queue()
+            items = queue.get("items", [])
+            if not items:
+                continue
+            save_manual_queue({"items": []})
+            logger.info("--- Разбираю очередь ручных постов: %s шт. ---", len(items))
+            for item in items:
+                item_id = item.get("id", "?")
+                text = item.get("text", "")
+                media_paths = item.get("media", [])
+                targets = item.get("targets", [])
+                missing = [mp for mp in media_paths if not Path(mp).exists()]
+                if missing:
+                    logger.error(
+                        "[manual#%s] файлы не найдены на диске этого сервера: %s — пост НЕ отправлен, убираю из очереди (скопируй файлы на сервер и поставь в очередь заново)",
+                        item_id, missing,
+                    )
+                    continue
+                for target in targets:
+                    try:
+                        if media_paths:
+                            try:
+                                await client.send_message(target, text, file=media_paths, parse_mode="md", link_preview=False)
+                            except MediaCaptionTooLongError:
+                                logger.info("[manual#%s] подпись слишком длинная для медиа, шлю текст отдельным сообщением", item_id)
+                                await client.send_message(target, "", file=media_paths)
+                                await client.send_message(target, text, parse_mode="md", link_preview=False)
+                        else:
+                            await client.send_message(target, text, parse_mode="md", link_preview=False)
+                        logger.info("[manual#%s] запощено в %s", item_id, target)
+                    except Exception:
+                        logger.exception("[manual#%s] ошибка при постинге в %s", item_id, target)
+        except Exception:
+            logger.exception("Ошибка в фоновой задаче отправки ручных постов — продолжаю, попробую на следующем цикле")
+
+
 async def _collect_messages(client, source, limit):
     return [m async for m in client.iter_messages(source, limit=limit)]
 
@@ -1363,6 +1477,9 @@ async def main():
         client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run,
         test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources,
     ))
+    # T-99 (30.08.2026): очередь ручных постов (userbot_manual_queue.json) —
+    # опрашивается раз в ~60с, отправляет через этот же живой client.
+    asyncio.create_task(_manual_queue_flusher(client))
 
     logger.info(
         "Режим: %s | видео: %s | источники: %s | цели: %s / %s",

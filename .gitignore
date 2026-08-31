@@ -21,3 +21,4 @@ node_modules/
 *.session
 *.session-journal
 *.mov
+manual_posts/

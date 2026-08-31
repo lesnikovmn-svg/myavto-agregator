@@ -943,8 +943,33 @@ _BADGE_OCR_SCALES = (3, 2)  # 26.08.2026: одного scale=3 не хватил
                              # "WINNER"/"CLUB". Пробуем оба, а не только x3,
                              # чтобы не терять либо мелкий, либо крупный бейдж.
 
+# 31.08.2026 (T-104): фото-путь гонял OCR ТОЛЬКО с psm=11 (россыпь текста),
+# хотя ещё в T-98 (28.08.2026, watermark_video.py) выяснилось, что psm=6
+# (один блок текста) надёжнее ловит "WINNER"/"CLUB" на реальном кадре — и
+# просто никогда не переносилось обратно на фото. Проверено на 7 реальных
+# фото из тестовой группы (жалоба "бейджи не везде полностью забрюлили"):
+# на прямых/почти прямых ракурсах (не 3/4) psm=11 не находил НИ ОДНОГО
+# слова бейджа там, где psm=6 уверенно ловил "WINNER" (dist=0). Пробуем
+# оба psm, как и оба scale — дороже по времени, но не меняет логику
+# принятия решения "это бейдж", только добавляет ещё один шанс найти текст.
+_BADGE_OCR_PSMS = (11, 6)
 
-def _find_badge_box(img, regions=None, scales=None, psm=11):
+# 31.08.2026 (T-104): OCR почти никогда не ловит все 3 слова бейджа сразу
+# (обычно только "WINNER" ИЛИ только "CLUB") — а старый паддинг
+# (_BADGE_PAD_FRAC_X от ширины НАЙДЕННОГО текста) считался симметрично от
+# этого одного короткого слова и физически не дотягивался до остальных
+# двух: на реальных фото из теста нашли "WINNER" (ширина ~70px), а вся
+# табличка "WINNER AUTO CLUB" шире ещё примерно на 220px правее — паддинг
+# в 0.55*70+10≈49px до туда не доставал, "AUTO CLUB" оставались на фото.
+# Порядок слов на бейдже фиксирован (всегда "WINNER AUTO CLUB" слева
+# направо) — используем это: если поймали "WINNER", но не "CLUB", запас
+# добавляем в основном ВПРАВО (там непойманные "AUTO CLUB"), и наоборот.
+# 5x высоты найденного слова — измерено на реальном фото (61b4d088,
+# T-104): ~220px запаса при высоте буквы ~45px.
+_BADGE_EXTRA_MULT = 5.0
+
+
+def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False):
     """Ищет бейдж WINNER AUTO CLUB по тексту в заданных областях кадра
     (по умолчанию — нижние углы, см. _badge_corner_regions; видео-пайплайн
     передаёт другой набор регионов — там бейдж встречается и по центру
@@ -961,11 +986,21 @@ def _find_badge_box(img, regions=None, scales=None, psm=11):
     области (2560-3840px) разваливались в шум и НЕ находили даже крупный
     чёткий анфас-бейдж (кадр 0 того видео) — тот же класс проблемы, что уже
     описан в комментарии у _BADGE_OCR_SCALES про фото, только острее из-за
-    большей ширины региона."""
+    большей ширины региона.
+
+    31.08.2026 (T-104): psm теперь по умолчанию None — фото-путь пробует
+    ОБА _BADGE_OCR_PSMS (11 и 6, см. комментарий там), а не только 11.
+    Видео как передавало один конкретный psm (сейчас 6, T-98), так и
+    передаёт — его поведение не меняется. return_words=True дополнительно
+    возвращает set() найденных слов ("WINNER"/"AUTO"/"CLUB") — remove_watermark
+    использует его, чтобы направленно расширить паддинг в сторону
+    непойманных слов (см. _BADGE_EXTRA_MULT); видео этот флаг не использует
+    и получает как раньше только box."""
     if regions is None:
         regions = _badge_corner_regions(img)
     if scales is None:
         scales = _BADGE_OCR_SCALES
+    psms = _BADGE_OCR_PSMS if psm is None else (psm,)
     all_hits = []
     for sx0, sy0, sx1, sy1 in regions:
         crop = img[sy0:sy1, sx0:sx1]
@@ -974,11 +1009,12 @@ def _find_badge_box(img, regions=None, scales=None, psm=11):
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         for variant in (gray, 255 - gray):
             for scale in scales:
-                for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale, psm=psm):
-                    all_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
+                for p in psms:
+                    for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale, psm=p):
+                        all_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
 
     if not all_hits:
-        return None
+        return (None, set()) if return_words else None
 
     # На каждое целевое слово оставляем только лучшее (наименьшее расстояние) совпадение
     best_per_word = {}
@@ -988,13 +1024,97 @@ def _find_badge_box(img, regions=None, scales=None, psm=11):
 
     strong = any(dist <= _BADGE_STRONG_MAX_DIST for dist, *_ in best_per_word.values())
     if not strong and len(best_per_word) < _BADGE_MIN_DISTINCT_WORDS:
-        return None
+        return (None, set()) if return_words else None
 
     xs0 = min(x for _, x, y, ww, hh in best_per_word.values())
     ys0 = min(y for _, x, y, ww, hh in best_per_word.values())
     xs1 = max(x + ww for _, x, y, ww, hh in best_per_word.values())
     ys1 = max(y + hh for _, x, y, ww, hh in best_per_word.values())
-    return int(xs0), int(ys0), int(xs1 - xs0), int(ys1 - ys0)
+    box = (int(xs0), int(ys0), int(xs1 - xs0), int(ys1 - ys0))
+    return (box, set(best_per_word.keys())) if return_words else box
+
+
+# 31.08.2026 (T-104): на ракурсе 3/4 (не анфас/корма строго в лоб) текст
+# бейджа в кадре заметно скошен перспективой — обычный _find_badge_box (без
+# поворота) не находит НИ ОДНОГО слова ни при каком psm/scale, проверено
+# вручную на реальном фото (белый TX, корма, F8C40AEF из жалобы 31.08.2026).
+# Перебор поворота кропа на несколько углов перед OCR подтверждённо чинит
+# именно этот случай (при +20° находились И "WINNER", И "CLUB" с точным
+# совпадением) — но НЕ чинит другой, внешне похожий случай (текст на фото
+# уже почти горизонтален, но OCR всё равно не находит ничего ни при каком
+# угле — там причина не в скосе, а в том, что весь угловой регион поиска
+# (768x710) слишком захламлён соседними деталями решётки/шторы для
+# psm=6 "единый блок текста"; для этого нужен отдельный фикс — сужение
+# региона или локализация в 2 прохода, здесь НЕ реализовано).
+#
+# Пробуем только КАК ФОЛБЭК — когда обычный _find_badge_box() вернул None,
+# то есть ничего не нашли и так, терять нечего. Сознательно ограничен набор
+# углов/scale/psm (4 угла × 2 варианта × 1 scale × 1 psm = 8 OCR-вызовов на
+# регион — тот же порядок, что и у обычного прохода), чтобы в худшем случае
+# (когда фолбэк тоже сработал впустую) обработка одного фото не утраивалась,
+# а примерно удваивалась — пользователь одобрил именно "удвоить время"
+# 31.08.2026, не больше.
+_BADGE_ROTATION_ANGLES = (-20, -15, 15, 20)
+_BADGE_ROTATION_SCALE = 2
+_BADGE_ROTATION_PSM = 11
+
+
+def _find_badge_box_rotated(img, regions=None, angles=None, scale=None, psm=None, return_words=False):
+    """Фолбэк-версия _find_badge_box() с перебором поворота кропа — см.
+    комментарий у _BADGE_ROTATION_ANGLES. Возвращает то же самое, что и
+    _find_badge_box (box или (box, words) при return_words=True), координаты
+    уже пересчитаны обратно в систему координат НЕповёрнутого кадра."""
+    if regions is None:
+        regions = _badge_corner_regions(img)
+    if angles is None:
+        angles = _BADGE_ROTATION_ANGLES
+    if scale is None:
+        scale = _BADGE_ROTATION_SCALE
+    if psm is None:
+        psm = _BADGE_ROTATION_PSM
+
+    all_hits = []
+    for sx0, sy0, sx1, sy1 in regions:
+        crop = img[sy0:sy1, sx0:sx1]
+        if crop.size == 0:
+            continue
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape[:2]
+        for angle in angles:
+            center = (w / 2, h / 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(gray, M, (w, h), borderValue=128)
+            # Обратное вращение (тот же центр, противоположный угол) — чтобы
+            # пересчитать найденный в ПОВЁРНУТОМ кропе бокс обратно в
+            # координаты исходного (неповёрнутого) кропа.
+            m_inv = cv2.getRotationMatrix2D(center, -angle, 1.0)
+            for variant in (rotated, 255 - rotated):
+                for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale, psm=psm):
+                    pts = np.array([[[x, y]], [[x + ww, y]], [[x, y + hh]], [[x + ww, y + hh]]], dtype=np.float32)
+                    mapped = cv2.transform(pts, m_inv)
+                    xs, ys = mapped[:, 0, 0], mapped[:, 0, 1]
+                    ox, oy = float(xs.min()), float(ys.min())
+                    ow, oh = float(xs.max() - xs.min()), float(ys.max() - ys.min())
+                    all_hits.append((target, dist, sx0 + ox, sy0 + oy, ow, oh))
+
+    if not all_hits:
+        return (None, set()) if return_words else None
+
+    best_per_word = {}
+    for target, dist, x, y, ww, hh in all_hits:
+        if target not in best_per_word or dist < best_per_word[target][0]:
+            best_per_word[target] = (dist, x, y, ww, hh)
+
+    strong = any(dist <= _BADGE_STRONG_MAX_DIST for dist, *_ in best_per_word.values())
+    if not strong and len(best_per_word) < _BADGE_MIN_DISTINCT_WORDS:
+        return (None, set()) if return_words else None
+
+    xs0 = min(x for _, x, y, ww, hh in best_per_word.values())
+    ys0 = min(y for _, x, y, ww, hh in best_per_word.values())
+    xs1 = max(x + ww for _, x, y, ww, hh in best_per_word.values())
+    ys1 = max(y + hh for _, x, y, ww, hh in best_per_word.values())
+    box = (int(xs0), int(ys0), int(xs1 - xs0), int(ys1 - ys0))
+    return (box, set(best_per_word.keys())) if return_words else box
 
 
 def remove_watermark(image_bytes):
@@ -1011,7 +1131,13 @@ def remove_watermark(image_bytes):
         return image_bytes
 
     try:
-        box = _find_badge_box(img)
+        box, words = _find_badge_box(img, return_words=True)
+        if box is None:
+            # 31.08.2026 (T-104): фолбэк на ракурс 3/4 — только когда обычный
+            # проход ничего не нашёл (см. комментарий у _BADGE_ROTATION_ANGLES
+            # про то, почему это не всегда помогает, но раз обычный проход и
+            # так вернул None, терять уже нечего).
+            box, words = _find_badge_box_rotated(img, return_words=True)
     except pytesseract.TesseractNotFoundError:
         # pytesseract (Python-пакет) стоит, а сам бинарь tesseract-ocr на
         # машине — нет (apt install tesseract-ocr, отдельно от pip install
@@ -1030,8 +1156,22 @@ def remove_watermark(image_bytes):
     # нераспознанное слово и фон вокруг текста.
     pad_x = int(w * _BADGE_PAD_FRAC_X) + 10
     pad_y = int(h * _BADGE_PAD_FRAC_Y) + 8
-    x0, y0 = max(0, x - pad_x), max(0, y - pad_y)
-    x1, y1 = min(img.shape[1], x + w + pad_x), min(img.shape[0], y + h + pad_y)
+    # 31.08.2026 (T-104): симметричный pad_x от найденного текста не
+    # дотягивался до остальных слов, если OCR поймала только одно короткое
+    # (обычно "WINNER" слева или "CLUB" справа) — см. комментарий у
+    # _BADGE_EXTRA_MULT. Порядок слов фиксирован, поэтому запас смещаем
+    # направленно в сторону непойманных слов, а не растягиваем поровну.
+    extra = int(h * _BADGE_EXTRA_MULT)
+    pad_left, pad_right = pad_x, pad_x
+    if "WINNER" in words and "CLUB" not in words:
+        pad_right += extra
+    elif "CLUB" in words and "WINNER" not in words:
+        pad_left += extra
+    elif words == {"AUTO"}:
+        pad_left += extra // 2
+        pad_right += extra // 2
+    x0, y0 = max(0, x - pad_left), max(0, y - pad_y)
+    x1, y1 = min(img.shape[1], x + w + pad_right), min(img.shape[0], y + h + pad_y)
 
     roi = img[y0:y1, x0:x1]
     # Сплошная заливка средним цветом области — блюр не убирает бейдж

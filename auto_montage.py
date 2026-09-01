@@ -23,7 +23,11 @@ userbot_parser.py — интеграция описана в TASKS.md T-86.
      класс проблемы, что и у OCR-детекта бейджа, см. watermark_video.py).
   3. Для каждого кандидата — проверить, есть ли в нём бейдж winner_auto_club
      (переиспользуем detect_boxes() из watermark_video.py, тот же
-     OCR-детект+трекинг, что и в ручном процессе). Три исхода:
+     OCR-детект+трекинг, что и в ручном процессе). T-110 (01.09.2026):
+     это ТОЛЬКО для source == "winner_auto_club" — OCR обучен/подобран
+     именно под его бейдж, для остальных источников (расширены в T-109)
+     план всегда считается "safe" без вызова OCR. Три исхода (актуальны
+     только когда OCR реально запущен):
        - НЕТ бейджа ни в одном кадре -> SAFE, используем как есть.
        - Бейдж уверенно найден и закрашен в почти всех кадрах (>=90%) ->
          COVERED, используем, закрасив (render()).
@@ -272,10 +276,23 @@ def _hook_text(parsed):
     return title or None
 
 
-def build_short(in_path, parsed, out_path, log=lambda msg: None):
+def build_short(in_path, parsed, out_path, log=lambda msg: None, source=None):
     t0_all = time.time()
     shots = _shot_boundaries(in_path)
     log(f"найдено планов: {len(shots)} -> {shots}")
+
+    # T-110 (01.09.2026, запрошено пользователем — "детект бейджа/OCR в
+    # auto_montage писался конкретно под видео winner_auto_club"): OCR-детект
+    # (detect_boxes(), тот же алгоритм, что и в watermark_video.py) отдельно
+    # обучался/подбирался именно под бейдж winner_auto_club — на видео
+    # других источников (artalexgroup, bezpokrasa, добавлены в
+    # AUTO_MONTAGE_SOURCES в T-109) он не проверялся: может ложно
+    # сработать, впустую тратить CPU/время на OCR (самая тяжёлая часть
+    # пайплайна, см. T-95/T-95bis про её вклад в OOM) там, где красить
+    # нечего. Поэтому OCR запускаем ТОЛЬКО когда source == "winner_auto_club"
+    # — для остальных источников план сразу считается "safe" (используем
+    # как есть, без закраски), без единого вызова detect_boxes().
+    run_badge_detect = source == "winner_auto_club"
 
     candidates = []
     for (a, b) in shots:
@@ -283,7 +300,10 @@ def build_short(in_path, parsed, out_path, log=lambda msg: None):
         start, win = _best_window(in_path, a, b, min(want, b - a))
         seg_tmp = f"{out_path}.cand_{len(candidates)}.mp4"
         _extract(in_path, start, win, seg_tmp)
-        status, results = _classify_badge(seg_tmp, log)
+        if run_badge_detect:
+            status, results = _classify_badge(seg_tmp, log)
+        else:
+            status, results = "safe", []
         candidates.append({"t0": start, "dur": win, "path": seg_tmp, "status": status, "results": results})
         log(f"план {a:.1f}-{b:.1f}с -> окно {start:.2f}+{win:.2f}с, статус={status}")
 
@@ -353,5 +373,9 @@ if __name__ == "__main__":
     in_path, out_path = sys.argv[1], sys.argv[2]
     title = sys.argv[3] if len(sys.argv) > 3 else None
     mileage = sys.argv[4] if len(sys.argv) > 4 else None
-    build_short(in_path, {"title": title, "mileage": mileage}, out_path, log=print)
+    # T-110: source_username — решает, включать ли OCR-детект бейджа (см.
+    # комментарий в build_short()). Пятый CLI-аргумент, необязательный
+    # (обратная совместимость: без него run_badge_detect=False).
+    source = sys.argv[5] if len(sys.argv) > 5 else None
+    build_short(in_path, {"title": title, "mileage": mileage}, out_path, log=print, source=source)
     print(f"done -> {out_path}")

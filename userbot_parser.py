@@ -1303,7 +1303,26 @@ PHOTO_PROCESSORS = {"winner_auto_club": remove_watermark}
 # только в тестовую группу, боевые каналы не затронуты, что бы ни
 # случилось. НЕ проверено на реальном VPS-трафике после этого фикса —
 # после деплоя посмотреть `free -h`/journalctl на VPS (T-95, пункт 1).
-AUTO_MONTAGE_SOURCES = {"winner_auto_club"}  # было set() (T-95, экстренно отключено 27.08.2026)
+#
+# T-109 (01.09.2026, запрошено пользователем — целевая схема: "для инсты
+# берем из боевых каналов, а в боевой канал пусть заходит уже после
+# автомонтажа" + "все источники"): расширили монтаж на все источники с
+# парсером (artalexgroup, bezpokrasa), не только winner_auto_club. НО тем
+# же сообщением пользователь уточнил: "пока авто монтаж в процессе
+# доработки кидаем все видео в тестовую группу" — то есть целевая схема
+# (боевой канал получает УЖЕ обработанное монтажом видео) сознательно
+# отложена, пока качество не подтверждено на реальном трафике для всех
+# источников. Поэтому в handle_group() ниже source_username из
+# AUTO_MONTAGE_SOURCES теперь безусловно форсирует видео в тестовую
+# группу (новая ветка, независимая от video_dry_run/video_dry_run_sources
+# и от TEST_ONLY_SOURCES) — artalexgroup и bezpokrasa раньше слали видео
+# сразу в боевые (не были в video_dry_run_sources), теперь их видео тоже
+# уходит в тест, пока они в AUTO_MONTAGE_SOURCES. Текст/фото-посты этих
+# источников не затронуты — идут в боевые как раньше.
+# НЕ проверено на реальном трафике artalexgroup/bezpokrasa через монтаж —
+# посмотреть тестовую группу и `journalctl ... | grep -i montage` после
+# деплоя.
+AUTO_MONTAGE_SOURCES = {"artalexgroup", "bezpokrasa", "winner_auto_club"}  # было {"winner_auto_club"} (T-109)
 
 
 async def _prepare_media_list(client, source_username, messages, parsed=None):
@@ -1373,8 +1392,16 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
                     # Telethon-сессию с живым слушателем каналов — сервис
                     # продолжит работать и корректно попадёт в except ниже
                     # (ненулевой returncode), ровно как и задумывался fallback.
+                    # T-110 (01.09.2026): source_username передаём отдельным
+                    # аргументом — auto_montage.build_short() запускает
+                    # OCR-детект бейджа (detect_boxes()) только когда
+                    # source == "winner_auto_club" (единственный источник, под
+                    # который этот OCR подбирался); для остальных источников
+                    # из AUTO_MONTAGE_SOURCES (T-109) детект пропускается
+                    # целиком — экономит время/CPU и не рискует ложным
+                    # срабатыванием на видео, под которое OCR не проверялся.
                     proc = await asyncio.create_subprocess_exec(
-                        sys.executable, "auto_montage.py", in_path, out_path, title, mileage,
+                        sys.executable, "auto_montage.py", in_path, out_path, title, mileage, source_username,
                         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                     )
                     out, _ = await proc.communicate()
@@ -1468,6 +1495,19 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         # DRY_RUN/video_dry_run.
         send_targets = [test_group] if test_group else []
         note = " (нет парсера — показ как есть -> тестовая)" if parser is None else f" (источник ещё не проверен на боевом трафике -> тестовая, боевые цели были бы: {real_targets})"
+    elif has_video and source_username in AUTO_MONTAGE_SOURCES:
+        # T-109 (01.09.2026): пока авто-монтаж "в процессе доработки"
+        # (решение пользователя) — любое видео источника из
+        # AUTO_MONTAGE_SOURCES безусловно уходит в тестовую, независимо от
+        # video_dry_run/video_dry_run_sources и от того, был ли раньше этот
+        # источник разрешён в боевые с видео (artalexgroup/bezpokrasa —
+        # были). Не зависит от TEST_ONLY_SOURCES тоже — ветка выше уже
+        # покрывает winner_auto_club отдельно. Когда качество монтажа
+        # подтвердится на реальном трафике по всем источникам — эту ветку
+        # нужно убрать (или сузить список), чтобы боевой канал начал
+        # получать обработанное видео, как договорено на будущее.
+        send_targets = [test_group] if test_group else []
+        note = f" (видео -> тестовая, авто-монтаж ещё не подтверждён на боевом трафике; боевые цели были бы: {real_targets})"
     elif has_video and video_dry_run and source_username in video_dry_run_sources:
         # T-83 (25.08.2026): раньше это правило било по видео ЛЮБОГО
         # источника — теперь только по source_username из

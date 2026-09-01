@@ -261,7 +261,10 @@
     </div>
     <div class="calc-row">
       <label for="calcVolume" class="sr-only">Объём двигателя, см³</label>
-      <input type="number" id="calcVolume" placeholder="Объём двигателя, см³" min="0" oninput="calcCustoms()">
+      <div class="calc-input-unit">
+        <input type="number" id="calcVolume" placeholder="Объём двигателя" min="0" oninput="calcCustoms()">
+        <span class="calc-unit">см³</span>
+      </div>
       <label for="calcEngineType" class="sr-only">Тип двигателя</label>
       <select id="calcEngineType" onchange="calcCustoms()">
         <option value="ice">Бензин / дизель</option>
@@ -271,9 +274,15 @@
     </div>
     <div class="calc-row">
       <label for="calcPower" class="sr-only">Мощность, л.с.</label>
-      <input type="number" id="calcPower" placeholder="Мощность, л.с." min="0" oninput="calcCustoms()">
+      <div class="calc-input-unit">
+        <input type="number" id="calcPower" placeholder="Мощность" min="0" oninput="calcCustoms()">
+        <span class="calc-unit">л.с.</span>
+      </div>
       <label for="calcValue" class="sr-only">Стоимость авто, ₽</label>
-      <input type="number" id="calcValue" placeholder="Стоимость авто, ₽" min="0" oninput="calcCustoms()">
+      <div class="calc-input-unit">
+        <input type="number" id="calcValue" placeholder="Стоимость авто" min="0" oninput="calcCustoms()">
+        <span class="calc-unit">₽</span>
+      </div>
     </div>
     <div class="calc-result" id="calcResultBlock">
       <div class="calc-label">Заполните параметры выше</div>

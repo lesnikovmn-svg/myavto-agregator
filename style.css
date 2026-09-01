@@ -270,6 +270,13 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .calc-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
 .calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 .calc-row select, .calc-row input[type="number"] { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; width: 100%; box-sizing: border-box; }
+.calc-input-unit { position: relative; }
+.calc-input-unit input[type="number"] { padding-right: 40px; }
+.calc-input-unit .calc-unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
+/* убираем нативные стрелки number-инпута, чтобы не наезжали на единицу измерения */
+.calc-input-unit input[type="number"]::-webkit-outer-spin-button,
+.calc-input-unit input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.calc-input-unit input[type="number"] { -moz-appearance: textfield; }
 .calc-result { background: var(--accent-light); border-radius: var(--radius); padding: 12px 16px; }
 .calc-label { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
 .calc-price { font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; color: var(--accent); }

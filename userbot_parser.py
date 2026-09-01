@@ -393,6 +393,60 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
     footer = build_footer(feedback_bot_username)
     return f"{body}\n\n{footer}" if body else footer
 
+
+# T-107 (01.09.2026, инстаграм-формат): подпись для видео, собранного
+# auto_montage.build_short() (короткий вертикальный ролик с текстом НА
+# видео) — пока уходит в ту же тестовую группу winner_auto_club, что и
+# T-104 (см. TASKS.md), как черновик для проверки перед реальной
+# публикацией в Instagram. НЕ переиспользует build_repost_text():
+# - там в футере markdown-ссылка на бота ([Написать](https://t.me/...)) —
+#   Instagram такую разметку не рендерит, ссылка ушла бы в подписи как
+#   голый текст, это не то, что реально увидит подписчик в IG;
+# - здесь вместо неё призыв к комментарию (см. auto_montage.CTA_TEXT —
+#   тот же призыв дублируется и на самом видео, и в подписи, по данным
+#   instagram-content-agent/content/2026-08-31_strategy_notes.md: у
+#   my_avto5 сейчас 0 комментариев на reels, у единственного конкурента с
+#   заметными комментариями в подписи прямой повторяющийся призыв написать
+#   слово в комментариях — это самый чёткий паттерн вовлечённости во всей
+#   выборке конкурентов).
+# T-107, уточнение того же дня (пользователь — "цена для тебя в твоем
+# городе"): показанная в цене строке ниже сумма — цена в Грузии, БЕЗ
+# доставки (для winner_auto_club мы не считаем "под ключ" сами, курс/
+# доставка/растаможка не фиксированы заранее — см. build_repost_text
+# выше). Значит призыв должен просить не абстрактное "ЦЕНА", а ГОРОД —
+# именно города не хватает, чтобы посчитать и прислать точную цену под
+# ключ конкретно этому покупателю (та же идея, что для bezpokrasa/
+# tamsyam26, там город уже часть цены).
+IG_CAPTION_CTA = "Напишите город в комментариях — пришлём точную цену под ключ в Директ."
+
+
+def build_instagram_caption(parsed, price_usd=None, price_eur=None):
+    """Подпись для инстаграм-формата (см. докстринг выше). НЕ выдумывает
+    цифры — только то, что реально распознал parser (title/mileage) и уже
+    посчитанная цена (price_usd/price_eur, те же поля, что использует
+    build_repost_text() для winner_auto_club)."""
+    parsed = parsed or {}
+    title = (parsed.get("title") or "").strip()
+    mileage = (parsed.get("mileage") or "").strip()
+
+    lines = []
+    if title:
+        lines.append(title)
+    if mileage:
+        lines.append(f"Пробег: {mileage}")
+
+    if price_usd is not None:
+        price_str = f"{price_usd:,}".replace(",", " ")
+        lines.append(f"Цена: ${price_str} (цена в Грузии, без доставки)")
+    elif price_eur is not None:
+        price_str = f"{price_eur:,}".replace(",", " ")
+        lines.append(f"Цена: €{price_str} (цена в Грузии, без доставки)")
+
+    lines.append("")
+    lines.append(IG_CAPTION_CTA)
+    return "\n".join(lines).strip()
+
+
 PRICE_LOW = 4_500_000
 PRICE_HIGH = 6_000_000
 
@@ -1220,9 +1274,17 @@ PHOTO_PROCESSORS = {"winner_auto_club": remove_watermark}
 # исключение (try/except его не ловит, ОС убивает процесс целиком), а
 # самовоспроизводящийся краш-луп каждые ~5 минут (см. TASKS.md T-95,
 # лог с 07:10 по 07:38 27.08.2026 — 4+ OOM-kill подряд, tamsyam26 из-за
-# этого ни разу не добрался до бэкфилла). Пустое множество = видео идёт
-# как раньше, оригиналом, без монтажа — до разбора причины OOM.
-AUTO_MONTAGE_SOURCES = set()  # было {"winner_auto_club"}
+# этого ни разу не добрался до бэкфилла).
+# T-95bis (01.09.2026, инстаграм-формат, включено обратно ОСТОРОЖНО):
+# сборка теперь изолирована в подпроцесс (см. _prepare_media_list) — OOM
+# убьёт максимум этот подпроцесс, не Telethon-сессию целиком, и корректно
+# попадёт в fallback (оригинал видео) вместо краш-лупа сервиса. Плюс
+# кандидатов уменьшено 8 -> 6 (см. PEAK_MAX_CANDIDATES в auto_montage.py).
+# winner_auto_club и так целиком в TEST_ONLY_SOURCES — результат уйдёт
+# только в тестовую группу, боевые каналы не затронуты, что бы ни
+# случилось. НЕ проверено на реальном VPS-трафике после этого фикса —
+# после деплоя посмотреть `free -h`/journalctl на VPS (T-95, пункт 1).
+AUTO_MONTAGE_SOURCES = {"winner_auto_club"}  # было set() (T-95, экстренно отключено 27.08.2026)
 
 
 async def _prepare_media_list(client, source_username, messages, parsed=None):
@@ -1241,9 +1303,17 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
     (другие каналы/очередь отложенных постов ждали бы), особенно на
     альбомах из нескольких фото. Поэтому вызов вынесен в отдельный поток
     через `asyncio.to_thread`. T-86: то же самое для видео-монтажа — это
-    минуты CPU (см. auto_montage.build_short), тоже через to_thread."""
+    минуты CPU (см. auto_montage.build_short), сборка вынесена в отдельный
+    подпроцесс (T-95bis, см. комментарий ниже).
+
+    Возвращает (media_list, montage_used) — T-107: montage_used=True только
+    если auto_montage реально собрал короткий ролик хотя бы для одного видео
+    (а не упал и не откатился на оригинал) — handle_group() по этому флагу
+    решает, какую подпись слать (build_instagram_caption вместо
+    build_repost_text)."""
     processor = PHOTO_PROCESSORS.get(source_username)
     auto_montage_on = source_username in AUTO_MONTAGE_SOURCES
+    montage_used = False
     media_list = []
     for m in messages:
         if not m.media:
@@ -1265,20 +1335,45 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
             try:
                 import tempfile
                 import os
-                import auto_montage  # локальный импорт — избегаем циклического
-                                      # импорта на верхнем уровне модуля
-                                      # (auto_montage -> watermark_video ->
-                                      # userbot_parser)
+                import sys
                 with tempfile.TemporaryDirectory() as tmpdir:
                     in_path = os.path.join(tmpdir, f"{m.id}_in.mp4")
                     out_path = os.path.join(tmpdir, f"{m.id}_short.mp4")
                     await client.download_media(m, file=in_path)
-                    await asyncio.to_thread(auto_montage.build_short, in_path, parsed, out_path, logger.info)
+                    title = (parsed or {}).get("title") or ""
+                    mileage = (parsed or {}).get("mileage") or ""
+                    # T-95bis (01.09.2026): build_short() раньше вызывался
+                    # in-process через asyncio.to_thread — на реальном трафике
+                    # это стабильно роняло ВЕСЬ юзербот-сервис OOM-killer'ом
+                    # (TASKS.md T-95): OOM убивает процесс на уровне ядра ОС,
+                    # try/except ниже физически не мог это поймать — он течёт
+                    # в ТОМ ЖЕ процессе, который убивают. Вынесли сборку в
+                    # отдельный python3-подпроцесс (тот же auto_montage.py,
+                    # что раньше импортировался — теперь запускается его CLI):
+                    # если памяти не хватит, убьют только его, а не
+                    # Telethon-сессию с живым слушателем каналов — сервис
+                    # продолжит работать и корректно попадёт в except ниже
+                    # (ненулевой returncode), ровно как и задумывался fallback.
+                    proc = await asyncio.create_subprocess_exec(
+                        sys.executable, "auto_montage.py", in_path, out_path, title, mileage,
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                    )
+                    out, _ = await proc.communicate()
+                    log_tail = out.decode("utf-8", "replace")[-2000:] if out else ""
+                    if proc.returncode != 0 or not os.path.exists(out_path):
+                        logger.warning(
+                            "[%s#%s] auto_montage подпроцесс завершился с кодом %s — шлю оригинал видео\n%s",
+                            source_username, m.id, proc.returncode, log_tail,
+                        )
+                        media_list.append(m.media)
+                        continue
+                    logger.info("[%s#%s] auto_montage подпроцесс:\n%s", source_username, m.id, log_tail)
                     with open(out_path, "rb") as f:
                         processed = f.read()
                 bio = io.BytesIO(processed)
                 bio.name = f"{m.id}_short.mp4"
                 media_list.append(bio)
+                montage_used = True
             except Exception:
                 logger.exception(
                     "[%s#%s] ошибка при авто-монтаже видео — шлю оригинал",
@@ -1287,7 +1382,7 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
                 media_list.append(m.media)
         else:
             media_list.append(m.media)
-    return media_list
+    return media_list, montage_used
 
 
 async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username=None, test_only_sources=frozenset(), video_dry_run_sources=frozenset({"winner_auto_club"})):
@@ -1382,7 +1477,22 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         send_targets = real_targets
         note = ""
 
-    media_list = await _prepare_media_list(client, source_username, messages, parsed)
+    media_list, montage_used = await _prepare_media_list(client, source_username, messages, parsed)
+
+    if montage_used:
+        # T-107 (01.09.2026): видео реально прошло через auto_montage
+        # (короткий вертикальный ролик с текстом на видео) — это черновик
+        # инстаграм-формата, а не обычный TG-репост, поэтому и подпись
+        # нужна инстаграмная (build_instagram_caption), не build_repost_text
+        # (там markdown-ссылка на бота, которую Instagram не отрендерит —
+        # см. докстрин build_instagram_caption). parsed гарантированно не
+        # None здесь: auto_montage_on проверяется только для источников из
+        # AUTO_MONTAGE_SOURCES, а это подмножество источников с парсером.
+        post_text = build_instagram_caption(
+            parsed,
+            price_usd=parsed.get("price_usd_total") if parsed else None,
+            price_eur=parsed.get("price_eur_total") if parsed else None,
+        )
 
     price_str = (f"{price_rub:,}".replace(",", " ") + " ₽") if price_rub is not None else "не определена (нет парсера для источника)"
     logger.info(

@@ -1259,6 +1259,25 @@ _BACKFILL_TIMEOUT = 25
 _BACKFILL_RETRIES = 3
 _BACKFILL_RETRY_DELAY = 5
 
+# T-108 (01.09.2026, обнаружено пользователем — "на безпокрасе были посты,
+# почему не было постинга к нам?"): в логе стабильно повторялась
+# telethon.errors.rpcerrorlist.UsernameNotOccupiedError на "bezpokrasa" —
+# не таймаут/сеть (T-94, та проблема была самоустраняющейся и ретраилась),
+# а Telegram прямо говорит "такого username сейчас ни у кого нет". Канал
+# сменил публичный @-хендл на @AutoLibraryChina (подтверждено
+# пользователем) — старый освободился, поэтому юзербот не мог найти канал
+# НИ в бэкфилле (ValueError сразу, без ретрая — see except Exception ниже
+# по файлу), НИ в живом потоке (chats=sources в events.NewMessage не мог
+# резолвнуть несуществующий username, значит live-события тоже не
+# долетали). Внутренний идентификатор "bezpokrasa" ОСТАЁТСЯ прежним везде
+# в остальном коде (SOURCE_PARSERS, наценка/цена, TEST_ONLY_SOURCES,
+# состояние отправленных постов и т.д. — это тот же бизнес/формат
+# объявлений, просто новая публичная ссылка в Telegram) — меняется только
+# то, по какому хендлу юзербот реально ищет канал в самом Telegram. Если
+# канал сменит хендл ещё раз — достаточно поправить только эту строку.
+SOURCE_TG_HANDLE = {"bezpokrasa": "autolibrarychina"}
+_TG_HANDLE_TO_SOURCE = {v: k for k, v in SOURCE_TG_HANDLE.items()}
+
 PHOTO_PROCESSORS = {"winner_auto_club": remove_watermark}
 
 # T-86 (27.08.2026, запрошено пользователем — "давай в автомат ставь видео
@@ -1560,7 +1579,10 @@ async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate
                     logger.info("[%s#%s] уже отправлено другим путём, пока сидел в очереди — пропускаю", source_username, ids)
                     continue
                 try:
-                    fetched = await client.get_messages(source_username, ids=ids)
+                    # T-108: тот же alias, что в бэкфилле/живом потоке — если
+                    # source_username переименован в Telegram (SOURCE_TG_HANDLE),
+                    # искать нужно по реальному текущему хендлу.
+                    fetched = await client.get_messages(SOURCE_TG_HANDLE.get(source_username, source_username), ids=ids)
                     group = [m for m in fetched if m is not None]
                 except Exception:
                     logger.exception("[%s#%s] не удалось получить сообщения из очереди отложенных — верну в очередь, попробую позже", source_username, ids)
@@ -1752,7 +1774,10 @@ async def main():
             for attempt in range(1, _BACKFILL_RETRIES + 1):
                 logger.info("[%s] запрашиваю историю (попытка %s/%s, таймаут %sс)...", source, attempt, _BACKFILL_RETRIES, _BACKFILL_TIMEOUT)
                 try:
-                    raw_messages = await asyncio.wait_for(_collect_messages(client, source, backfill_limit), timeout=_BACKFILL_TIMEOUT)
+                    # T-108: ищем канал в Telegram по его РЕАЛЬНОМУ текущему
+                    # хендлу (SOURCE_TG_HANDLE), а не по внутреннему source —
+                    # для источников без переименования это одно и то же.
+                    raw_messages = await asyncio.wait_for(_collect_messages(client, SOURCE_TG_HANDLE.get(source, source), backfill_limit), timeout=_BACKFILL_TIMEOUT)
                     break
                 except asyncio.TimeoutError:
                     if attempt < _BACKFILL_RETRIES:
@@ -1801,9 +1826,20 @@ async def main():
             return
         await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources)
 
-    @client.on(events.NewMessage(chats=sources))
+    # T-108: подписываемся по РЕАЛЬНЫМ текущим хендлам (SOURCE_TG_HANDLE),
+    # иначе переименованный канал (например bezpokrasa -> AutoLibraryChina)
+    # вообще не резолвится Telethon'ом и живые события с него не приходят.
+    tg_chat_filters = [SOURCE_TG_HANDLE.get(s, s) for s in sources]
+
+    @client.on(events.NewMessage(chats=tg_chat_filters))
     async def on_new_message(event):
-        source_username = (event.chat.username or "").lower()
+        # T-108: event.chat.username — это ТЕКУЩИЙ хендл канала в Telegram
+        # (после переименования — новый), а не то, что настроено в SOURCES.
+        # Переводим обратно во внутренний идентификатор (_TG_HANDLE_TO_SOURCE),
+        # чтобы парсер/цена/state продолжили работать так же, как раньше —
+        # вся остальная логика по-прежнему знает источник как "bezpokrasa".
+        raw_username = (event.chat.username or "").lower()
+        source_username = _TG_HANDLE_TO_SOURCE.get(raw_username, raw_username)
         msg = event.message
         if msg.grouped_id is None:
             if _already_sent(state, source_username, [msg.id]):

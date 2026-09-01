@@ -35,6 +35,15 @@ import tempfile
 
 from telethon import TelegramClient
 
+# T-111bis (01.09.2026): при запуске через `> log 2>&1 &` stdout не TTY —
+# Python буферизует print() большими блоками, наши строки прогресса
+# показывались только в самом конце (или не показывались вовсе, если
+# процесс зависал/убивался раньше). Построчный флаш — видно сразу в логе.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from userbot_parser import load_env, build_proxy, SOURCE_PARSERS, SOURCE_TG_HANDLE, ensure_test_group  # noqa: E402
 import auto_montage  # noqa: E402
@@ -105,7 +114,16 @@ async def main():
             in_path = os.path.join(tmpdir, f"{source}_{found.id}_in.mp4")
             out_path = os.path.join(tmpdir, f"{source}_{found.id}_short.mp4")
             try:
-                await client.download_media(found, file=in_path)
+                # T-111bis (01.09.2026): без таймаута скачивание могло
+                # зависнуть НАВСЕГДА на сетевом обрыве (реальный случай —
+                # 44 минуты без прогресса, 0% CPU, процесс пришлось убивать
+                # руками) — download_media() сам не ретраит и не падает по
+                # таймауту. Оборачиваем в wait_for, при таймауте просто
+                # пропускаем источник и идём дальше, как и остальные ошибки.
+                await asyncio.wait_for(client.download_media(found, file=in_path), timeout=90)
+            except asyncio.TimeoutError:
+                print(f"[{source}] скачивание видео зависло (>90с) — пропускаю")
+                continue
             except Exception as e:
                 print(f"[{source}] не удалось скачать видео: {e!r}")
                 continue

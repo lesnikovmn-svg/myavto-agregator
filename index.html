@@ -226,13 +226,25 @@
      Раньше жил внутри <aside class="sidebar">, который на мобильных
      (max-width:680px) скрывается целиком (.sidebar{display:none}) —
      из-за этого ссылка "Калькулятор" в шапке вела в пустоту на телефоне.
-     Теперь виден на всех разрешениях. -->
+     Теперь виден на всех разрешениях.
+     01.09.2026 (T-61, часть "растаможка"): раньше калькулятор просто
+     показывал 4 захардкоженных строки-заглушки по стране+бюджету
+     ("от 180 000 ₽" и т.п., без единого расчёта). Заменено на реальный
+     расчёт пошлины и утильсбора по официальным ставкам для физлица,
+     ввозящего для личного пользования — см. calcCustoms() в app.js и
+     комментарий там же с источниками формул. Доставка ОСТАЁТСЯ
+     ориентировочной оценкой (те же старые числа по стране) — реальных
+     тарифов перевозчиков у нас нет, честно помечено в интерфейсе.
+     Реальные цены на сами автомобили с площадок (Encar/Mobile.de/
+     китайские агрегаторы) — отдельная, не сделанная часть T-61, требует
+     бэкенд-прокси и решения вопросов легальности парсинга по ToS
+     площадок; пользователь сейчас вводит стоимость машины сам. -->
 <section class="calc-standalone" id="calc">
   <div class="calc-section">
-    <div class="calc-title">Калькулятор пригона</div>
+    <div class="calc-title">Калькулятор: пошлина + утильсбор + доставка</div>
     <div class="calc-row">
-      <label for="calcCountry" class="sr-only">Страна импорта</label>
-      <select id="calcCountry" onchange="calcPrice()">
+      <label for="calcCountry" class="sr-only">Страна вывоза</label>
+      <select id="calcCountry" onchange="calcCustoms()">
         <option value="korea">Корея</option>
         <option value="china">Китай</option>
         <option value="japan">Япония</option>
@@ -240,18 +252,44 @@
         <option value="uae">ОАЭ</option>
         <option value="europe">Европа</option>
       </select>
-      <label for="calcBudget" class="sr-only">Бюджет автомобиля</label>
-      <select id="calcBudget" onchange="calcPrice()">
-        <option value="1">до 1.5 млн ₽</option>
-        <option value="2">1.5–3 млн ₽</option>
-        <option value="3">3–5 млн ₽</option>
-        <option value="4">от 5 млн ₽</option>
+      <label for="calcAge" class="sr-only">Возраст авто</label>
+      <select id="calcAge" onchange="calcCustoms()">
+        <option value="lt3">До 3 лет</option>
+        <option value="3-5">От 3 до 5 лет</option>
+        <option value="gt5">Старше 5 лет</option>
       </select>
     </div>
-    <div class="calc-result">
-      <div class="calc-label">Доставка + растаможка</div>
-      <div class="calc-price" id="calcResult">от 180 000 ₽</div>
-      <div class="calc-note">включая утильсбор и СБКТС</div>
+    <div class="calc-row">
+      <label for="calcVolume" class="sr-only">Объём двигателя, см³</label>
+      <input type="number" id="calcVolume" placeholder="Объём двигателя, см³" min="0" oninput="calcCustoms()">
+      <label for="calcEngineType" class="sr-only">Тип двигателя</label>
+      <select id="calcEngineType" onchange="calcCustoms()">
+        <option value="ice">Бензин / дизель</option>
+        <option value="hybrid">Гибрид</option>
+        <option value="electric">Электро</option>
+      </select>
+    </div>
+    <div class="calc-row">
+      <label for="calcPower" class="sr-only">Мощность, л.с.</label>
+      <input type="number" id="calcPower" placeholder="Мощность, л.с." min="0" oninput="calcCustoms()">
+      <label for="calcValue" class="sr-only">Стоимость авто, ₽</label>
+      <input type="number" id="calcValue" placeholder="Стоимость авто, ₽" min="0" oninput="calcCustoms()">
+    </div>
+    <div class="calc-result" id="calcResultBlock">
+      <div class="calc-label">Заполните параметры выше</div>
+      <div class="calc-price" id="calcResult">—</div>
+      <div class="calc-note" id="calcBreakdown"></div>
+    </div>
+    <div class="calc-note">
+      Пошлина и утильсбор — расчёт по официальным ставкам для физлица,
+      ввозящего автомобиль для личного пользования (Решение Совета ЕЭК
+      №107 от 20.12.2017 — пошлина; ПП РФ №1291 с изм. №1713 от
+      01.11.2025 — утильсбор). Курс EUR/RUB зафиксирован на 01.09.2026
+      (100,57 ₽) и не обновляется автоматически. Доставка — ориентировочная
+      оценка, не тариф конкретного перевозчика. Для коммерческого ввоза
+      (юрлицо) и для авто, превышающих льготные пороги по утильсбору,
+      расчёт другой — уточняйте у компаний из каталога. Это не юридическая
+      консультация.
     </div>
   </div>
 </section>

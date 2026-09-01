@@ -260,18 +260,152 @@ document.getElementById('mainSearch').addEventListener('keydown', e => {
   if (e.key === 'Enter') doSearch();
 });
 
-function calcPrice() {
-  const c = document.getElementById('calcCountry').value;
-  const b = parseInt(document.getElementById('calcBudget').value);
-  const p = {
-    korea:  ['от 180 000 ₽','от 220 000 ₽','от 290 000 ₽','от 380 000 ₽'],
-    china:  ['от 150 000 ₽','от 200 000 ₽','от 270 000 ₽','от 340 000 ₽'],
-    japan:  ['от 200 000 ₽','от 260 000 ₽','от 330 000 ₽','от 420 000 ₽'],
-    usa:    ['от 350 000 ₽','от 430 000 ₽','от 520 000 ₽','от 680 000 ₽'],
-    uae:    ['от 280 000 ₽','от 350 000 ₽','от 430 000 ₽','от 560 000 ₽'],
-    europe: ['от 300 000 ₽','от 390 000 ₽','от 470 000 ₽','от 620 000 ₽'],
-  };
-  document.getElementById('calcResult').textContent = p[c][b-1];
+// Калькулятор растаможки — 01.09.2026 (T-61, часть "растаможка").
+// Раньше это была функция calcPrice() с 4 захардкоженными строками-заглушками
+// на страну — не расчёт, а таблица выдуманных чисел. Заменено на реальную
+// формулу для физлица, ввозящего авто для личного пользования (не юрлицо,
+// не коммерческий ввоз для перепродажи — это другая, более дорогая схема).
+//
+// Источники (проверены напрямую по первоисточникам 01.09.2026):
+// - Пошлина: Решение Совета ЕЭК от 20.12.2017 №107 «Об отдельных вопросах,
+//   связанных с товарами для личного пользования», Приложение №2, Таблица 2,
+//   п.3 (легковые авто, ТН ВЭД 8703), с учётом изменений по 18.10.2024 №87.
+//   https://eec.eaeunion.org/upload/medialibrary/48d/754bnati3u804penijmb0h866e5g6cng/Prilozhenie-2_107.pdf
+// - Утильсбор: Постановление Правительства РФ от 26.12.2013 №1291, с изм.
+//   от Постановления №1713 от 01.11.2025 (вступило в силу 01.12.2025) —
+//   именно это изменение добавило порог по мощности (л.с.), не только по
+//   объёму двигателя. http://government.ru/docs/all/161708/
+// - Курс EUR/RUB: ЦБ РФ на 01.09.2026 — 100,5714 ₽. Захардкожен ниже,
+//   НЕ обновляется автоматически — при использовании через несколько
+//   месяцев курс нужно обновить вручную (EUR_RATE ниже).
+//
+// Важные ограничения (честно, не скрываем):
+// - Ставки пошлины и коэффициент утильсбора верны только для физлица,
+//   личное пользование, не для перепродажи. Юрлица/коммерческий ввоз
+//   считаются иначе (в т.ч. отдельно НДС) — здесь не реализовано.
+// - Утильсбор считаем ТОЛЬКО в границах льготного порога личного
+//   пользования: ДВС — объём ≤3000см³ И мощность ≤160 л.с.; электро/
+//   гибрид — мощность ≤80 л.с. Если порог превышен, дальше идёт
+//   прогрессивная коммерческая таблица коэффициентов (десятки строк,
+//   растут по датам вступления в силу) — мы её не свели с достаточной
+//   уверенностью в источниках, поэтому НЕ считаем и явно говорим об этом
+//   пользователю, а не показываем правдоподобно выглядящую, но не
+//   проверенную цифру.
+// - Доставка — ориентировочная оценка (те же старые числа по стране, что
+//   были в заглушке), не тариф конкретного перевозчика и не связана с
+//   реальными объявлениями на площадках (Encar/Mobile.de/китайские
+//   агрегаторы) — это отдельная, не реализованная часть задачи T-61
+//   (нужен бэкенд-прокси из-за CORS + вопрос легальности парсинга по ToS
+//   площадок), пользователь пока вводит цену авто сам.
+
+const EUR_RATE = 100.57; // курс ЦБ РФ на 01.09.2026 — обновлять вручную
+
+const DELIVERY_FROM_RUB = {
+  korea: 180000, china: 150000, japan: 200000,
+  usa: 350000, uae: 280000, europe: 300000,
+};
+
+// Пошлина для авто от 3 до 5 лет и старше 5 лет — фиксированная ставка
+// €/см³ по диапазону объёма двигателя, стоимость авто не участвует.
+function dutyRatePerCm3(age, cm3) {
+  const bands3to5 = [[1000,1.5],[1500,1.7],[1800,2.5],[2300,2.7],[3000,3],[Infinity,3.6]];
+  const bandsOver5 = [[1000,3],[1500,3.2],[1800,3.5],[2300,4.8],[3000,5],[Infinity,5.7]];
+  const bands = age === '3-5' ? bands3to5 : bandsOver5;
+  for (const [max, rate] of bands) { if (cm3 <= max) return rate; }
+  return bands[bands.length - 1][1];
+}
+
+// Пошлина для авто до 3 лет — применяется БОЛЬШЕЕ из (% от стоимости) и
+// (минимальная ставка €/см³) — так прямо указано в Решении №107.
+function dutyEurUnder3(valueEur, cm3) {
+  const bands = [
+    [8500, 0.54, 2.5],
+    [16700, 0.48, 3.5],
+    [42300, 0.48, 5.5],
+    [84500, 0.48, 7.5],
+    [169000, 0.48, 15],
+    [Infinity, 0.48, 20],
+  ];
+  for (const [max, pct, minRate] of bands) {
+    if (valueEur <= max) return Math.max(valueEur * pct, cm3 * minRate);
+  }
+}
+
+// Утильсбор: null означает "превышен льготный порог личного пользования,
+// коммерческий расчёт не реализован" — вызывающий код должен показать это
+// пользователю текстом, а не подставлять 0 или выдуманное число.
+// Порог по мощности для электро/гибрид (80 л.с.) ниже, чем для ДВС
+// (160 л.с.) — так в самом постановлении №1713, это не опечатка.
+function utilFeeRub(age, engineType, cm3, hp) {
+  const eligible = engineType === 'ice' ? (cm3 <= 3000 && hp <= 160) : (hp <= 80);
+  if (!eligible) return null;
+  const coef = age === 'lt3' ? 0.17 : 0.26;
+  return 20000 * coef; // 3 400 ₽ или 5 200 ₽
+}
+
+function fmtRub(n) {
+  return Math.round(n).toLocaleString('ru-RU') + ' ₽';
+}
+
+function calcCustoms() {
+  const country = document.getElementById('calcCountry').value;
+  const age = document.getElementById('calcAge').value;
+  const cm3 = parseFloat(document.getElementById('calcVolume').value);
+  const engineType = document.getElementById('calcEngineType').value;
+  const hp = parseFloat(document.getElementById('calcPower').value);
+  const priceRub = parseFloat(document.getElementById('calcValue').value);
+
+  const labelEl = document.querySelector('#calcResultBlock .calc-label');
+  const resultEl = document.getElementById('calcResult');
+  const breakdownEl = document.getElementById('calcBreakdown');
+
+  const needsVolume = engineType !== 'electric'; // у электромобиля нет см³
+  if (!hp || (needsVolume && !cm3)) {
+    labelEl.textContent = 'Заполните параметры выше';
+    resultEl.textContent = '—';
+    breakdownEl.innerHTML = '';
+    return;
+  }
+  if (age === 'lt3' && needsVolume && !priceRub) {
+    labelEl.textContent = 'Для авто младше 3 лет укажите стоимость';
+    resultEl.textContent = '—';
+    breakdownEl.innerHTML = '';
+    return;
+  }
+
+  // Пошлина для чистого электромобиля считается по отдельной методике
+  // (Решение Совета ЕЭК №39 от 17.03.2022, с изм. №111 от 05.12.2025 и
+  // №35 от 24.02.2026) — мы не сверили её текст с достаточной уверенностью,
+  // поэтому честно не считаем, а не показываем правдоподобно выглядящую
+  // догадку. Для гибрида двигатель внутреннего сгорания есть — считается
+  // по обычной формуле, как для ДВС.
+  const dutyRub = engineType === 'electric'
+    ? null
+    : (age === 'lt3'
+        ? dutyEurUnder3(priceRub / EUR_RATE, cm3) * EUR_RATE
+        : dutyRatePerCm3(age, cm3) * cm3 * EUR_RATE);
+
+  const util = utilFeeRub(age, engineType, cm3 || 0, hp);
+  const delivery = DELIVERY_FROM_RUB[country];
+
+  labelEl.textContent = 'Пошлина + утильсбор + доставка (см. расшифровку)';
+
+  const lines = [];
+  lines.push(dutyRub !== null
+    ? `Пошлина: ${fmtRub(dutyRub)}`
+    : 'Пошлина: для электромобилей считается по отдельной методике — не реализовано здесь, уточняйте у компании из каталога');
+  lines.push(util !== null
+    ? `Утильсбор: ${fmtRub(util)}`
+    : 'Утильсбор: превышен льготный порог личного пользования (объём/мощность) — считается индивидуально, уточняйте у компании из каталога');
+  lines.push(`Доставка: от ${fmtRub(delivery)} (ориентировочно)`);
+  breakdownEl.innerHTML = lines.join('<br>');
+
+  if (dutyRub !== null && util !== null) {
+    resultEl.textContent = `от ${fmtRub(dutyRub + util + delivery)}`;
+  } else {
+    const known = (dutyRub || 0) + (util || 0) + delivery;
+    resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
+  }
 }
 
 function toggleFaq(el) {

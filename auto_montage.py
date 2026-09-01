@@ -59,6 +59,7 @@ parsed — тот же dict, что возвращает SOURCE_PARSERS[source_u
 CPU-bound, минуты — в асинхронном коде вызывать через asyncio.to_thread,
 как и watermark_video.process_video (см. T-85 про ту же проблему).
 """
+import os
 import subprocess
 import sys
 import time
@@ -101,6 +102,26 @@ COVERAGE_COVERED_MIN = 0.9  # >=90% кадров закрашено -> счит�
 # userbot_parser.py) повторяет и усиливает этот же призыв.
 CTA_TEXT = "Напишите город в комментариях"
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+# T-113 (01.09.2026, запрошено пользователем — "на видео из безпокраса
+# можно подпись на видео, все авто проверяем ЛКП по умолчанию"): на одном
+# из middle-планов реального тестового видео bezpokrasa как раз в кадре
+# толщиномер (прибор проверки лакокрасочного покрытия) — подпись фиксирует
+# этот факт как УТП компании. Per-source, потому что это конкретная бизнес-
+# практика bezpokrasa, не общая для всех источников (для winner_auto_club/
+# artalexgroup такой проверки не заявлено — пусто, значит без подписи).
+SOURCE_MIDDLE_TEXT = {"bezpokrasa": "Проверяем ЛКП каждого авто"}
+
+# T-114 (01.09.2026, запрошено пользователем — "музыка не наложена" на
+# тестовом ролике -> уточнили: нужна отдельная фоновая музыка, а не звук
+# из исходника): если рядом лежит файл трека — используем его (зациклен на
+# длительность ролика), иначе как раньше берём звук из начала исходника.
+# Специально сделано как fallback, а не жёсткое требование файла — трек
+# ещё предстоит получить от пользователя (сетевые ограничения песочницы не
+# дали скачать напрямую, см. TASKS.md T-114), код готов принять его сразу,
+# как файл появится в assets/, без дополнительных правок.
+MUSIC_TRACK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "bg_music.mp3")
+MUSIC_VOLUME = 0.5  # приглушаем — на случай, если в кадре что-то говорят/шум важен для доверия к ролику
 
 _VFILT_BASE = (
     "split=2[bg][fg];"
@@ -252,12 +273,73 @@ def _paint(seg_path, results, out_path):
     wv.render(seg_path, results, out_path, log=lambda m: None)
 
 
+# T-112 (01.09.2026, обнаружено пользователем на реальном ролике из T-111 —
+# и хук ("Mercedes-Benz V 300, пробег 40 км"), и CTA ("Напишите город в
+# комментариях") вылезали за края кадра при фиксированном fontsize=58):
+# кадр по ширине 1080px (см. _VFILT_BASE), DejaVuSans-Bold жирный и
+# кириллица заметно шире латиницы — при длинных строках метраж не сходится.
+# CHAR_WIDTH_RATIO — грубая эмпирическая оценка средней ширины символа
+# относительно fontsize, откалибрована по факту наблюдавшегося переполнения
+# на тех самых строках (не точный расчёт через реальный рендер шрифта —
+# библиотек для точного measure text под рукой нет, берём с запасом, чтобы
+# скорее перестраховаться мелким шрифтом, чем снова вылезти за кадр).
+TEXT_MAX_WIDTH_PX = 1000  # из 1080 кадра, с полями по бокам
+TEXT_BASE_FONTSIZE = 58
+TEXT_MIN_FONTSIZE = 34
+CHAR_WIDTH_RATIO = 0.6
+
+
+def _fit_text_layout(text, max_width_px=TEXT_MAX_WIDTH_PX, base_fontsize=TEXT_BASE_FONTSIZE, min_fontsize=TEXT_MIN_FONTSIZE, char_w_ratio=CHAR_WIDTH_RATIO):
+    """Подбирает fontsize под длину текста, чтобы уместиться в
+    max_width_px в одну строку; если даже на min_fontsize не влезает —
+    переносит на 2 строки (режем по ближайшему пробелу к середине) и ещё
+    раз подбираем fontsize уже под более короткие половины. Возвращает
+    (список строк, fontsize)."""
+    def _fits(s, fs):
+        return fs * char_w_ratio * len(s) <= max_width_px
+
+    if _fits(text, base_fontsize):
+        return [text], base_fontsize
+
+    fs = base_fontsize
+    while fs > min_fontsize and not _fits(text, fs):
+        fs -= 2
+    if _fits(text, fs):
+        return [text], fs
+
+    words = text.split()
+    if len(words) < 2:
+        return [text], min_fontsize
+
+    best = None
+    for i in range(1, len(words)):
+        line1 = " ".join(words[:i])
+        line2 = " ".join(words[i:])
+        longer = max(len(line1), len(line2))
+        if best is None or longer < best[0]:
+            best = (longer, line1, line2)
+    _, line1, line2 = best
+
+    fs2 = base_fontsize
+    while fs2 > min_fontsize and not (_fits(line1, fs2) and _fits(line2, fs2)):
+        fs2 -= 2
+    return [line1, line2], fs2
+
+
 def _vertical(in_path, out_path, text=None, text_top=True, hold_extra=0.0):
     filt = _VFILT_BASE
     if text:
-        y = 260 if text_top else 1550
-        safe = text.replace("'", r"\'").replace(":", r"\:")
-        filt += f",drawtext=fontfile={FONT}:text='{safe}':fontsize=58:fontcolor=white:borderw=6:bordercolor=black:x=(w-text_w)/2:y={y}"
+        lines, fontsize = _fit_text_layout(text)
+        render_text = "\\n".join(lines)
+        # T-112: две строки занимают больше места по вертикали — сдвигаем
+        # верхний текст чуть выше, нижний (CTA) чуть выше нижнего края,
+        # чтобы вторая строка не упёрлась в границу кадра (1920px высота).
+        if text_top:
+            y = 220 if len(lines) > 1 else 260
+        else:
+            y = 1470 if len(lines) > 1 else 1550
+        safe = render_text.replace("'", r"\'").replace(":", r"\:")
+        filt += f",drawtext=fontfile={FONT}:text='{safe}':fontsize={fontsize}:fontcolor=white:borderw=6:bordercolor=black:line_spacing=10:x=(w-text_w)/2:y={y}"
     if hold_extra > 0:
         filt += f",tpad=stop_mode=clone:stop_duration={hold_extra:.2f}"
     subprocess.run(
@@ -337,9 +419,13 @@ def build_short(in_path, parsed, out_path, log=lambda msg: None, source=None):
 
     hook_text = _hook_text(parsed)
     segs_final.append(_prep(hook_c, HOOK_DUR, text=hook_text, text_top=True))
-    for c in middle:
+    # T-113: подпись про ЛКП (если задана для source) — на ПЕРВОМ middle-
+    # плане, один раз, чтобы не перегружать ролик текстом на каждом кадре.
+    middle_text = SOURCE_MIDDLE_TEXT.get(source)
+    for i, c in enumerate(middle):
         dur = DETAIL_DUR if c is middle[-1] and len(middle) >= 2 else CAR_SHOT_DUR
-        segs_final.append(_prep(c, dur))
+        text = middle_text if i == 0 else None
+        segs_final.append(_prep(c, dur, text=text, text_top=True))
     segs_final.append(_prep(cta_c, CTA_DUR, text=CTA_TEXT, text_top=False, hold=CTA_HOLD_EXTRA))
 
     list_path = out_path + ".concat.txt"
@@ -355,10 +441,20 @@ def build_short(in_path, parsed, out_path, log=lambda msg: None, source=None):
 
     total_dur = _ffprobe_duration(silent_out)
     audio_bed = out_path + ".audio.m4a"
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", in_path, "-t", f"{total_dur:.3f}", "-vn", "-c:a", "aac", audio_bed],
-        check=True, capture_output=True,
-    )
+    if os.path.exists(MUSIC_TRACK_PATH):
+        # T-114: отдельная фоновая музыка вместо звука из исходника —
+        # -stream_loop -1 на случай, если трек короче итогового ролика,
+        # -t обрезает до нужной длины в любом случае (короче или длиннее).
+        subprocess.run(
+            ["ffmpeg", "-y", "-stream_loop", "-1", "-i", MUSIC_TRACK_PATH, "-t", f"{total_dur:.3f}",
+             "-af", f"volume={MUSIC_VOLUME}", "-c:a", "aac", audio_bed],
+            check=True, capture_output=True,
+        )
+    else:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", in_path, "-t", f"{total_dur:.3f}", "-vn", "-c:a", "aac", audio_bed],
+            check=True, capture_output=True,
+        )
     subprocess.run(
         ["ffmpeg", "-y", "-i", silent_out, "-i", audio_bed, "-map", "0:v", "-map", "1:a",
          "-c:v", "copy", "-c:a", "aac", "-shortest", out_path],

@@ -684,9 +684,6 @@ function calcCustoms() {
     labelEl.textContent = 'Пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)';
     const CURRENCY_SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩', RUB: '₽' };
     const lines = [];
-    if (currency !== 'RUB' && priceInput) {
-      lines.push(`Стоимость авто: ${fmtRub(priceRub)} (по курсу ЦБ РФ на ${CBR_RATES._date}, 1 ${currency} = ${CBR_RATES[currency]} ₽)`);
-    }
     lines.push(`Пошлина (${fuelType === 'diesel' ? '10%, дизель' : '15%, бензин'} от таможенной стоимости — источник один, не сверено по второй площадке): ${fmtRub(d.duty)}`);
     lines.push(`НДС 22% (акциза для N1 нет): ${fmtRub(d.vat)}`);
     lines.push(util !== null
@@ -813,9 +810,6 @@ function calcCustoms() {
   const CURRENCY_SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩', RUB: '₽' };
 
   const lines = [];
-  if (currency !== 'RUB' && priceInput) {
-    lines.push(`Стоимость авто: ${fmtRub(priceRub)} (по курсу ЦБ РФ на ${CBR_RATES._date}, 1 ${currency} = ${CBR_RATES[currency]} ₽)`);
-  }
   lines.push(dutyLine, ...extraLines);
   lines.push(util !== null
     ? `Утильсбор: ${fmtRub(util)}`
@@ -846,26 +840,16 @@ function toggleFaq(el) {
   el.classList.toggle('open');
 }
 
-// 02.09.2026, по запросу пользователя — поле стоимости авто свёрнуто под
-// чекбокс по умолчанию (экономия места). Выключен — поле пустое, скрыто;
-// включён — показывается строка с полем и валютой. calcCustoms() сам
-// разберётся, что делать с пустой ценой (см. iceNeedsPrice/electric-ветку).
 // T-124: переключение между полями M1 (объём/тип двигателя/мощность) и
 // N1 (тип топлива/масса) — показываем только те, что реально участвуют
-// в формуле выбранной категории.
+// в формуле выбранной категории. Поле стоимости авто (calcValueRow) —
+// общее для обеих категорий, всегда видимое (пробовали прятать под
+// чекбокс "для экономии места" 02.09.2026, пользователь тут же попросил
+// вернуть постоянную видимость — см. TASKS.md T-125).
 function toggleVehicleCategory() {
   const isTruck = document.getElementById('calcVehicleCategory').value === 'n1';
   document.getElementById('calcM1Fields').style.display = isTruck ? 'none' : '';
   document.getElementById('calcN1Fields').style.display = isTruck ? '' : 'none';
-  calcCustoms();
-}
-
-function toggleCalcPrice() {
-  const show = document.getElementById('calcShowPrice').checked;
-  document.getElementById('calcValueRow').style.display = show ? '' : 'none';
-  if (!show) {
-    document.getElementById('calcValue').value = '';
-  }
   calcCustoms();
 }
 

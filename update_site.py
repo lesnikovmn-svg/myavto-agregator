@@ -5,6 +5,7 @@ import os
 import sheets_client
 import verify_egrul
 from company_agent import connect_reviews_sheet, REVIEWS_HEADER
+from fetch_cbr_rates import fetch_cbr_rates
 
 # Раньше данные читались через публичный gviz/tq JSON-эндпоинт Google
 # Sheets. У него есть собственный серверный кэш (не наш HTTP-кэш, повлиять
@@ -426,6 +427,25 @@ app_js = open("app.js").read()
 s = app_js.find("const COMPANIES = [")
 e = app_js.find("];", s) + 2
 app_js = app_js[:s] + js + app_js[e:]
+
+# T-117 (01.09.2026): курсы валют ЦБ РФ для калькулятора (#calc) — тот же
+# принцип, что и COMPANIES: вшиваем актуальные данные в app.js при каждом
+# обычном прогоне update_site.py, не отдельным расписанием. Если ЦБ недоступен
+# или отдал неожиданный формат — НЕ падаем и НЕ затираем старые курсы нулями,
+# просто оставляем то, что уже было в app.js, и громко печатаем предупреждение
+# в лог, чтобы это было видно в выводе daily_update.sh.
+try:
+    rates = fetch_cbr_rates()
+    print(f"Курсы ЦБ РФ на {rates['_date']}: USD={rates['USD']} EUR={rates['EUR']} CNY={rates['CNY']} KRW={rates['KRW']}")
+    cbr_js = "const CBR_RATES = " + json.dumps(rates, ensure_ascii=False) + ";"
+    cs = app_js.find("const CBR_RATES = {")
+    if cs == -1:
+        raise ValueError("в app.js не найден маркер 'const CBR_RATES = {' — структура файла изменилась")
+    ce = app_js.find("};", cs) + 2
+    app_js = app_js[:cs] + cbr_js + app_js[ce:]
+except Exception as e:
+    print(f"[ВНИМАНИЕ] не удалось обновить курсы ЦБ РФ ({e}) — в app.js остались прежние курсы, калькулятор растаможки может показывать устаревшую валюту.")
+
 open("app.js", "w").write(app_js)
 
 html = open("index.html").read()

@@ -277,6 +277,9 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .calc-input-unit input[type="number"]::-webkit-outer-spin-button,
 .calc-input-unit input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .calc-input-unit input[type="number"] { -moz-appearance: textfield; }
+.calc-input-currency input[type="number"] { padding-right: 72px; }
+.calc-input-currency .calc-unit-select { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: auto; max-width: 64px; padding: 4px 4px; border: none; border-radius: 4px; font-size: 12px; background: transparent; color: var(--muted); font-family: 'Inter', sans-serif; cursor: pointer; pointer-events: auto; }
+.calc-input-currency .calc-unit-select:hover, .calc-input-currency .calc-unit-select:focus { background: var(--accent-light); color: var(--text); }
 .calc-result { background: var(--accent-light); border-radius: var(--radius); padding: 12px 16px; }
 .calc-label { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
 .calc-price { font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; color: var(--accent); }

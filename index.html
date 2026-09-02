@@ -278,10 +278,17 @@
         <input type="number" id="calcPower" placeholder="Мощность" min="0" oninput="calcCustoms()">
         <span class="calc-unit">л.с.</span>
       </div>
-      <label for="calcValue" class="sr-only">Стоимость авто, ₽</label>
-      <div class="calc-input-unit">
+      <label for="calcValue" class="sr-only">Стоимость авто</label>
+      <div class="calc-input-unit calc-input-currency">
         <input type="number" id="calcValue" placeholder="Стоимость авто" min="0" oninput="calcCustoms()">
-        <span class="calc-unit">₽</span>
+        <label for="calcCurrency" class="sr-only">Валюта стоимости</label>
+        <select id="calcCurrency" class="calc-unit-select" onchange="calcCustoms()">
+          <option value="RUB">₽</option>
+          <option value="USD">$</option>
+          <option value="EUR">€</option>
+          <option value="CNY">¥ (юань)</option>
+          <option value="KRW">₩ (вона)</option>
+        </select>
       </div>
     </div>
     <div class="calc-result" id="calcResultBlock">
@@ -292,13 +299,15 @@
     <div class="calc-note">
       Пошлина и утильсбор — расчёт по официальным ставкам для физлица,
       ввозящего автомобиль для личного пользования (Решение Совета ЕЭК
-      №107 от 20.12.2017 — пошлина; ПП РФ №1291 с изм. №1713 от
-      01.11.2025 — утильсбор). Курс EUR/RUB зафиксирован на 01.09.2026
-      (100,57 ₽) и не обновляется автоматически. Доставка — ориентировочная
-      оценка, не тариф конкретного перевозчика. Для коммерческого ввоза
-      (юрлицо) и для авто, превышающих льготные пороги по утильсбору,
-      расчёт другой — уточняйте у компаний из каталога. Это не юридическая
-      консультация.
+      №107 от 20.12.2017 — пошлина; полная таблица коэффициентов утильсбора
+      с customs.gov.ru, включая авто с мощностью выше льготного порога —
+      утильсбор берётся автоматически по текущему году). Курсы $/€/¥/₩ —
+      официальные курсы ЦБ РФ, обновляются автоматически при каждом
+      обновлении сайта (дата курса указана в расшифровке расчёта).
+      Доставка — ориентировочная оценка, не тариф конкретного перевозчика.
+      Пошлина для электромобилей и весь расчёт для юрлиц/коммерческого
+      ввоза не реализованы — уточняйте у компаний из каталога. Это не
+      юридическая консультация.
     </div>
   </div>
 </section>

@@ -481,33 +481,87 @@ function priceLine(priceRub, priceInput, currency) {
   return `Стоимость авто: ${fmtRub(priceRub)} (курс на ${CBR_RATES._date}, см. методологию)`;
 }
 
+// T-134 (02.09.2026, по запросу пользователя: "в окошках своя сумма
+// добавить выбор валюты, при выборе валюты евро и доллара добавить
+// окошка ручного ввода курса") — показывает/прячет строку "свой курс"
+// под полем "своя сумма" в зависимости от выбранной валюты. Вызывается
+// из onchange у каждого из 4 селектов валюты в index.html.
+function toggleOverrideRateRow(prefix) {
+  const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
+  const row = document.getElementById(`calc${prefix}OverrideRateRow`);
+  row.style.display = (currency === 'EUR' || currency === 'USD') ? '' : 'none';
+}
+
+// Читает поле "своя сумма" + выбранную валюту + (для €/$) необязательный
+// свой курс, возвращает сумму в рублях. NaN, если поле "своя сумма"
+// пустое — это сигнал "override не задан, берём нашу оценку", ровно тот
+// же смысл, что раньше был у голого parseFloat(...).value в T-131. Свой
+// курс — пусто, значит берём курс ЦБ РФ, как обычно (для ¥/₩ свой курс
+// вообще не предлагаем — этого никто не просил, см. комментарий в
+// index.html).
+function overrideAmountRub(prefix) {
+  const amount = parseFloat(document.getElementById(`calc${prefix}Override`).value);
+  if (isNaN(amount)) return NaN;
+  const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
+  if (currency === 'RUB') return amount;
+  if (currency === 'EUR' || currency === 'USD') {
+    const rateInput = parseFloat(document.getElementById(`calc${prefix}OverrideRate`).value);
+    const rate = !isNaN(rateInput) ? rateInput : CBR_RATES[currency];
+    return amount * rate;
+  }
+  return amount * CBR_RATES[currency];
+}
+
+// Уточняющая приписка к строке расшифровки, когда "своя сумма" введена
+// не в рублях — какая валюта/сумма/курс были использованы, и чей это
+// курс (свой или ЦБ РФ). Пустая строка для RUB — там уточнять нечего.
+function overrideCurrencyNote(prefix) {
+  const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
+  if (currency === 'RUB') return '';
+  const amount = parseFloat(document.getElementById(`calc${prefix}Override`).value);
+  if (isNaN(amount)) return '';
+  const SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩' };
+  let rate = CBR_RATES[currency];
+  let rateSource = `курс ЦБ РФ на ${CBR_RATES._date}`;
+  if (currency === 'EUR' || currency === 'USD') {
+    const rateInput = parseFloat(document.getElementById(`calc${prefix}OverrideRate`).value);
+    if (!isNaN(rateInput)) {
+      rate = rateInput;
+      rateSource = 'свой курс';
+    }
+  }
+  return ` (${SYMBOL[currency]}${amount.toLocaleString('ru-RU')} по курсу ${rate} ₽, ${rateSource})`;
+}
+
 // T-131 (02.09.2026, по запросу пользователя: "нужно добавить самому
 // ставить значения: доставка, комиссия импортера, экспортера, услуги
 // брокера") — четыре одинаковых по смыслу хелпера: строка расшифровки
 // меняется в зависимости от того, взята сумма из нашей оценки или введена
 // пользователем вручную (override). Общие для веток M1 и N1, чтобы не
-// дублировать текст в четырёх местах.
-function deliveryLine(delivery, deliveryOverride, deliveryOrig) {
+// дублировать текст в четырёх местах. T-134: добавлен параметр
+// overrideNote — приписка про валюту/курс из overrideCurrencyNote() выше,
+// пустая строка, если override в рублях или не задан вовсе.
+function deliveryLine(delivery, deliveryOverride, deliveryOrig, overrideNote) {
   return !isNaN(deliveryOverride)
-    ? `Доставка: ${fmtRub(delivery)} — указано вручную`
+    ? `Доставка: ${fmtRub(delivery)}${overrideNote} — указано вручную`
     : `Доставка: от ${fmtRub(delivery)}${deliveryOrig} — ориентировочно`;
 }
 
-function exporterCommissionLine(exporterCommission, exporterCommissionOverride) {
+function exporterCommissionLine(exporterCommission, exporterCommissionOverride, overrideNote) {
   return !isNaN(exporterCommissionOverride)
-    ? `Комиссия экспортёра: ${fmtRub(exporterCommission)} — указано вручную`
+    ? `Комиссия экспортёра: ${fmtRub(exporterCommission)}${overrideNote} — указано вручную`
     : `Комиссия экспортёра (Германия, ${EXPORTER_COMMISSION_RATE * 100}% от стоимости авто): ${fmtRub(exporterCommission)}`;
 }
 
-function importerCommissionLine(importerCommission, importerCommissionOverride) {
+function importerCommissionLine(importerCommission, importerCommissionOverride, overrideNote) {
   return !isNaN(importerCommissionOverride)
-    ? `Комиссия импортёра: ${fmtRub(importerCommission)} — указано вручную`
+    ? `Комиссия импортёра: ${fmtRub(importerCommission)}${overrideNote} — указано вручную`
     : `Комиссия импортёра: от ${fmtRub(importerCommission)} — ориентировочно`;
 }
 
-function brokerLine(broker, brokerOverride) {
+function brokerLine(broker, brokerOverride, overrideNote) {
   return !isNaN(brokerOverride)
-    ? `${BROKER_SERVICES_LABEL}: ${fmtRub(broker)} — указано вручную`
+    ? `${BROKER_SERVICES_LABEL}: ${fmtRub(broker)}${overrideNote} — указано вручную`
     : `${BROKER_SERVICES_LABEL}: от ${fmtRub(broker)} — ориентировочно`;
 }
 
@@ -718,14 +772,17 @@ function calcCustoms() {
   // T-131 (02.09.2026, по запросу пользователя: "нужно добавить самому
   // ставить значения: доставка, комиссия импортера, экспортера, услуги
   // брокера") — необязательные поля "своя сумма" рядом с каждым чекбоксом
-  // выше. parseFloat('') = NaN — это сигнал "поле не заполнено, брать
-  // нашу оценку", а не 0 (0 — валидное значение, которое можно указать
-  // явно, например "доставку уже оплатил, не считать"). Проверяем именно
-  // !isNaN(...), не truthy — иначе 0 будет неотличимо от пустого поля.
-  const deliveryOverride = parseFloat(document.getElementById('calcDeliveryOverride').value);
-  const exporterCommissionOverride = parseFloat(document.getElementById('calcExporterCommissionOverride').value);
-  const importerCommissionOverride = parseFloat(document.getElementById('calcImporterCommissionOverride').value);
-  const brokerOverride = parseFloat(document.getElementById('calcBrokerOverride').value);
+  // выше. NaN — это сигнал "поле не заполнено, брать нашу оценку", а не 0
+  // (0 — валидное значение, которое можно указать явно, например
+  // "доставку уже оплатил, не считать"). T-134 (02.09.2026, по запросу
+  // пользователя: "в окошках своя сумма добавить выбор валюты, при выборе
+  // валюты евро и доллара добавить окошка ручного ввода курса") —
+  // overrideAmountRub() теперь сама учитывает выбранную валюту и
+  // (для €/$) свой курс, если он задан, см. функцию выше.
+  const deliveryOverride = overrideAmountRub('Delivery');
+  const exporterCommissionOverride = overrideAmountRub('ExporterCommission');
+  const importerCommissionOverride = overrideAmountRub('ImporterCommission');
+  const brokerOverride = overrideAmountRub('Broker');
   const country = document.getElementById('calcCountry').value;
   const age = document.getElementById('calcAge').value; // lt3 | 3-5 | 5-7 | gt7
   const cm3 = parseFloat(document.getElementById('calcVolume').value);
@@ -812,16 +869,16 @@ function calcCustoms() {
       const deliveryOrig = deliveryInfo.currency === 'RUB'
         ? ''
         : ` (${CURRENCY_SYMBOL[deliveryInfo.currency]}${deliveryInfo.amount.toLocaleString('ru-RU')}, по курсу ЦБ РФ на ${CBR_RATES._date})`;
-      lines.push(deliveryLine(delivery, deliveryOverride, deliveryOrig));
+      lines.push(deliveryLine(delivery, deliveryOverride, deliveryOrig, overrideCurrencyNote('Delivery')));
     }
     if (includeExporterCommission && country === 'europe') {
-      lines.push(exporterCommissionLine(exporterCommission, exporterCommissionOverride));
+      lines.push(exporterCommissionLine(exporterCommission, exporterCommissionOverride, overrideCurrencyNote('ExporterCommission')));
     }
     if (includeImporterCommission) {
-      lines.push(importerCommissionLine(importerCommission, importerCommissionOverride));
+      lines.push(importerCommissionLine(importerCommission, importerCommissionOverride, overrideCurrencyNote('ImporterCommission')));
     }
     if (includeBroker) {
-      lines.push(brokerLine(broker, brokerOverride));
+      lines.push(brokerLine(broker, brokerOverride, overrideCurrencyNote('Broker')));
     }
     breakdownEl.innerHTML = lines.filter(Boolean).join('<br>');
 
@@ -956,16 +1013,16 @@ function calcCustoms() {
     const deliveryOrig = deliveryInfo.currency === 'RUB'
       ? ''
       : ` (${CURRENCY_SYMBOL[deliveryInfo.currency]}${deliveryInfo.amount.toLocaleString('ru-RU')}, по курсу ЦБ РФ на ${CBR_RATES._date})`;
-    lines.push(deliveryLine(delivery, deliveryOverride, deliveryOrig));
+    lines.push(deliveryLine(delivery, deliveryOverride, deliveryOrig, overrideCurrencyNote('Delivery')));
   }
   if (includeExporterCommission && country === 'europe') {
-    lines.push(exporterCommissionLine(exporterCommission, exporterCommissionOverride));
+    lines.push(exporterCommissionLine(exporterCommission, exporterCommissionOverride, overrideCurrencyNote('ExporterCommission')));
   }
   if (includeImporterCommission) {
-    lines.push(importerCommissionLine(importerCommission, importerCommissionOverride));
+    lines.push(importerCommissionLine(importerCommission, importerCommissionOverride, overrideCurrencyNote('ImporterCommission')));
   }
   if (includeBroker) {
-    lines.push(brokerLine(broker, brokerOverride));
+    lines.push(brokerLine(broker, brokerOverride, overrideCurrencyNote('Broker')));
   }
   breakdownEl.innerHTML = lines.join('<br>');
 

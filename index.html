@@ -368,19 +368,44 @@
          итоге — не просто прячет текст.
          T-131 (02.09.2026, по запросу пользователя: "нужно добавить самому
          ставить значения: доставка, комиссия импортера, экспортера, услуги
-         брокера") — у каждого пункта появилось поле "своя сумма, ₽" рядом
+         брокера") — у каждого пункта появилось поле "своя сумма" рядом
          с чекбоксом. Пусто — считается наша ориентировочная оценка (как
          раньше). Указано число (даже 0) — используется оно вместо оценки,
          строка в расшифровке помечается "указано вручную". Работает только
          пока чекбокс включён — выключенный пункт по-прежнему полностью
-         убирается из расчёта, свою сумму задавать бессмысленно. -->
+         убирается из расчёта, свою сумму задавать бессмысленно.
+         T-134 (02.09.2026, по запросу пользователя: "в окошках своя сумма
+         добавить выбор валюты, при выборе валюты евро и доллара добавить
+         окошка ручного ввода курса") — у поля "своя сумма" появился выбор
+         валюты (как у поля "Стоимость авто"), по умолчанию ₽. Если выбрать
+         €/$, снизу появляется отдельное поле "свой курс" — пусто, значит
+         берём курс ЦБ РФ (как обычно); указано число — используется оно,
+         поведение и терминология те же, что и у надбавки к курсу для цены
+         авто (см. PRICE_RATE_MARKUP_RUB/priceRateFor в app.js, только там
+         фиксированная надбавка, а тут пользователь вводит весь курс
+         целиком). Для ¥/₩ поле курса не показывается — своего курса для
+         них никто не просил, считаем по чистому курсу ЦБ, как и раньше
+         для цены авто. -->
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <span>Учитывать доставку</span>
         <input type="checkbox" id="calcIncludeDelivery" checked onchange="calcCustoms()">
       </label>
-      <div class="calc-input-unit">
+      <div class="calc-input-unit calc-input-currency">
         <input type="number" id="calcDeliveryOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <label for="calcDeliveryOverrideCurrency" class="sr-only">Валюта своей суммы — доставка</label>
+        <select id="calcDeliveryOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Delivery'); calcCustoms()">
+          <option value="RUB">₽</option>
+          <option value="USD">$</option>
+          <option value="EUR">€</option>
+          <option value="CNY">¥</option>
+          <option value="KRW">₩</option>
+        </select>
+      </div>
+    </div>
+    <div class="calc-row calc-row-single calc-override-rate-row" id="calcDeliveryOverrideRateRow" style="display:none">
+      <div class="calc-input-unit">
+        <input type="number" id="calcDeliveryOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -389,8 +414,21 @@
         <span>Учитывать комиссию экспортёра</span>
         <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="calcCustoms()">
       </label>
-      <div class="calc-input-unit">
+      <div class="calc-input-unit calc-input-currency">
         <input type="number" id="calcExporterCommissionOverride" placeholder="Своя сумма, иначе 6% от цены" min="0" oninput="calcCustoms()">
+        <label for="calcExporterCommissionOverrideCurrency" class="sr-only">Валюта своей суммы — комиссия экспортёра</label>
+        <select id="calcExporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ExporterCommission'); calcCustoms()">
+          <option value="RUB">₽</option>
+          <option value="USD">$</option>
+          <option value="EUR">€</option>
+          <option value="CNY">¥</option>
+          <option value="KRW">₩</option>
+        </select>
+      </div>
+    </div>
+    <div class="calc-row calc-row-single calc-override-rate-row" id="calcExporterCommissionOverrideRateRow" style="display:none">
+      <div class="calc-input-unit">
+        <input type="number" id="calcExporterCommissionOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -399,8 +437,21 @@
         <span>Учитывать комиссию импортёра</span>
         <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="calcCustoms()">
       </label>
-      <div class="calc-input-unit">
+      <div class="calc-input-unit calc-input-currency">
         <input type="number" id="calcImporterCommissionOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <label for="calcImporterCommissionOverrideCurrency" class="sr-only">Валюта своей суммы — комиссия импортёра</label>
+        <select id="calcImporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ImporterCommission'); calcCustoms()">
+          <option value="RUB">₽</option>
+          <option value="USD">$</option>
+          <option value="EUR">€</option>
+          <option value="CNY">¥</option>
+          <option value="KRW">₩</option>
+        </select>
+      </div>
+    </div>
+    <div class="calc-row calc-row-single calc-override-rate-row" id="calcImporterCommissionOverrideRateRow" style="display:none">
+      <div class="calc-input-unit">
+        <input type="number" id="calcImporterCommissionOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -409,8 +460,21 @@
         <span>Учитывать услуги брокера</span>
         <input type="checkbox" id="calcIncludeBroker" checked onchange="calcCustoms()">
       </label>
-      <div class="calc-input-unit">
+      <div class="calc-input-unit calc-input-currency">
         <input type="number" id="calcBrokerOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <label for="calcBrokerOverrideCurrency" class="sr-only">Валюта своей суммы — услуги брокера</label>
+        <select id="calcBrokerOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Broker'); calcCustoms()">
+          <option value="RUB">₽</option>
+          <option value="USD">$</option>
+          <option value="EUR">€</option>
+          <option value="CNY">¥</option>
+          <option value="KRW">₩</option>
+        </select>
+      </div>
+    </div>
+    <div class="calc-row calc-row-single calc-override-rate-row" id="calcBrokerOverrideRateRow" style="display:none">
+      <div class="calc-input-unit">
+        <input type="number" id="calcBrokerOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -503,7 +567,15 @@
       сумма" рядом с чекбоксом — если знаете точную цифру для своего
       случая (счёт перевозчика, договорённость с брокером и т.п.), можно
       ввести её вместо нашей оценки; пустое поле — используется оценка,
-      как обычно. Работает, только пока сам пункт включён чекбоксом.<br><br>
+      как обычно. Работает, только пока сам пункт включён чекбоксом. У
+      поля "своя сумма" есть выбор валюты ($/€/¥/₩/₽) — как у поля
+      "Стоимость авто". При выборе € или $ дополнительно появляется поле
+      "свой курс": пусто — берём курс ЦБ РФ на дату расчёта, как обычно;
+      указано число — используется оно вместо курса ЦБ (тот же принцип,
+      что и с надбавкой к курсу для стоимости авто выше, только здесь
+      можно задать курс целиком, а не только надбавку). Для ¥/₩ свой курс
+      не предлагается — этого никто не просил, считается по чистому курсу
+      ЦБ, аналогично тому, как это сделано для стоимости авто.<br><br>
       <strong>Пикап / грузовой N1 (до 5т):</strong> пикапы попадают под
       ТН ВЭД 8704 (грузовые), а не 8703, по критериям Решения Комиссии ТС
       №751 от 18.11.2011 (число осей, полная масса, соотношение длины

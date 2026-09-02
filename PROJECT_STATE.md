@@ -11,21 +11,34 @@
 `lesnikovmn-svg/myavto-agregator` (публичный).
 
 ## Архитектура
-Google Sheets (база данных) → Python-скрипты на Маке → генерируют встроенный
-JS-массив в `index.html` → git push → GitHub Pages (основной источник) +
-VPS REG.ru (зеркало, отдаёт сайт для рунета/Яндекса).
+Google Sheets (база данных) → `vps_daily_update.sh` на VPS запускает
+`company_agent.py` (ищет/добавляет компании) → `update_site.py`
+(перегенерирует встроенный JS-массив `COMPANIES` в `app.js`) → сам
+коммитит и пушит → GitHub Pages (основной источник) + VPS REG.ru
+(зеркало, отдаёт сайт для рунета/Яндекса, синкается отдельным cron'ом
+`git pull` раз в 10 минут).
 
 ## Инфраструктура
 - **Домен**: myavto-agregator.ru, регистратор и DNS — REG.ru.
 - **VPS**: REG.ru, IP `89.108.70.185`, Ubuntu, nginx, SSL через certbot
-  (автопродление настроено certbot'ом). Раз в 10 минут делает
-  `git pull origin main` в `/var/www/myavto-agregator` (cron на самом VPS).
+  (автопродление настроено certbot'ом).
 - **GitHub Pages**: остаётся как есть, обновляется автоматически при пуше.
-- **Агент и автоматизация** (поиск компаний, обновление сайта) — по-прежнему
-  **на Маке**, не на VPS. Работает через `daily_update.sh` + cron
-  (`crontab -l` на Маке: `0 8 * * * ~/myavto-agregator/daily_update.sh`).
-  Пуш в GitHub — по SSH-ключу, passphrase в Keychain
-  (`ssh-add --apple-use-keychain`), поэтому работает без участия человека.
+- **Агент и автоматизация** (поиск компаний, обновление сайта) — T-117
+  (02.09.2026, было исправлено — раньше этот раздел ошибочно утверждал
+  "по-прежнему на Маке", хотя перенос состоялся ещё 13.08.2026, см. раздел
+  "Перенос агента на VPS — завершено" ниже в этом файле): работает **на
+  VPS**, НЕ на Маке. Крон на самом VPS (`crontab -l`):
+  ```
+  0 5 * * * flock -n /tmp/myavto-agent.lock /var/www/myavto-agregator/vps_daily_update.sh
+  */10 * * * * flock -n /tmp/myavto-agent.lock -c "cd /var/www/myavto-agregator && git pull origin main >> /var/log/site-sync.log 2>&1"
+  ```
+  (05:00 UTC = 08:00 МСК; общий `flock`-лок не даёт `git pull` каждые 10
+  минут дёрнуться ровно в момент, когда агент коммитит/пушит). Мак-кроном
+  (`daily_update.sh`, было `0 8 * * *`) больше НЕ пользуемся — отключён
+  (`crontab -r` на Маке, 13.08.2026); файл `daily_update.sh` остался в
+  репозитории как историческая Мак-версия (со своей venv-логикой),
+  живой скрипт — `vps_daily_update.sh`. Пуш с VPS — по HTTPS с
+  fine-grained Personal Access Token (не SSH-ключ, как было на Маке).
 
 ## Где платим за хостинг/прокси (запись от 27.08.2026, по просьбе пользователя)
 - **Сайт (myavto-agregator.ru) — домен + VPS 89.108.70.185**: REG.ru.

@@ -463,22 +463,63 @@ function toRub(amount, currency) {
 // цифру.
 const PRICE_RATE_MARKUP_RUB = { EUR: 1, USD: 3, CNY: 0, KRW: 0 };
 
+// T-135 (02.09.2026, по запросу пользователя: "прибавлять стоимость авто,
+// добавить окно ввода своего курса") — рядом с полем "Стоимость авто"
+// появилось поле "свой курс" (только для €/$, показывается/прячется
+// togglePriceRateRow() ниже). Если оно заполнено, это ПОЛНЫЙ курс за
+// единицу валюты, введённый пользователем, — используется вместо курса
+// ЦБ РФ + фиксированной надбавки из T-126 (не складывается с ней, а
+// заменяет весь расчёт целиком: пользователь один раз явно называет
+// число, а не два разных источника). Поле пустое — поведение то же, что
+// было: курс ЦБ РФ + надбавка из PRICE_RATE_MARKUP_RUB. Для ¥/₩ своего
+// курса как и раньше нет — не выдумываем то, что не просили.
 function priceRateFor(currency) {
-  return currency === 'RUB' ? 1 : CBR_RATES[currency] + (PRICE_RATE_MARKUP_RUB[currency] || 0);
+  if (currency === 'RUB') return 1;
+  if (currency === 'EUR' || currency === 'USD') {
+    const manualRateEl = document.getElementById('calcValueRate');
+    const manualRate = manualRateEl ? parseFloat(manualRateEl.value) : NaN;
+    if (!isNaN(manualRate)) return manualRate;
+  }
+  return CBR_RATES[currency] + (PRICE_RATE_MARKUP_RUB[currency] || 0);
 }
 
 function priceCurrencyToRub(amount, currency) {
   return currency === 'RUB' ? amount : amount * priceRateFor(currency);
 }
 
+// T-135 — показывает/прячет строку "свой курс" под полем "Стоимость авто"
+// в зависимости от выбранной валюты (только €/$, как и у override-полей
+// в T-134).
+function togglePriceRateRow() {
+  const currency = document.getElementById('calcCurrency').value;
+  const row = document.getElementById('calcValueRateRow');
+  row.style.display = (currency === 'EUR' || currency === 'USD') ? '' : 'none';
+}
+
 // Строка "Стоимость авто: ..." для расшифровки расчёта — общая для веток
 // M1 и N1. T-129 (02.09.2026): подробное объяснение курса+надбавки убрано
 // отсюда в методологию/источники под калькулятором — здесь остаётся
 // только сумма и дата курса, не занимает три строки при каждом расчёте.
+// T-135 (02.09.2026): раньше здесь была фраза "см. методологию" без
+// самого курса — по принципу "честность важнее оптимизма" использованный
+// курс должен быть виден прямо в расшифровке расчёта, а не только в
+// свёрнутом тексте методологии. Теперь строка явно называет курс и его
+// источник: "свой курс" (T-135, если задан), "курс ЦБ РФ + надбавка"
+// (T-126, по умолчанию для €/$) или просто "курс ЦБ РФ" (¥/₩, надбавки
+// нет).
 function priceLine(priceRub, priceInput, currency) {
   if (!priceInput) return null;
   if (currency === 'RUB') return `Стоимость авто: ${fmtRub(priceRub)}`;
-  return `Стоимость авто: ${fmtRub(priceRub)} (курс на ${CBR_RATES._date}, см. методологию)`;
+  const rate = priceRateFor(currency);
+  let rateSource;
+  if (currency === 'EUR' || currency === 'USD') {
+    const manualRateEl = document.getElementById('calcValueRate');
+    const manualRate = manualRateEl ? parseFloat(manualRateEl.value) : NaN;
+    rateSource = !isNaN(manualRate) ? 'свой курс' : `курс ЦБ РФ на ${CBR_RATES._date} + надбавка ${PRICE_RATE_MARKUP_RUB[currency]}₽`;
+  } else {
+    rateSource = `курс ЦБ РФ на ${CBR_RATES._date}`;
+  }
+  return `Стоимость авто: ${fmtRub(priceRub)} (по курсу ${rate} ₽, ${rateSource})`;
 }
 
 // T-134 (02.09.2026, по запросу пользователя: "в окошках своя сумма

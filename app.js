@@ -855,6 +855,23 @@ function calcCustoms() {
   // категорий, где она нужна) — теперь по явной просьбе пользователя
   // добавляется как отдельное слагаемое, регулируется той же галочкой.
   const priceForTotal = usePrice ? priceRub : 0;
+  // T-136 (02.09.2026, по запросу пользователя: "цена авто в калькуляторе
+  // остается для расчета пошлины, и еще дополнительно в ручную водить
+  // стоимость нужно все таки, в случае если таможенная оценка ниже
+  // стоимости авто, такое тоже бывает") — таможня считает пошлину/НДС/
+  // акциз/сбор от таможенной стоимости, а не от того, что реально
+  // заплачено продавцу — эти два числа обычно совпадают, но не всегда
+  // (в т.ч. может быть ниже цены авто). Отдельное необязательное поле
+  // "Таможенная стоимость" — если заполнено, используется ВМЕСТО цены
+  // авто для всей налоговой математики (пошлина/акциз/НДС/таможенный
+  // сбор). "Стоимость авто" при этом не трогается — она по-прежнему
+  // участвует в итоговой сумме (T-130) и в комиссии экспортёра (это
+  // процент от реальной цены сделки, не от таможенной оценки). Поле
+  // пустое — поведение не меняется, всё считается от цены авто, как
+  // раньше. Валюта/свой курс работают так же, как у override-полей
+  // T-134 — тот же overrideAmountRub()/toggleOverrideRateRow().
+  const customsValueOverride = overrideAmountRub('CustomsValue');
+  const dutyBaseRub = !isNaN(customsValueOverride) ? customsValueOverride : priceRub;
 
   const labelEl = document.querySelector('#calcResultBlock .calc-label');
   const resultEl = document.getElementById('calcResult');
@@ -871,13 +888,13 @@ function calcCustoms() {
       breakdownEl.innerHTML = '';
       return;
     }
-    if (!priceRub) {
-      labelEl.textContent = 'Укажите стоимость авто — пошлина и НДС для N1 считаются от неё';
+    if (!dutyBaseRub) {
+      labelEl.textContent = 'Укажите стоимость авто (или таможенную стоимость, если знаете) — пошлина и НДС для N1 считаются от неё';
       resultEl.textContent = '—';
       breakdownEl.innerHTML = '';
       return;
     }
-    const d = dutyTruckRub(fuelType, priceRub);
+    const d = dutyTruckRub(fuelType, dutyBaseRub);
     const util = utilFeeTruckRub(age, maxMass, utilYear);
     const deliveryInfo = DELIVERY_FROM[country];
     const delivery = includeDelivery
@@ -892,7 +909,7 @@ function calcCustoms() {
     const importerCommission = includeImporterCommission
       ? (!isNaN(importerCommissionOverride) ? importerCommissionOverride : IMPORTER_COMMISSION_RUB)
       : 0;
-    const customsFee = customsFeeRub(priceRub);
+    const customsFee = customsFeeRub(dutyBaseRub);
 
     labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)' : 'Пошлина + НДС + утильсбор + доставка + комиссии, без стоимости авто (грузовой N1, см. расшифровку)');
     const CURRENCY_SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩', RUB: '₽' };
@@ -900,6 +917,9 @@ function calcCustoms() {
     if (preview2027) lines.push('Внимание: утильсбор посчитан по ставкам 2027 года (предпросмотр) — не текущий официальный расчёт.');
     const priceLineN1 = priceLine(priceRub, priceInput, currency);
     if (usePrice && priceLineN1) lines.push(priceLineN1);
+    if (!isNaN(customsValueOverride)) {
+      lines.push(`Таможенная стоимость для расчёта пошлины/НДС/сбора: ${fmtRub(dutyBaseRub)}${overrideCurrencyNote('CustomsValue')} — указано вручную, отличается от стоимости авто`);
+    }
     lines.push(`Пошлина (${fuelType === 'diesel' ? '10%, дизель' : '15%, бензин'} от таможенной стоимости — источник один, не сверено по второй площадке): ${fmtRub(d.duty)}`);
     lines.push(`НДС 22% (акциза для N1 нет): ${fmtRub(d.vat)}`);
     lines.push(util !== null
@@ -948,29 +968,34 @@ function calcCustoms() {
   // считается от суммы (стоимость + пошлина + акциз), и без цены НДС
   // получится заниженным на всю стоимость авто. Раньше здесь было
   // "age !== 'gt7'" — баг, поймал сам на тестовом расчёте перед деплоем.
+  // T-136: проверки ниже теперь смотрят на dutyBaseRub (цена авто ИЛИ
+  // таможенная стоимость, если она указана вручную), а не жёстко на
+  // priceRub — если пользователь не знает/не хочет вводить цену авто, но
+  // знает таможенную стоимость, пошлина всё равно посчитается.
   const iceNeedsPrice = needsVolume && (isLegal ? true : age === 'lt3');
-  if (iceNeedsPrice && !priceRub) {
+  if (iceNeedsPrice && !dutyBaseRub) {
     labelEl.textContent = isLegal
-      ? 'Для юрлица укажите стоимость авто — нужна для акциза и НДС даже при пошлине по фиксированной ставке'
-      : 'Для авто младше 3 лет укажите стоимость';
+      ? 'Для юрлица укажите стоимость авто (или таможенную стоимость) — нужна для акциза и НДС даже при пошлине по фиксированной ставке'
+      : 'Для авто младше 3 лет укажите стоимость авто или таможенную стоимость';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     return;
   }
-  // Комиссия экспортёра (см. EXPORTER_COMMISSION_RATE ниже) — % от
-  // стоимости авто, без цены её не посчитать, даже если для пошлины
-  // цена в этом возрастном диапазоне не нужна.
+  // Комиссия экспортёра (см. EXPORTER_COMMISSION_RATE ниже) — % от РЕАЛЬНОЙ
+  // цены сделки (не от таможенной оценки, это разные числа), без неё не
+  // посчитать, даже если для пошлины цена в этом возрастном диапазоне не
+  // нужна. Тут намеренно проверяем priceRub, а не dutyBaseRub.
   if (country === 'europe' && !priceRub) {
     labelEl.textContent = 'Для Европы укажите стоимость авто — нужна для комиссии экспортёра';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     return;
   }
-  // Для электро формула (пошлина+акциз+НДС) считается от стоимости авто
+  // Для электро формула (пошлина+акциз+НДС) считается от таможенной базы
   // всегда, для обоих типов ввоза — в отличие от ДВС, где цена нужна не
   // всегда (см. iceNeedsPrice выше).
-  if (engineType === 'electric' && !priceRub) {
-    labelEl.textContent = 'Для электромобиля укажите стоимость авто — нужна для расчёта пошлины';
+  if (engineType === 'electric' && !dutyBaseRub) {
+    labelEl.textContent = 'Для электромобиля укажите стоимость авто (или таможенную стоимость) — нужна для расчёта пошлины';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     return;
@@ -996,14 +1021,14 @@ function calcCustoms() {
     // 14.09.2021, ТН ВЭД 8703 80 000, 15% для РФ), для физлица — по-прежнему
     // РЕКОНСТРУКЦИЯ (см. комментарий у electricDutyRub выше), т.к. прямой
     // нормы для личного пользования электро в Решении №107 нет.
-    dutyTotal = electricDutyRub(priceRub, hpForExcise);
+    dutyTotal = electricDutyRub(dutyBaseRub, hpForExcise);
     dutyLine = isLegal
       ? `Пошлина 15% + акциз по мощности + НДС 22% (Решение СЕЭК №80 от 14.09.2021, ТН ВЭД 8703 80 000): ${fmtRub(dutyTotal)}`
       : `Пошлина + акциз + НДС (реконструкция для электро — 15% + акциз по мощности + 22% НДС, НЕ прямая норма закона для физлиц, сверьте у брокера): ${fmtRub(dutyTotal)}`;
   } else if (isLegal) {
     // Юрлицо, ДВС/гибрид — полный стандартный набор: пошлина ЕТТ + акциз +
     // НДС отдельными строками (см. dutyLegalIceRub выше).
-    const d = dutyLegalIceRub(legalAgeBucket, priceRub, cm3, hpForExcise);
+    const d = dutyLegalIceRub(legalAgeBucket, dutyBaseRub, cm3, hpForExcise);
     dutyTotal = d.total;
     dutyLine = `Пошлина (ЕТТ ЕАЭС, ${legalAgeBucket === 'gt7' ? 'фикс. ставка €/см³' : '25% от стоимости или мин. €/см³, что больше'}): ${fmtRub(d.dutyRub)}`;
     extraLines = [
@@ -1014,7 +1039,7 @@ function calcCustoms() {
     // Физлицо, ДВС/гибрид — как раньше, без отдельного акциза/НДС
     // (упрощённый порядок для личного пользования их не выделяет).
     dutyTotal = age === 'lt3'
-      ? dutyEurUnder3(priceRub / EUR_RATE, cm3) * EUR_RATE
+      ? dutyEurUnder3(dutyBaseRub / EUR_RATE, cm3) * EUR_RATE
       : dutyRatePerCm3(physicalAgeBucket, cm3) * cm3 * EUR_RATE;
     dutyLine = `Пошлина: ${fmtRub(dutyTotal)}`;
   }
@@ -1033,7 +1058,7 @@ function calcCustoms() {
   const importerCommission = includeImporterCommission
     ? (!isNaN(importerCommissionOverride) ? importerCommissionOverride : IMPORTER_COMMISSION_RUB)
     : 0;
-  const customsFee = customsFeeRub(priceRub); // T-123, null если стоимость не указана
+  const customsFee = customsFeeRub(dutyBaseRub); // T-123, null если таможенная база не указана
 
   labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + утильсбор + доставка + комиссии + услуги брокера (см. расшифровку)' : 'Пошлина + утильсбор + доставка + комиссии + услуги брокера, без стоимости авто (см. расшифровку)');
 
@@ -1043,6 +1068,9 @@ function calcCustoms() {
   if (preview2027) lines.push('Внимание: утильсбор посчитан по ставкам 2027 года (предпросмотр) — не текущий официальный расчёт.');
   const priceLineM1 = priceLine(priceRub, priceInput, currency);
   if (usePrice && priceLineM1) lines.push(priceLineM1);
+  if (!isNaN(customsValueOverride)) {
+    lines.push(`Таможенная стоимость для расчёта пошлины/акциза/НДС/сбора: ${fmtRub(dutyBaseRub)}${overrideCurrencyNote('CustomsValue')} — указано вручную, отличается от стоимости авто`);
+  }
   lines.push(dutyLine, ...extraLines);
   lines.push(util !== null
     ? `Утильсбор: ${fmtRub(util)}`

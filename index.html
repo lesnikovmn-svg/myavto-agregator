@@ -260,6 +260,13 @@
       </select>
     </div>
     <div class="calc-row calc-row-single">
+      <label for="calcVehicleCategory" class="sr-only">Категория ТС</label>
+      <select id="calcVehicleCategory" onchange="toggleVehicleCategory()">
+        <option value="m1">Легковой авто (M1)</option>
+        <option value="n1">Пикап / грузовик до 5т (N1)</option>
+      </select>
+    </div>
+    <div class="calc-row calc-row-single">
       <label for="calcAge" class="sr-only">Возраст авто</label>
       <select id="calcAge" onchange="calcCustoms()">
         <option value="lt3">До 3 лет</option>
@@ -268,31 +275,73 @@
         <option value="gt7">Старше 7 лет</option>
       </select>
     </div>
-    <div class="calc-row">
-      <label for="calcVolume" class="sr-only">Объём двигателя, см³</label>
-      <div class="calc-input-unit">
-        <input type="number" id="calcVolume" placeholder="Объём двигателя" min="0" oninput="calcCustoms()">
-        <span class="calc-unit">см³</span>
-      </div>
-      <label for="calcEngineType" class="sr-only">Тип двигателя</label>
-      <select id="calcEngineType" onchange="calcCustoms()">
-        <option value="ice">Бензин / дизель</option>
-        <option value="hybrid">Гибрид</option>
-        <option value="electric">Электро</option>
-      </select>
-    </div>
-    <div class="calc-row">
-      <label for="calcPower" class="sr-only">Мощность</label>
-      <div class="calc-input-unit calc-input-currency">
-        <input type="number" id="calcPower" placeholder="Мощность" min="0" oninput="calcCustoms()">
-        <label for="calcPowerUnit" class="sr-only">Единица мощности</label>
-        <select id="calcPowerUnit" class="calc-unit-select" onchange="calcCustoms()">
-          <option value="hp">л.с.</option>
-          <option value="kw">кВт</option>
+    <!-- 02.09.2026, T-124 — поля M1/N1 показываются по выбору "Категория ТС"
+         выше, см. toggleVehicleCategory() в app.js. -->
+    <div id="calcM1Fields">
+      <div class="calc-row">
+        <label for="calcVolume" class="sr-only">Объём двигателя, см³</label>
+        <div class="calc-input-unit">
+          <input type="number" id="calcVolume" placeholder="Объём двигателя" min="0" oninput="calcCustoms()">
+          <span class="calc-unit">см³</span>
+        </div>
+        <label for="calcEngineType" class="sr-only">Тип двигателя</label>
+        <select id="calcEngineType" onchange="calcCustoms()">
+          <option value="ice">Бензин / дизель</option>
+          <option value="hybrid">Гибрид</option>
+          <option value="electric">Электро</option>
         </select>
       </div>
+      <div class="calc-row calc-row-single">
+        <label for="calcPower" class="sr-only">Мощность</label>
+        <div class="calc-input-unit calc-input-currency">
+          <input type="number" id="calcPower" placeholder="Мощность" min="0" oninput="calcCustoms()">
+          <label for="calcPowerUnit" class="sr-only">Единица мощности</label>
+          <select id="calcPowerUnit" class="calc-unit-select" onchange="calcCustoms()">
+            <option value="hp">л.с.</option>
+            <option value="kw">кВт</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <!-- T-124: пикап/грузовик N1 — масса вместо объёма/мощности, топливо
+         вместо типа двигателя (нет данных отдельно про гибрид/электро для
+         этой категории — не выдумываем, просто не предлагаем такой выбор).
+         Акциза для N1 нет (см. комментарий у DUTY_TRUCK_RATE в app.js),
+         поэтому единица мощности этой категории вообще не нужна. -->
+    <div id="calcN1Fields" style="display:none">
+      <div class="calc-row">
+        <label for="calcTruckMass" class="sr-only">Максимальная масса</label>
+        <select id="calcTruckMass" onchange="calcCustoms()">
+          <option value="">Макс. масса —</option>
+          <option value="2500">До 2,5 т</option>
+          <option value="3500">2,5–3,5 т</option>
+          <option value="5000">3,5–5 т</option>
+        </select>
+        <label for="calcTruckFuel" class="sr-only">Тип топлива</label>
+        <select id="calcTruckFuel" onchange="calcCustoms()">
+          <option value="petrol">Бензин</option>
+          <option value="diesel">Дизель</option>
+        </select>
+      </div>
+    </div>
+    <!-- 02.09.2026, по запросу пользователя ("стоимость авто можно скрыть
+         под флажок, для экономии места") — поле стоимости свёрнуто под
+         чекбокс по умолчанию. Причина, которую назвал пользователь: курс
+         ЦБ РФ — справочный, реальный платёж по нему провести нельзя (банк/
+         платёжный агент берёт свой курс + комиссию) — это уже отражено в
+         тексте .calc-note ниже. Когда чекбокс выключен, поле стоимости
+         пустое — те строки расчёта, где цена обязательна (см. iceNeedsPrice
+         в app.js), просто попросят её ввести. Общее поле для M1 и N1 —
+         цена нужна в обеих категориях. -->
+    <div class="calc-row calc-row-single">
+      <label class="calc-checkbox-toggle">
+        <input type="checkbox" id="calcShowPrice" onchange="toggleCalcPrice()">
+        Указать точную стоимость авто
+      </label>
+    </div>
+    <div class="calc-row" id="calcValueRow" style="display:none">
       <label for="calcValue" class="sr-only">Стоимость авто</label>
-      <div class="calc-input-unit calc-input-currency">
+      <div class="calc-input-unit calc-input-currency" style="grid-column: 1 / -1">
         <input type="number" id="calcValue" placeholder="Стоимость авто" min="0" oninput="calcCustoms()">
         <label for="calcCurrency" class="sr-only">Валюта стоимости</label>
         <select id="calcCurrency" class="calc-unit-select" onchange="calcCustoms()">
@@ -309,7 +358,12 @@
       <div class="calc-price" id="calcResult">—</div>
       <div class="calc-note" id="calcBreakdown"></div>
     </div>
-    <div class="calc-note">
+    <!-- 02.09.2026, по запросу пользователя ("этот текст под калькулятором
+         нужно свернуть, для экономии места") — методология/источники
+         свёрнуты в <details>, открыты по клику, не занимают место по
+         умолчанию. -->
+    <details class="calc-note calc-methodology">
+      <summary>Как считается — методология и источники</summary>
       <strong>Физлицо:</strong> пошлина и утильсбор — расчёт по официальным
       ставкам для физлица, ввозящего автомобиль для личного пользования
       (Решение Совета ЕЭК №107 от 20.12.2017 — пошлина; полная таблица
@@ -330,19 +384,41 @@
       пошлины с 2026 года касается только Белоруссии/Армении/Киргизии,
       не России). Для юрлица дополнительно считаются акциз по мощности
       (НК РФ ст.193) и НДС 22% — при коммерческом ввозе они не входят в
-      упрощённый платёж физлица, а начисляются отдельно. Таможенный сбор
-      за операции (оформление декларации) не включён ни в одном режиме.<br><br>
+      упрощённый платёж физлица, а начисляются отдельно.<br><br>
+      <strong>Таможенный сбор за операции</strong> — Постановление
+      Правительства РФ №1638 от 23.10.2025 (действует с 01.01.2026), 8
+      диапазонов по таможенной стоимости от 1 231₽ до 73 860₽, считается
+      для любого режима ввоза. Текст самого постановления напрямую не
+      открывали (нет доступа к publication.pravo.gov.ru из рабочей среды),
+      сверено по двум независимым брокерским источникам с одинаковыми
+      цифрами — стоит держать в уме при ежемесячной проверке ставок.<br><br>
       Курсы $/€/¥/₩ — официальные курсы ЦБ РФ, обновляются автоматически
       при каждом обновлении сайта (дата курса — в расшифровке расчёта).
+      Это справочный курс для перевода в рубли внутри расчёта, а не курс,
+      по которому реально проходит платёж — банк или платёжный агент
+      обычно берёт свой курс и комиссию за перевод, это в расчёте не
+      учтено, ориентируйтесь на итог как на нижнюю границу.
       Доставка — ориентировочная оценка, не тариф конкретного перевозчика.
       Комиссия экспортёра (6% от стоимости авто) считается только для
       направления "Европа". Комиссия импортёра и услуги брокера (СВХ,
       оценочная экспертиза, СБКТС, ЭПТС, оформление утильсбора) —
       фиксированные ориентиры, посчитаны по ценам для физлиц и могут не
-      отражать реальную стоимость услуг при коммерческом объёме ввоза.
-      Грузовики, мото и прицепы не поддерживаются. Это не юридическая
+      отражать реальную стоимость услуг при коммерческом объёме ввоза.<br><br>
+      <strong>Пикап / грузовой N1 (до 5т):</strong> пикапы попадают под
+      ТН ВЭД 8704 (грузовые), а не 8703, по критериям Решения Комиссии ТС
+      №751 от 18.11.2011 (число осей, полная масса, соотношение длины
+      платформы и базы, расчётная масса груза против пассажиров — не
+      "как выглядит"). Утильсбор — официальная таблица customs.gov.ru,
+      раздел II, по массе, без деления по мощности/объёму, одинаковая для
+      физ- и юрлица (отдельной льготы для личного пользования у категории
+      N1 в этой таблице нет). Пошлина — 15% (бензин) / 10% (дизель) от
+      таможенной стоимости плюс НДС 22%, акциза нет — эта ставка пока
+      сверена только по одному источнику (не как остальные цифры на этой
+      странице), стоит перепроверить у брокера перед сделкой отдельно.
+      Тяжелее 5т, гибриды и электро в категории N1 не поддерживаются.
+      Мото и прицепы не поддерживаются вообще. Это не юридическая
       консультация, перед сделкой сверяйте расчёт у брокера.
-    </div>
+    </details>
   </div>
 </section>
 

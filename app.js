@@ -472,15 +472,13 @@ function priceCurrencyToRub(amount, currency) {
 }
 
 // Строка "Стоимость авто: ..." для расшифровки расчёта — общая для веток
-// M1 и N1, чтобы не дублировать текст про надбавку в двух местах.
+// M1 и N1. T-129 (02.09.2026): подробное объяснение курса+надбавки убрано
+// отсюда в методологию/источники под калькулятором — здесь остаётся
+// только сумма и дата курса, не занимает три строки при каждом расчёте.
 function priceLine(priceRub, priceInput, currency) {
   if (!priceInput) return null;
   if (currency === 'RUB') return `Стоимость авто: ${fmtRub(priceRub)}`;
-  const markup = PRICE_RATE_MARKUP_RUB[currency] || 0;
-  const markupNote = markup
-    ? `курс ЦБ РФ ${CBR_RATES[currency]} ₽ + ${markup} ₽ надбавка (задано вручную) = ${priceRateFor(currency)} ₽ за 1 ${currency}`
-    : `курс ЦБ РФ, 1 ${currency} = ${CBR_RATES[currency]} ₽ (без надбавки)`;
-  return `Стоимость авто: ${fmtRub(priceRub)} (${CBR_RATES._date}, ${markupNote})`;
+  return `Стоимость авто: ${fmtRub(priceRub)} (курс на ${CBR_RATES._date}, см. методологию)`;
 }
 
 // Полная таблица коэффициентов утильсбора для физлица (личное пользование),
@@ -696,13 +694,20 @@ function calcCustoms() {
   const kw = powerUnit === 'kw' ? powerInput : powerInput * HP_TO_KW;
   const priceInput = parseFloat(document.getElementById('calcValue').value);
   const currency = document.getElementById('calcCurrency').value;
-  // T-126: чекбокс "учитывать стоимость авто в расчёте" — выключен, цена
-  // не участвует в расчёте вообще (priceRub = 0), даже если что-то введено
-  // в поле. Конвертация — priceCurrencyToRub() (курс ЦБ РФ + ручная
-  // надбавка пользователя для EUR/USD, см. PRICE_RATE_MARKUP_RUB выше) —
-  // ТОЛЬКО для стоимости самой машины, не для доставки и прочих сумм.
+  // T-129 (02.09.2026, фикс по просьбе пользователя): раньше этот чекбокс
+  // обнулял priceRub целиком, из-за чего расчёт мог заблокироваться там,
+  // где цена математически обязательна (юрлицо — НДС, электро, до 3 лет,
+  // Европа — комиссия экспортёра) — снятая галочка не отменяет то, что
+  // пошлина/НДС/сбор реально считаются от цены, это не вопрос удобства
+  // отображения. Теперь priceRub всегда считается из введённого значения
+  // (если оно есть) — расчёт идёт как обычно. Чекбокс управляет только
+  // тем, показывается ли строка "Стоимость авто: ..." в расшифровке (см.
+  // `usePrice && priceLineX` ниже), не самой математикой. Конвертация —
+  // priceCurrencyToRub() (курс ЦБ РФ + ручная надбавка пользователя для
+  // EUR/USD, см. PRICE_RATE_MARKUP_RUB выше) — ТОЛЬКО для стоимости самой
+  // машины, не для доставки и прочих сумм.
   const usePrice = document.getElementById('calcUsePrice').checked;
-  const priceRub = usePrice && priceInput ? priceCurrencyToRub(priceInput, currency) : 0;
+  const priceRub = priceInput ? priceCurrencyToRub(priceInput, currency) : 0;
 
   const labelEl = document.querySelector('#calcResultBlock .calc-label');
   const resultEl = document.getElementById('calcResult');

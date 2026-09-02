@@ -362,6 +362,36 @@
         Учитывать стоимость авто в расчёте
       </label>
     </div>
+    <!-- T-128 (02.09.2026, по запросу пользователя: "нужно добавить
+         возможность отключения доставки, комиссии экспортера и
+         импортера по желанию") — три независимых чекбокса, все включены
+         по умолчанию (текущее поведение не меняется, пока не выключить
+         явно). Каждый управляет и строкой в расшифровке, и суммой в
+         итоге — не просто прячет текст. -->
+    <div class="calc-row calc-row-single">
+      <label class="calc-checkbox-toggle">
+        <input type="checkbox" id="calcIncludeDelivery" checked onchange="calcCustoms()">
+        Учитывать доставку
+      </label>
+    </div>
+    <div class="calc-row calc-row-single">
+      <label class="calc-checkbox-toggle">
+        <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="calcCustoms()">
+        Учитывать комиссию экспортёра
+      </label>
+    </div>
+    <div class="calc-row calc-row-single">
+      <label class="calc-checkbox-toggle">
+        <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="calcCustoms()">
+        Учитывать комиссию импортёра
+      </label>
+    </div>
+    <div class="calc-row calc-row-single">
+      <label class="calc-checkbox-toggle">
+        <input type="checkbox" id="calcIncludeBroker" checked onchange="calcCustoms()">
+        Учитывать услуги брокера
+      </label>
+    </div>
     <div class="calc-result" id="calcResultBlock">
       <div class="calc-label">Заполните параметры выше</div>
       <div class="calc-price" id="calcResult">—</div>

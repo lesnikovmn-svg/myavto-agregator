@@ -281,7 +281,7 @@
       <div class="calc-row">
         <label for="calcVolume" class="sr-only">Объём двигателя, см³</label>
         <div class="calc-input-unit">
-          <input type="number" id="calcVolume" placeholder="Объём двигателя" min="0" oninput="calcCustoms()">
+          <input type="number" id="calcVolume" placeholder="Объём двигателя" min="0" oninput="calcCustoms()" onfocus="this.select()">
           <span class="calc-unit">см³</span>
         </div>
         <label for="calcEngineType" class="sr-only">Тип двигателя</label>
@@ -294,7 +294,7 @@
       <div class="calc-row calc-row-single">
         <label for="calcPower" class="sr-only">Мощность</label>
         <div class="calc-input-unit calc-input-currency">
-          <input type="number" id="calcPower" placeholder="Мощность" min="0" oninput="calcCustoms()">
+          <input type="number" id="calcPower" placeholder="Мощность" min="0" oninput="calcCustoms()" onfocus="this.select()">
           <label for="calcPowerUnit" class="sr-only">Единица мощности</label>
           <select id="calcPowerUnit" class="calc-unit-select" onchange="calcCustoms()">
             <option value="hp">л.с.</option>
@@ -347,9 +347,10 @@
          + фиксированную надбавку из T-126 (не меняли), указано число —
          используется целиком вместо ЦБ+надбавки, а не поверх неё. -->
     <div class="calc-row" id="calcValueRow">
+      <div class="calc-field-caption" style="grid-column: 1 / -1">Стоимость авто</div>
       <label for="calcValue" class="sr-only">Стоимость авто</label>
       <div class="calc-input-unit calc-input-currency" style="grid-column: 1 / -1">
-        <input type="number" id="calcValue" placeholder="Стоимость авто" min="0" oninput="calcCustoms()">
+        <input type="number" id="calcValue" placeholder="Стоимость авто" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcCurrency" class="sr-only">Валюта стоимости</label>
         <select id="calcCurrency" class="calc-unit-select" onchange="togglePriceRateRow(); calcCustoms()">
           <option value="RUB">₽</option>
@@ -361,8 +362,9 @@
       </div>
     </div>
     <div class="calc-row calc-row-single calc-override-rate-row" id="calcValueRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для стоимости авто выше</div>
       <div class="calc-input-unit">
-        <input type="number" id="calcValueRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ + надбавка" min="0" step="0.01" oninput="calcCustoms()">
+        <input type="number" id="calcValueRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ + надбавка" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -378,8 +380,9 @@
          реальную сделку, а не про таможенную оценку). Валюта и свой курс
          — тот же паттерн override-полей, что и выше (T-134). -->
     <div class="calc-row calc-row-single">
+      <div class="calc-field-caption">Таможенная стоимость (если отличается от цены авто)</div>
       <div class="calc-input-unit calc-input-currency">
-        <input type="number" id="calcCustomsValueOverride" placeholder="Таможенная стоимость, если отличается от цены авто" min="0" oninput="calcCustoms()">
+        <input type="number" id="calcCustomsValueOverride" placeholder="Таможенная стоимость, если отличается от цены авто" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcCustomsValueOverrideCurrency" class="sr-only">Валюта таможенной стоимости</label>
         <select id="calcCustomsValueOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('CustomsValue'); calcCustoms()">
           <option value="RUB">₽</option>
@@ -391,8 +394,9 @@
       </div>
     </div>
     <div class="calc-row calc-row-single calc-override-rate-row" id="calcCustomsValueOverrideRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для таможенной стоимости выше</div>
       <div class="calc-input-unit">
-        <input type="number" id="calcCustomsValueOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
+        <input type="number" id="calcCustomsValueOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -434,7 +438,7 @@
         <input type="checkbox" id="calcIncludeDelivery" checked onchange="calcCustoms()">
       </label>
       <div class="calc-input-unit calc-input-currency">
-        <input type="number" id="calcDeliveryOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <input type="number" id="calcDeliveryOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcDeliveryOverrideCurrency" class="sr-only">Валюта своей суммы — доставка</label>
         <select id="calcDeliveryOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Delivery'); calcCustoms()">
           <option value="RUB">₽</option>
@@ -446,8 +450,9 @@
       </div>
     </div>
     <div class="calc-row calc-row-single calc-override-rate-row" id="calcDeliveryOverrideRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для доставки выше</div>
       <div class="calc-input-unit">
-        <input type="number" id="calcDeliveryOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
+        <input type="number" id="calcDeliveryOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -457,7 +462,7 @@
         <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="calcCustoms()">
       </label>
       <div class="calc-input-unit calc-input-currency">
-        <input type="number" id="calcExporterCommissionOverride" placeholder="Своя сумма, иначе 6% от цены" min="0" oninput="calcCustoms()">
+        <input type="number" id="calcExporterCommissionOverride" placeholder="Своя сумма, иначе 6% от цены" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcExporterCommissionOverrideCurrency" class="sr-only">Валюта своей суммы — комиссия экспортёра</label>
         <select id="calcExporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ExporterCommission'); calcCustoms()">
           <option value="RUB">₽</option>
@@ -469,8 +474,9 @@
       </div>
     </div>
     <div class="calc-row calc-row-single calc-override-rate-row" id="calcExporterCommissionOverrideRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для комиссии экспортёра выше</div>
       <div class="calc-input-unit">
-        <input type="number" id="calcExporterCommissionOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
+        <input type="number" id="calcExporterCommissionOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -480,7 +486,7 @@
         <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="calcCustoms()">
       </label>
       <div class="calc-input-unit calc-input-currency">
-        <input type="number" id="calcImporterCommissionOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <input type="number" id="calcImporterCommissionOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcImporterCommissionOverrideCurrency" class="sr-only">Валюта своей суммы — комиссия импортёра</label>
         <select id="calcImporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ImporterCommission'); calcCustoms()">
           <option value="RUB">₽</option>
@@ -492,8 +498,9 @@
       </div>
     </div>
     <div class="calc-row calc-row-single calc-override-rate-row" id="calcImporterCommissionOverrideRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для комиссии импортёра выше</div>
       <div class="calc-input-unit">
-        <input type="number" id="calcImporterCommissionOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
+        <input type="number" id="calcImporterCommissionOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
         <span class="calc-unit">₽</span>
       </div>
     </div>
@@ -503,7 +510,7 @@
         <input type="checkbox" id="calcIncludeBroker" checked onchange="calcCustoms()">
       </label>
       <div class="calc-input-unit calc-input-currency">
-        <input type="number" id="calcBrokerOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <input type="number" id="calcBrokerOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcBrokerOverrideCurrency" class="sr-only">Валюта своей суммы — услуги брокера</label>
         <select id="calcBrokerOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Broker'); calcCustoms()">
           <option value="RUB">₽</option>
@@ -515,8 +522,9 @@
       </div>
     </div>
     <div class="calc-row calc-row-single calc-override-rate-row" id="calcBrokerOverrideRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для услуг брокера выше</div>
       <div class="calc-input-unit">
-        <input type="number" id="calcBrokerOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()">
+        <input type="number" id="calcBrokerOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
         <span class="calc-unit">₽</span>
       </div>
     </div>

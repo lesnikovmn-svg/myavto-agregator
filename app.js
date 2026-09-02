@@ -413,8 +413,14 @@ const UTIL_TRUCK = [
   { maxMass: 5000, byYear: { "2024": [5.71, 8.5], "2025": [6.28, 9.35], "2026": [6.91, 10.29], "2027": [7.6, 11.31], "2028": [8.36, 12.44], "2029": [9.2, 13.69], "2030": [10.12, 15.06] } },
 ];
 
-function utilFeeTruckRub(age, maxMass) {
-  const year = String(Math.max(2024, Math.min(2030, new Date().getFullYear())));
+// T-127 (02.09.2026, по запросу пользователя после сверки его файла
+// "Новые ставки с 1 января" — он совпал 1-в-1, 196 строк, со столбцом
+// "2026" уже зашитых таблиц). forceYear — необязательный параметр для
+// предпросмотра 2027 года (см. calcCustoms, чекбокс calcPreview2027):
+// БЕЗ него функция сама берёт текущий год, как и раньше — предпросмотр
+// ничего не меняет в обычном расчёте, только когда явно попросили.
+function utilFeeTruckRub(age, maxMass, forceYear) {
+  const year = forceYear || String(Math.max(2024, Math.min(2030, new Date().getFullYear())));
   const ageKey = age === 'lt3' ? 0 : 1;
   const band = findBand(UTIL_TRUCK, maxMass, 'maxMass');
   const pair = band.byYear[year];
@@ -438,10 +444,43 @@ function dutyTruckRub(fuelType, priceRub) {
 }
 
 // currency !== "RUB" здесь означает "нужно конвертировать по курсу ЦБ РФ" —
-// та же функция конвертации, что и для стоимости авто, чтобы не дублировать
-// логику (см. currency === 'RUB' ? ... в calcCustoms).
+// используется для доставки и прочих сумм НЕ являющихся стоимостью самого
+// авто (для неё — отдельная priceCurrencyToRub() ниже, с надбавкой).
 function toRub(amount, currency) {
   return currency === "RUB" ? amount : amount * CBR_RATES[currency];
+}
+
+// T-126 (02.09.2026, по запросу пользователя: "курс евро бери =1 еденица
+// к курсу цб, к курсу $ +3 единицы для расчета стоимости самого авто в
+// стране вывоза"). По курсу ЦБ РФ реально купить/перевести валюту нельзя
+// (см. оговорку в методологии) — пользователь задал вручную конкретную
+// надбавку поверх официального курса ЦБ РФ, но ТОЛЬКО для перевода
+// стоимости самой машины (не для доставки/прочих сумм — toRub() выше
+// используется без изменений для них). Не выведена из какого-то
+// официального источника — это личная оценка пользователя, не "средний
+// курс обменников" и не что-то ещё сверяемое. CNY/KRW пользователь не
+// упоминал — считаем без надбавки (по чистому курсу ЦБ), а не выдумываем
+// цифру.
+const PRICE_RATE_MARKUP_RUB = { EUR: 1, USD: 3, CNY: 0, KRW: 0 };
+
+function priceRateFor(currency) {
+  return currency === 'RUB' ? 1 : CBR_RATES[currency] + (PRICE_RATE_MARKUP_RUB[currency] || 0);
+}
+
+function priceCurrencyToRub(amount, currency) {
+  return currency === 'RUB' ? amount : amount * priceRateFor(currency);
+}
+
+// Строка "Стоимость авто: ..." для расшифровки расчёта — общая для веток
+// M1 и N1, чтобы не дублировать текст про надбавку в двух местах.
+function priceLine(priceRub, priceInput, currency) {
+  if (!priceInput) return null;
+  if (currency === 'RUB') return `Стоимость авто: ${fmtRub(priceRub)}`;
+  const markup = PRICE_RATE_MARKUP_RUB[currency] || 0;
+  const markupNote = markup
+    ? `курс ЦБ РФ ${CBR_RATES[currency]} ₽ + ${markup} ₽ надбавка (задано вручную) = ${priceRateFor(currency)} ₽ за 1 ${currency}`
+    : `курс ЦБ РФ, 1 ${currency} = ${CBR_RATES[currency]} ₽ (без надбавки)`;
+  return `Стоимость авто: ${fmtRub(priceRub)} (${CBR_RATES._date}, ${markupNote})`;
 }
 
 // Полная таблица коэффициентов утильсбора для физлица (личное пользование),
@@ -611,8 +650,9 @@ function findBand(bands, value, key) {
 // отдельной строки для "старше 5 лет" в ней нет).
 // importerType: 'physical' (по умолчанию) — таблицы п.3/п.4 (личное
 // пользование); 'legal' — таблицы п.1/п.2 (общая/коммерческая), T-122.
-function utilFeeRub(age, engineType, cm3, kw, importerType) {
-  const year = String(Math.max(2025, Math.min(2030, new Date().getFullYear())));
+// forceYear — см. комментарий у utilFeeTruckRub() выше, тот же смысл.
+function utilFeeRub(age, engineType, cm3, kw, importerType, forceYear) {
+  const year = forceYear || String(Math.max(2025, Math.min(2030, new Date().getFullYear())));
   const ageKey = age === 'lt3' ? 0 : 1;
   const isLegal = importerType === 'legal';
 
@@ -636,6 +676,10 @@ function calcCustoms() {
   const vehicleCategory = document.getElementById('calcVehicleCategory').value; // 'm1' | 'n1'
   const importerType = document.getElementById('calcImporterType').value; // 'physical' | 'legal'
   const isLegal = importerType === 'legal';
+  // T-127: предпросмотр утильсбора по столбцу "2027" тех же таблиц —
+  // ничего не меняет в обычном расчёте, пока чекбокс не включён явно.
+  const preview2027 = document.getElementById('calcPreview2027').checked;
+  const utilYear = preview2027 ? '2027' : undefined;
   const country = document.getElementById('calcCountry').value;
   const age = document.getElementById('calcAge').value; // lt3 | 3-5 | 5-7 | gt7
   const cm3 = parseFloat(document.getElementById('calcVolume').value);
@@ -645,11 +689,13 @@ function calcCustoms() {
   const kw = powerUnit === 'kw' ? powerInput : powerInput * HP_TO_KW;
   const priceInput = parseFloat(document.getElementById('calcValue').value);
   const currency = document.getElementById('calcCurrency').value;
-  // CBR_RATES хранит курс "рублей за 1 единицу валюты" (для RUB — считаем
-  // курс 1, конвертация не нужна). Одна и та же введённая сумма всегда
-  // приводится к рублям здесь один раз, дальше по коду (дальше — все
-  // формулы) везде используется уже priceRub, как и раньше.
-  const priceRub = currency === 'RUB' ? priceInput : priceInput * CBR_RATES[currency];
+  // T-126: чекбокс "учитывать стоимость авто в расчёте" — выключен, цена
+  // не участвует в расчёте вообще (priceRub = 0), даже если что-то введено
+  // в поле. Конвертация — priceCurrencyToRub() (курс ЦБ РФ + ручная
+  // надбавка пользователя для EUR/USD, см. PRICE_RATE_MARKUP_RUB выше) —
+  // ТОЛЬКО для стоимости самой машины, не для доставки и прочих сумм.
+  const usePrice = document.getElementById('calcUsePrice').checked;
+  const priceRub = usePrice && priceInput ? priceCurrencyToRub(priceInput, currency) : 0;
 
   const labelEl = document.querySelector('#calcResultBlock .calc-label');
   const resultEl = document.getElementById('calcResult');
@@ -673,7 +719,7 @@ function calcCustoms() {
       return;
     }
     const d = dutyTruckRub(fuelType, priceRub);
-    const util = utilFeeTruckRub(age, maxMass);
+    const util = utilFeeTruckRub(age, maxMass, utilYear);
     const deliveryInfo = DELIVERY_FROM[country];
     const delivery = toRub(deliveryInfo.amount, deliveryInfo.currency);
     const broker = BROKER_SERVICES_RUB;
@@ -681,9 +727,12 @@ function calcCustoms() {
     const importerCommission = IMPORTER_COMMISSION_RUB;
     const customsFee = customsFeeRub(priceRub);
 
-    labelEl.textContent = 'Пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)';
+    labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + 'Пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)';
     const CURRENCY_SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩', RUB: '₽' };
     const lines = [];
+    if (preview2027) lines.push('Внимание: утильсбор посчитан по ставкам 2027 года (предпросмотр) — не текущий официальный расчёт.');
+    const priceLineN1 = priceLine(priceRub, priceInput, currency);
+    if (usePrice && priceLineN1) lines.push(priceLineN1);
     lines.push(`Пошлина (${fuelType === 'diesel' ? '10%, дизель' : '15%, бензин'} от таможенной стоимости — источник один, не сверено по второй площадке): ${fmtRub(d.duty)}`);
     lines.push(`НДС 22% (акциза для N1 нет): ${fmtRub(d.vat)}`);
     lines.push(util !== null
@@ -797,7 +846,7 @@ function calcCustoms() {
     dutyLine = `Пошлина: ${fmtRub(dutyTotal)}`;
   }
 
-  const util = utilFeeRub(age, engineType, cm3 || 0, kw, importerType);
+  const util = utilFeeRub(age, engineType, cm3 || 0, kw, importerType, utilYear);
   const deliveryInfo = DELIVERY_FROM[country];
   const delivery = toRub(deliveryInfo.amount, deliveryInfo.currency);
   const broker = BROKER_SERVICES_RUB;
@@ -805,11 +854,14 @@ function calcCustoms() {
   const importerCommission = IMPORTER_COMMISSION_RUB;
   const customsFee = customsFeeRub(priceRub); // T-123, null если стоимость не указана
 
-  labelEl.textContent = 'Пошлина + утильсбор + доставка + комиссии + услуги брокера (см. расшифровку)';
+  labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + 'Пошлина + утильсбор + доставка + комиссии + услуги брокера (см. расшифровку)';
 
   const CURRENCY_SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩', RUB: '₽' };
 
   const lines = [];
+  if (preview2027) lines.push('Внимание: утильсбор посчитан по ставкам 2027 года (предпросмотр) — не текущий официальный расчёт.');
+  const priceLineM1 = priceLine(priceRub, priceInput, currency);
+  if (usePrice && priceLineM1) lines.push(priceLineM1);
   lines.push(dutyLine, ...extraLines);
   lines.push(util !== null
     ? `Утильсбор: ${fmtRub(util)}`

@@ -434,13 +434,23 @@ app_js = app_js[:s] + js + app_js[e:]
 # или отдал неожиданный формат — НЕ падаем и НЕ затираем старые курсы нулями,
 # просто оставляем то, что уже было в app.js, и громко печатаем предупреждение
 # в лог, чтобы это было видно в выводе daily_update.sh.
+#
+# T-117-fix (01.09.2026): naive find("const CBR_RATES = {") один раз уже
+# поймал НЕ настоящее объявление, а упоминание этой же строки внутри
+# комментария в app.js (комментарий сам ссылался на маркер по имени) —
+# склеило комментарий с кодом и уронило весь калькулятор (EUR_RATE читался
+# из несуществующего CBR_RATES, TDZ ReferenceError). Ищем теперь с явным
+# переводом строки перед "const" — так матчится только настоящее
+# объявление в начале строки, а не текст внутри "// ...".
 try:
     rates = fetch_cbr_rates()
     print(f"Курсы ЦБ РФ на {rates['_date']}: USD={rates['USD']} EUR={rates['EUR']} CNY={rates['CNY']} KRW={rates['KRW']}")
     cbr_js = "const CBR_RATES = " + json.dumps(rates, ensure_ascii=False) + ";"
-    cs = app_js.find("const CBR_RATES = {")
+    marker = "\nconst CBR_RATES = {"
+    cs = app_js.find(marker)
     if cs == -1:
-        raise ValueError("в app.js не найден маркер 'const CBR_RATES = {' — структура файла изменилась")
+        raise ValueError("в app.js не найден маркер 'const CBR_RATES = {' в начале строки — структура файла изменилась")
+    cs += 1  # не затирать сам перевод строки
     ce = app_js.find("};", cs) + 2
     app_js = app_js[:cs] + cbr_js + app_js[ce:]
 except Exception as e:

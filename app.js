@@ -305,9 +305,7 @@ document.getElementById('mainSearch').addEventListener('keydown', e => {
 // отображения. Это СИД-значения на момент написания — update_site.py при
 // каждом обычном прогоне подставляет сюда актуальные курсы напрямую с
 // customs... то есть с cbr.ru (см. fetch_cbr_rates.py), маркер для замены —
-// сама строка "const CBR_RATES = {" ниже, не менять её вид резко, иначе
-// автозамена в update_site.py перестанет находить блок.
-const CBR_RATES = {"USD": 86.3793, "EUR": 100.5714, "CNY": 12.897, "KRW": 0.059527, "_date": "02.09.2026"};
+// сама строка "const CBR_RATES = {"_date": "02.09.2026", "USD": 86.753, "EUR": 100.5988, "CNY": 12.897, "KRW": 0.063157};
 
 const EUR_RATE = CBR_RATES.EUR; // курс EUR нужен формуле пошлины отдельно от остальных валют
 

@@ -298,8 +298,15 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    логотип-вотермарк, что уже используется в hero (.hero-bg-logo), только
    внутри блока результата калькулятора и с другой прозрачностью (0.25
    вместо 0.15 у hero — там на белом фоне, здесь на светло-зелёном
-   .calc-result, нужна была чуть выше). */
-.calc-result-badge { position: absolute; right: -10px; bottom: -16px; width: 110px; height: auto; opacity: 0.25; pointer-events: none; z-index: 0; }
+   .calc-result, нужна была чуть выше).
+   T-132-fix (02.09.2026, по скриншоту пользователя): бейдж стоял внизу
+   блока и попадал на длинную расшифровку, а не на саму итоговую сумму —
+   перенесён в правый верхний угол, туда, где строка "от X ₽" (calc-price
+   идёт сразу после calc-label, оба в самом верху блока), и уменьшен,
+   чтобы не наезжать на расшифровку ниже.
+   T-132-fix-2 (02.09.2026, по запросу пользователя): прозрачность 25% →
+   60%, бейдж заметнее. */
+.calc-result-badge { position: absolute; right: 6px; top: 6px; width: 72px; height: auto; opacity: 0.6; pointer-events: none; z-index: 0; }
 .calc-label, .calc-price, .calc-note, #calcBreakdown { position: relative; z-index: 1; }
 .calc-label { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
 .calc-price { font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; color: var(--accent); }

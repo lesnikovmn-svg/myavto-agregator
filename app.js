@@ -527,10 +527,29 @@ function priceLine(priceRub, priceInput, currency) {
 // окошка ручного ввода курса") — показывает/прячет строку "свой курс"
 // под полем "своя сумма" в зависимости от выбранной валюты. Вызывается
 // из onchange у каждого из 4 селектов валюты в index.html.
+//
+// T-141 (02.09.2026, по запросу пользователя, со скриншотом: "когда
+// фишка выключена убирай совсем из вида окна для ручного ввода") —
+// добавлена вторая обязанность: прятать ВЕСЬ блок "своя сумма" (поле +
+// выбор валюты), не только строку "свой курс", когда соответствующий
+// чекбокс "Учитывать X" выключен — раньше поле оставалось на виду,
+// хотя ни на что не влияло (выключенный пункт полностью убирается из
+// расчёта, см. T-131). Теперь вызывается также из onchange самого
+// чекбокса (см. index.html), не только из onchange выбора валюты.
+// Id чекбокса выводится из prefix (`calcInclude${prefix}`) — совпадает
+// у всех 4 полей с "Учитывать"-чекбоксом (Delivery/ExporterCommission/
+// ImporterCommission/Broker). Поле "Таможенная стоимость" (T-136,
+// prefix='CustomsValue') такого чекбокса не имеет вообще — тогда
+// getElementById вернёт null, и included остаётся true (как и раньше,
+// это поле не гейтится ничем), никакого спецкейса не понадобилось.
 function toggleOverrideRateRow(prefix) {
+  const includeCheckbox = document.getElementById(`calcInclude${prefix}`);
+  const included = includeCheckbox ? includeCheckbox.checked : true;
+  const wrap = document.getElementById(`calc${prefix}OverrideWrap`);
+  if (wrap) wrap.style.display = included ? '' : 'none';
   const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
   const row = document.getElementById(`calc${prefix}OverrideRateRow`);
-  row.style.display = (currency === 'EUR' || currency === 'USD') ? '' : 'none';
+  row.style.display = (included && (currency === 'EUR' || currency === 'USD')) ? '' : 'none';
 }
 
 // Читает поле "своя сумма" + выбранную валюту + (для €/$) необязательный

@@ -142,7 +142,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=369e7fdbf4">
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
    (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
@@ -431,13 +431,23 @@
          фиксированная надбавка, а тут пользователь вводит весь курс
          целиком). Для ¥/₩ поле курса не показывается — своего курса для
          них никто не просил, считаем по чистому курсу ЦБ, как и раньше
-         для цены авто. -->
+         для цены авто.
+         T-141 (02.09.2026, по запросу пользователя, со скриншотом: "когда
+         фишка выключена убирай совсем из вида окна для ручного ввода") —
+         раньше поле "своя сумма" (+ выбор валюты) оставалось на виду и
+         при выключенном чекбоксе "Учитывать X", хотя ни на что не влияло
+         (выключенный пункт полностью убирается из расчёта, см. T-131) —
+         только загромождало калькулятор. Теперь toggleOverrideRateRow()
+         (уже существовала для T-134, вызывалась только из onchange у
+         выбора валюты) полностью прячет весь блок "своя сумма" вместе с
+         выбором валюты и строкой "свой курс", когда чекбокс выключен —
+         вызывается также из onchange самого чекбокса. См. app.js. -->
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <span>Учитывать доставку</span>
-        <input type="checkbox" id="calcIncludeDelivery" checked onchange="calcCustoms()">
+        <input type="checkbox" id="calcIncludeDelivery" checked onchange="toggleOverrideRateRow('Delivery'); calcCustoms()">
       </label>
-      <div class="calc-input-unit calc-input-currency">
+      <div class="calc-input-unit calc-input-currency" id="calcDeliveryOverrideWrap">
         <input type="number" id="calcDeliveryOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcDeliveryOverrideCurrency" class="sr-only">Валюта своей суммы — доставка</label>
         <select id="calcDeliveryOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Delivery'); calcCustoms()">
@@ -459,9 +469,9 @@
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <span>Учитывать комиссию экспортёра</span>
-        <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="calcCustoms()">
+        <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="toggleOverrideRateRow('ExporterCommission'); calcCustoms()">
       </label>
-      <div class="calc-input-unit calc-input-currency">
+      <div class="calc-input-unit calc-input-currency" id="calcExporterCommissionOverrideWrap">
         <input type="number" id="calcExporterCommissionOverride" placeholder="Своя сумма, иначе 6% от цены" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcExporterCommissionOverrideCurrency" class="sr-only">Валюта своей суммы — комиссия экспортёра</label>
         <select id="calcExporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ExporterCommission'); calcCustoms()">
@@ -483,9 +493,9 @@
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <span>Учитывать комиссию импортёра</span>
-        <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="calcCustoms()">
+        <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="toggleOverrideRateRow('ImporterCommission'); calcCustoms()">
       </label>
-      <div class="calc-input-unit calc-input-currency">
+      <div class="calc-input-unit calc-input-currency" id="calcImporterCommissionOverrideWrap">
         <input type="number" id="calcImporterCommissionOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcImporterCommissionOverrideCurrency" class="sr-only">Валюта своей суммы — комиссия импортёра</label>
         <select id="calcImporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ImporterCommission'); calcCustoms()">
@@ -507,9 +517,9 @@
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <span>Учитывать услуги брокера</span>
-        <input type="checkbox" id="calcIncludeBroker" checked onchange="calcCustoms()">
+        <input type="checkbox" id="calcIncludeBroker" checked onchange="toggleOverrideRateRow('Broker'); calcCustoms()">
       </label>
-      <div class="calc-input-unit calc-input-currency">
+      <div class="calc-input-unit calc-input-currency" id="calcBrokerOverrideWrap">
         <input type="number" id="calcBrokerOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()" onfocus="this.select()">
         <label for="calcBrokerOverrideCurrency" class="sr-only">Валюта своей суммы — услуги брокера</label>
         <select id="calcBrokerOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Broker'); calcCustoms()">
@@ -1065,6 +1075,6 @@
   </div>
 </footer>
 
-<script src="app.js"></script>
+<script src="app.js?v=008cf6d5f2"></script>
 </body>
 </html>

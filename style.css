@@ -305,8 +305,13 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    идёт сразу после calc-label, оба в самом верху блока), и уменьшен,
    чтобы не наезжать на расшифровку ниже.
    T-132-fix-2 (02.09.2026, по запросу пользователя): прозрачность 25% →
-   60%, бейдж заметнее. */
-.calc-result-badge { position: absolute; right: 6px; top: 6px; width: 72px; height: auto; opacity: 0.6; pointer-events: none; z-index: 0; }
+   60%.
+   T-132-fix-3 (02.09.2026, по запросу пользователя: "увеличить бейдж в
+   2,5 раза и прозрачность 30% оставить, передвинуть на центр блока") —
+   72px → 180px (×2.5), прозрачность 60% → 30%, позиция — по центру
+   блока результата (`top/left: 50%` + `transform: translate(-50%,-50%)`
+   вместо угла). */
+.calc-result-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 180px; height: auto; opacity: 0.3; pointer-events: none; z-index: 0; }
 .calc-label, .calc-price, .calc-note, #calcBreakdown { position: relative; z-index: 1; }
 .calc-label { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
 .calc-price { font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; color: var(--accent); }

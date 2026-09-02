@@ -163,9 +163,23 @@ def track_local(frame_gray, template_gray, last_box):
     return best  # (x, y, w, h, score)
 
 
-def detect_boxes(path, log=lambda msg: None):
+def detect_boxes(path, log=lambda msg: None, anchor_interval=ANCHOR_INTERVAL):
     """Проходит по видео и для каждого кадра определяет box бейджа (или None).
-    Возвращает список (frame_idx, box_or_None, source), source: 'ocr' | 'track' | None."""
+    Возвращает список (frame_idx, box_or_None, source), source: 'ocr' | 'track' | None.
+
+    T-116 (02.09.2026): anchor_interval вынесен в параметр (было — жёстко
+    ANCHOR_INTERVAL внутри) — auto_montage.py зовёт detect_boxes() на уже
+    КОРОТКИХ (1-3с, ~30-90 кадров) вырезанных кандидатах, не на полном
+    видео, для которого ANCHOR_INTERVAL=10 подбирался (см. докстринг
+    ANCHOR_INTERVAL выше — расчёт на десятки секунд/минуты материала).
+    На таком коротком кандидате 10-кадровый шаг даёт всего 3-9 OCR-попыток
+    на весь план — если все они пришлись на кадры, где бейдж под углом,
+    которого хватает трекингу между ними, но не хватает OCR (тот же класс
+    проблемы, что и с угловыми ФОТО, см. T-85/watermark_video докстринг про
+    OCR и наклон), план целиком уходит в "safe" (0 находок = считаем, что
+    бейджа нет вовсе) — а на самом деле бейдж просто не был пойман ни разу
+    и остаётся видимым на видео. Даём auto_montage возможность звать с
+    более частыми якорями на своих коротких кандидатах."""
     cap = cv2.VideoCapture(path)
     idx = 0
     results = []
@@ -190,7 +204,7 @@ def detect_boxes(path, log=lambda msg: None):
         # на 40-секундном ролике. Теперь между якорями работает только
         # быстрый локальный трекинг; если он гаснет — ждём следующего
         # планового якоря, не раньше.
-        if idx % ANCHOR_INTERVAL == 0:
+        if idx % anchor_interval == 0:
             ocr_box = ocr_anchor(frame)
             ocr_calls += 1
             if ocr_box is not None:

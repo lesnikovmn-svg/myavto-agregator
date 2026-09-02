@@ -273,9 +273,44 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    занимает весь ряд вместо половины */
 .calc-row-single { grid-template-columns: 1fr; }
 /* 02.09.2026, T-126 — чекбокс "учитывать стоимость авто в расчёте"
-   (не то же самое, что скрытие поля — поле всегда видно, см. T-125-fix) */
-.calc-checkbox-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
-.calc-checkbox-toggle input[type="checkbox"] { width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
+   (не то же самое, что скрытие поля — поле всегда видно, см. T-125-fix)
+   T-133 (02.09.2026, по скриншоту пользователя — "вместо галочек поставь
+   такой переключатель") — обычный <input type="checkbox"> перерисован в
+   pill-переключатель (зелёный, белый кружок) через appearance:none +
+   псевдоэлемент ::before как "бегунок" — без картинок и JS, работает как
+   обычный чекбокс (те же id, те же onchange="calcCustoms()" в HTML, менять
+   там ничего не пришлось, кроме порядка: текст теперь в <span> перед
+   input, чтобы переключатель был прижат к правому краю строки, как в
+   макете). */
+.calc-checkbox-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+.calc-checkbox-toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: #d1d5db;
+  cursor: pointer;
+  outline: none;
+  transition: background .15s ease;
+}
+.calc-checkbox-toggle input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: transform .15s ease;
+}
+.calc-checkbox-toggle input[type="checkbox"]:checked { background: var(--accent); }
+.calc-checkbox-toggle input[type="checkbox"]:checked::before { transform: translateX(16px); }
+.calc-checkbox-toggle input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px var(--accent-light); }
 /* 02.09.2026 — методология калькулятора свёрнута в <details>, чтобы не
    занимать место по умолчанию (по запросу пользователя) */
 .calc-methodology summary { cursor: pointer; color: var(--text); font-weight: 500; list-style: revert; padding: 2px 0; }

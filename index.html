@@ -356,8 +356,8 @@
     </div>
     <div class="calc-row calc-row-single">
       <label class="calc-checkbox-toggle">
+        <span>Прибавлять стоимость авто к итоговой сумме</span>
         <input type="checkbox" id="calcUsePrice" checked onchange="calcCustoms()">
-        Прибавлять стоимость авто к итоговой сумме
       </label>
     </div>
     <!-- T-128 (02.09.2026, по запросу пользователя: "нужно добавить
@@ -376,8 +376,8 @@
          убирается из расчёта, свою сумму задавать бессмысленно. -->
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
+        <span>Учитывать доставку</span>
         <input type="checkbox" id="calcIncludeDelivery" checked onchange="calcCustoms()">
-        Учитывать доставку
       </label>
       <div class="calc-input-unit">
         <input type="number" id="calcDeliveryOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
@@ -386,8 +386,8 @@
     </div>
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
+        <span>Учитывать комиссию экспортёра</span>
         <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="calcCustoms()">
-        Учитывать комиссию экспортёра
       </label>
       <div class="calc-input-unit">
         <input type="number" id="calcExporterCommissionOverride" placeholder="Своя сумма, иначе 6% от цены" min="0" oninput="calcCustoms()">
@@ -396,8 +396,8 @@
     </div>
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
+        <span>Учитывать комиссию импортёра</span>
         <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="calcCustoms()">
-        Учитывать комиссию импортёра
       </label>
       <div class="calc-input-unit">
         <input type="number" id="calcImporterCommissionOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
@@ -406,8 +406,8 @@
     </div>
     <div class="calc-row">
       <label class="calc-checkbox-toggle">
+        <span>Учитывать услуги брокера</span>
         <input type="checkbox" id="calcIncludeBroker" checked onchange="calcCustoms()">
-        Учитывать услуги брокера
       </label>
       <div class="calc-input-unit">
         <input type="number" id="calcBrokerOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
@@ -430,8 +430,8 @@
          предпросмотра, не должна занимать место среди основных полей ввода. -->
     <div class="calc-row calc-row-single">
       <label class="calc-checkbox-toggle">
+        <span>Предпросмотр: утильсбор по ставкам 2027 года</span>
         <input type="checkbox" id="calcPreview2027" onchange="calcCustoms()">
-        Предпросмотр: утильсбор по ставкам 2027 года
       </label>
     </div>
     <!-- 02.09.2026, по запросу пользователя ("этот текст под калькулятором

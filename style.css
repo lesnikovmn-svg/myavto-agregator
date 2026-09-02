@@ -269,6 +269,9 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .calc-section { background: rgba(255,255,255,0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .calc-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
 .calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+/* 02.09.2026, T-122 (режим юр.лицо) — строка с одним полем (возраст),
+   занимает весь ряд вместо половины */
+.calc-row-single { grid-template-columns: 1fr; }
 .calc-row select, .calc-row input[type="number"] { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; width: 100%; box-sizing: border-box; }
 .calc-input-unit { position: relative; }
 .calc-input-unit input[type="number"] { padding-right: 40px; }

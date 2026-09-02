@@ -481,6 +481,36 @@ function priceLine(priceRub, priceInput, currency) {
   return `Стоимость авто: ${fmtRub(priceRub)} (курс на ${CBR_RATES._date}, см. методологию)`;
 }
 
+// T-131 (02.09.2026, по запросу пользователя: "нужно добавить самому
+// ставить значения: доставка, комиссия импортера, экспортера, услуги
+// брокера") — четыре одинаковых по смыслу хелпера: строка расшифровки
+// меняется в зависимости от того, взята сумма из нашей оценки или введена
+// пользователем вручную (override). Общие для веток M1 и N1, чтобы не
+// дублировать текст в четырёх местах.
+function deliveryLine(delivery, deliveryOverride, deliveryOrig) {
+  return !isNaN(deliveryOverride)
+    ? `Доставка: ${fmtRub(delivery)} — указано вручную`
+    : `Доставка: от ${fmtRub(delivery)}${deliveryOrig} — ориентировочно`;
+}
+
+function exporterCommissionLine(exporterCommission, exporterCommissionOverride) {
+  return !isNaN(exporterCommissionOverride)
+    ? `Комиссия экспортёра: ${fmtRub(exporterCommission)} — указано вручную`
+    : `Комиссия экспортёра (Германия, ${EXPORTER_COMMISSION_RATE * 100}% от стоимости авто): ${fmtRub(exporterCommission)}`;
+}
+
+function importerCommissionLine(importerCommission, importerCommissionOverride) {
+  return !isNaN(importerCommissionOverride)
+    ? `Комиссия импортёра: ${fmtRub(importerCommission)} — указано вручную`
+    : `Комиссия импортёра: от ${fmtRub(importerCommission)} — ориентировочно`;
+}
+
+function brokerLine(broker, brokerOverride) {
+  return !isNaN(brokerOverride)
+    ? `${BROKER_SERVICES_LABEL}: ${fmtRub(broker)} — указано вручную`
+    : `${BROKER_SERVICES_LABEL}: от ${fmtRub(broker)} — ориентировочно`;
+}
+
 // Полная таблица коэффициентов утильсбора для физлица (личное пользование),
 // ДВС — источник: customs.gov.ru, "Коэффициенты утилизационного сбора на
 // колесные ТС", раздел I, п.4 ("...ввозимые физическими лицами для личного
@@ -685,6 +715,17 @@ function calcCustoms() {
   const includeExporterCommission = document.getElementById('calcIncludeExporterCommission').checked;
   const includeImporterCommission = document.getElementById('calcIncludeImporterCommission').checked;
   const includeBroker = document.getElementById('calcIncludeBroker').checked;
+  // T-131 (02.09.2026, по запросу пользователя: "нужно добавить самому
+  // ставить значения: доставка, комиссия импортера, экспортера, услуги
+  // брокера") — необязательные поля "своя сумма" рядом с каждым чекбоксом
+  // выше. parseFloat('') = NaN — это сигнал "поле не заполнено, брать
+  // нашу оценку", а не 0 (0 — валидное значение, которое можно указать
+  // явно, например "доставку уже оплатил, не считать"). Проверяем именно
+  // !isNaN(...), не truthy — иначе 0 будет неотличимо от пустого поля.
+  const deliveryOverride = parseFloat(document.getElementById('calcDeliveryOverride').value);
+  const exporterCommissionOverride = parseFloat(document.getElementById('calcExporterCommissionOverride').value);
+  const importerCommissionOverride = parseFloat(document.getElementById('calcImporterCommissionOverride').value);
+  const brokerOverride = parseFloat(document.getElementById('calcBrokerOverride').value);
   const country = document.getElementById('calcCountry').value;
   const age = document.getElementById('calcAge').value; // lt3 | 3-5 | 5-7 | gt7
   const cm3 = parseFloat(document.getElementById('calcVolume').value);
@@ -741,10 +782,18 @@ function calcCustoms() {
     const d = dutyTruckRub(fuelType, priceRub);
     const util = utilFeeTruckRub(age, maxMass, utilYear);
     const deliveryInfo = DELIVERY_FROM[country];
-    const delivery = includeDelivery ? toRub(deliveryInfo.amount, deliveryInfo.currency) : 0;
-    const broker = includeBroker ? BROKER_SERVICES_RUB : 0;
-    const exporterCommission = includeExporterCommission && country === 'europe' ? priceRub * EXPORTER_COMMISSION_RATE : 0;
-    const importerCommission = includeImporterCommission ? IMPORTER_COMMISSION_RUB : 0;
+    const delivery = includeDelivery
+      ? (!isNaN(deliveryOverride) ? deliveryOverride : toRub(deliveryInfo.amount, deliveryInfo.currency))
+      : 0;
+    const broker = includeBroker
+      ? (!isNaN(brokerOverride) ? brokerOverride : BROKER_SERVICES_RUB)
+      : 0;
+    const exporterCommission = includeExporterCommission && country === 'europe'
+      ? (!isNaN(exporterCommissionOverride) ? exporterCommissionOverride : priceRub * EXPORTER_COMMISSION_RATE)
+      : 0;
+    const importerCommission = includeImporterCommission
+      ? (!isNaN(importerCommissionOverride) ? importerCommissionOverride : IMPORTER_COMMISSION_RUB)
+      : 0;
     const customsFee = customsFeeRub(priceRub);
 
     labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)' : 'Пошлина + НДС + утильсбор + доставка + комиссии, без стоимости авто (грузовой N1, см. расшифровку)');
@@ -763,16 +812,16 @@ function calcCustoms() {
       const deliveryOrig = deliveryInfo.currency === 'RUB'
         ? ''
         : ` (${CURRENCY_SYMBOL[deliveryInfo.currency]}${deliveryInfo.amount.toLocaleString('ru-RU')}, по курсу ЦБ РФ на ${CBR_RATES._date})`;
-      lines.push(`Доставка: от ${fmtRub(delivery)}${deliveryOrig} — ориентировочно`);
+      lines.push(deliveryLine(delivery, deliveryOverride, deliveryOrig));
     }
     if (includeExporterCommission && country === 'europe') {
-      lines.push(`Комиссия экспортёра (Германия, ${EXPORTER_COMMISSION_RATE * 100}% от стоимости авто): ${fmtRub(exporterCommission)}`);
+      lines.push(exporterCommissionLine(exporterCommission, exporterCommissionOverride));
     }
     if (includeImporterCommission) {
-      lines.push(`Комиссия импортёра: от ${fmtRub(importerCommission)} — ориентировочно`);
+      lines.push(importerCommissionLine(importerCommission, importerCommissionOverride));
     }
     if (includeBroker) {
-      lines.push(`${BROKER_SERVICES_LABEL}: от ${fmtRub(broker)} — ориентировочно`);
+      lines.push(brokerLine(broker, brokerOverride));
     }
     breakdownEl.innerHTML = lines.filter(Boolean).join('<br>');
 
@@ -874,10 +923,18 @@ function calcCustoms() {
 
   const util = utilFeeRub(age, engineType, cm3 || 0, kw, importerType, utilYear);
   const deliveryInfo = DELIVERY_FROM[country];
-  const delivery = includeDelivery ? toRub(deliveryInfo.amount, deliveryInfo.currency) : 0;
-  const broker = includeBroker ? BROKER_SERVICES_RUB : 0;
-  const exporterCommission = includeExporterCommission && country === 'europe' ? priceRub * EXPORTER_COMMISSION_RATE : 0;
-  const importerCommission = includeImporterCommission ? IMPORTER_COMMISSION_RUB : 0;
+  const delivery = includeDelivery
+    ? (!isNaN(deliveryOverride) ? deliveryOverride : toRub(deliveryInfo.amount, deliveryInfo.currency))
+    : 0;
+  const broker = includeBroker
+    ? (!isNaN(brokerOverride) ? brokerOverride : BROKER_SERVICES_RUB)
+    : 0;
+  const exporterCommission = includeExporterCommission && country === 'europe'
+    ? (!isNaN(exporterCommissionOverride) ? exporterCommissionOverride : priceRub * EXPORTER_COMMISSION_RATE)
+    : 0;
+  const importerCommission = includeImporterCommission
+    ? (!isNaN(importerCommissionOverride) ? importerCommissionOverride : IMPORTER_COMMISSION_RUB)
+    : 0;
   const customsFee = customsFeeRub(priceRub); // T-123, null если стоимость не указана
 
   labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + утильсбор + доставка + комиссии + услуги брокера (см. расшифровку)' : 'Пошлина + утильсбор + доставка + комиссии + услуги брокера, без стоимости авто (см. расшифровку)');
@@ -899,16 +956,16 @@ function calcCustoms() {
     const deliveryOrig = deliveryInfo.currency === 'RUB'
       ? ''
       : ` (${CURRENCY_SYMBOL[deliveryInfo.currency]}${deliveryInfo.amount.toLocaleString('ru-RU')}, по курсу ЦБ РФ на ${CBR_RATES._date})`;
-    lines.push(`Доставка: от ${fmtRub(delivery)}${deliveryOrig} — ориентировочно`);
+    lines.push(deliveryLine(delivery, deliveryOverride, deliveryOrig));
   }
   if (includeExporterCommission && country === 'europe') {
-    lines.push(`Комиссия экспортёра (Германия, ${EXPORTER_COMMISSION_RATE * 100}% от стоимости авто): ${fmtRub(exporterCommission)}`);
+    lines.push(exporterCommissionLine(exporterCommission, exporterCommissionOverride));
   }
   if (includeImporterCommission) {
-    lines.push(`Комиссия импортёра: от ${fmtRub(importerCommission)} — ориентировочно`);
+    lines.push(importerCommissionLine(importerCommission, importerCommissionOverride));
   }
   if (includeBroker) {
-    lines.push(`${BROKER_SERVICES_LABEL}: от ${fmtRub(broker)} — ориентировочно`);
+    lines.push(brokerLine(broker, brokerOverride));
   }
   breakdownEl.innerHTML = lines.join('<br>');
 

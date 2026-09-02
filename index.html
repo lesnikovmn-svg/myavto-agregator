@@ -362,35 +362,60 @@
     </div>
     <!-- T-128 (02.09.2026, по запросу пользователя: "нужно добавить
          возможность отключения доставки, комиссии экспортера и
-         импортера по желанию") — три независимых чекбокса, все включены
+         импортера по желанию") — четыре независимых чекбокса, все включены
          по умолчанию (текущее поведение не меняется, пока не выключить
          явно). Каждый управляет и строкой в расшифровке, и суммой в
-         итоге — не просто прячет текст. -->
-    <div class="calc-row calc-row-single">
+         итоге — не просто прячет текст.
+         T-131 (02.09.2026, по запросу пользователя: "нужно добавить самому
+         ставить значения: доставка, комиссия импортера, экспортера, услуги
+         брокера") — у каждого пункта появилось поле "своя сумма, ₽" рядом
+         с чекбоксом. Пусто — считается наша ориентировочная оценка (как
+         раньше). Указано число (даже 0) — используется оно вместо оценки,
+         строка в расшифровке помечается "указано вручную". Работает только
+         пока чекбокс включён — выключенный пункт по-прежнему полностью
+         убирается из расчёта, свою сумму задавать бессмысленно. -->
+    <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <input type="checkbox" id="calcIncludeDelivery" checked onchange="calcCustoms()">
         Учитывать доставку
       </label>
+      <div class="calc-input-unit">
+        <input type="number" id="calcDeliveryOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <span class="calc-unit">₽</span>
+      </div>
     </div>
-    <div class="calc-row calc-row-single">
+    <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="calcCustoms()">
         Учитывать комиссию экспортёра
       </label>
+      <div class="calc-input-unit">
+        <input type="number" id="calcExporterCommissionOverride" placeholder="Своя сумма, иначе 6% от цены" min="0" oninput="calcCustoms()">
+        <span class="calc-unit">₽</span>
+      </div>
     </div>
-    <div class="calc-row calc-row-single">
+    <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="calcCustoms()">
         Учитывать комиссию импортёра
       </label>
+      <div class="calc-input-unit">
+        <input type="number" id="calcImporterCommissionOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <span class="calc-unit">₽</span>
+      </div>
     </div>
-    <div class="calc-row calc-row-single">
+    <div class="calc-row">
       <label class="calc-checkbox-toggle">
         <input type="checkbox" id="calcIncludeBroker" checked onchange="calcCustoms()">
         Учитывать услуги брокера
       </label>
+      <div class="calc-input-unit">
+        <input type="number" id="calcBrokerOverride" placeholder="Своя сумма, иначе оценка" min="0" oninput="calcCustoms()">
+        <span class="calc-unit">₽</span>
+      </div>
     </div>
     <div class="calc-result" id="calcResultBlock">
+      <img src="/hero-bg-logo-full.png" alt="" class="calc-result-badge">
       <div class="calc-label">Заполните параметры выше</div>
       <div class="calc-price" id="calcResult">—</div>
       <div class="calc-note" id="calcBreakdown"></div>
@@ -472,7 +497,13 @@
       направления "Европа". Комиссия импортёра и услуги брокера (СВХ,
       оценочная экспертиза, СБКТС, ЭПТС, оформление утильсбора) —
       фиксированные ориентиры, посчитаны по ценам для физлиц и могут не
-      отражать реальную стоимость услуг при коммерческом объёме ввоза.<br><br>
+      отражать реальную стоимость услуг при коммерческом объёме ввоза. У
+      каждого из этих четырёх пунктов (доставка, комиссия экспортёра,
+      комиссия импортёра, услуги брокера) есть необязательное поле "своя
+      сумма" рядом с чекбоксом — если знаете точную цифру для своего
+      случая (счёт перевозчика, договорённость с брокером и т.п.), можно
+      ввести её вместо нашей оценки; пустое поле — используется оценка,
+      как обычно. Работает, только пока сам пункт включён чекбоксом.<br><br>
       <strong>Пикап / грузовой N1 (до 5т):</strong> пикапы попадают под
       ТН ВЭД 8704 (грузовые), а не 8703, по критериям Решения Комиссии ТС
       №751 от 18.11.2011 (число осей, полная масса, соотношение длины

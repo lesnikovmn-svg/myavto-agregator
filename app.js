@@ -700,14 +700,22 @@ function calcCustoms() {
   // Европа — комиссия экспортёра) — снятая галочка не отменяет то, что
   // пошлина/НДС/сбор реально считаются от цены, это не вопрос удобства
   // отображения. Теперь priceRub всегда считается из введённого значения
-  // (если оно есть) — расчёт идёт как обычно. Чекбокс управляет только
-  // тем, показывается ли строка "Стоимость авто: ..." в расшифровке (см.
-  // `usePrice && priceLineX` ниже), не самой математикой. Конвертация —
-  // priceCurrencyToRub() (курс ЦБ РФ + ручная надбавка пользователя для
-  // EUR/USD, см. PRICE_RATE_MARKUP_RUB выше) — ТОЛЬКО для стоимости самой
-  // машины, не для доставки и прочих сумм.
+  // (если оно есть) — расчёт идёт как обычно, пошлина/НДС/сбор всегда
+  // верные. Конвертация — priceCurrencyToRub() (курс ЦБ РФ + ручная
+  // надбавка пользователя для EUR/USD, см. PRICE_RATE_MARKUP_RUB выше) —
+  // ТОЛЬКО для стоимости самой машины, не для доставки и прочих сумм.
   const usePrice = document.getElementById('calcUsePrice').checked;
   const priceRub = priceInput ? priceCurrencyToRub(priceInput, currency) : 0;
+  // T-130 (02.09.2026, по запросу пользователя: "при расчете калькулятора
+  // прибавлять стоимость авто к таможенным платежам, при снятой галочке
+  // убирать") — чекбокс теперь управляет ДВУМЯ вещами: строкой "Стоимость
+  // авто: ..." в расшифровке (как в T-129) И тем, прибавляется ли цена
+  // авто к итоговой сумме сверху таможенных платежей (пошлина+утильсбор+
+  // сбор+доставка+комиссии+брокер). Раньше цена в итог не прибавлялась
+  // вообще, только влияла на пошлину/НДС через математику формул (для тех
+  // категорий, где она нужна) — теперь по явной просьбе пользователя
+  // добавляется как отдельное слагаемое, регулируется той же галочкой.
+  const priceForTotal = usePrice ? priceRub : 0;
 
   const labelEl = document.querySelector('#calcResultBlock .calc-label');
   const resultEl = document.getElementById('calcResult');
@@ -739,7 +747,7 @@ function calcCustoms() {
     const importerCommission = includeImporterCommission ? IMPORTER_COMMISSION_RUB : 0;
     const customsFee = customsFeeRub(priceRub);
 
-    labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + 'Пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)';
+    labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)' : 'Пошлина + НДС + утильсбор + доставка + комиссии, без стоимости авто (грузовой N1, см. расшифровку)');
     const CURRENCY_SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩', RUB: '₽' };
     const lines = [];
     if (preview2027) lines.push('Внимание: утильсбор посчитан по ставкам 2027 года (предпросмотр) — не текущий официальный расчёт.');
@@ -769,9 +777,9 @@ function calcCustoms() {
     breakdownEl.innerHTML = lines.filter(Boolean).join('<br>');
 
     if (util !== null) {
-      resultEl.textContent = `от ${fmtRub(d.total + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
+      resultEl.textContent = `от ${fmtRub(priceForTotal + d.total + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
     } else {
-      const known = d.total + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
+      const known = priceForTotal + d.total + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
       resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
     }
     return;
@@ -872,7 +880,7 @@ function calcCustoms() {
   const importerCommission = includeImporterCommission ? IMPORTER_COMMISSION_RUB : 0;
   const customsFee = customsFeeRub(priceRub); // T-123, null если стоимость не указана
 
-  labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + 'Пошлина + утильсбор + доставка + комиссии + услуги брокера (см. расшифровку)';
+  labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + утильсбор + доставка + комиссии + услуги брокера (см. расшифровку)' : 'Пошлина + утильсбор + доставка + комиссии + услуги брокера, без стоимости авто (см. расшифровку)');
 
   const CURRENCY_SYMBOL = { USD: '$', EUR: '€', CNY: '¥', KRW: '₩', RUB: '₽' };
 
@@ -905,9 +913,9 @@ function calcCustoms() {
   breakdownEl.innerHTML = lines.join('<br>');
 
   if (dutyTotal !== null && util !== null) {
-    resultEl.textContent = `от ${fmtRub(dutyTotal + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
+    resultEl.textContent = `от ${fmtRub(priceForTotal + dutyTotal + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
   } else {
-    const known = (dutyTotal || 0) + (util || 0) + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
+    const known = priceForTotal + (dutyTotal || 0) + (util || 0) + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
     resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
   }
 }

@@ -542,14 +542,29 @@ function priceLine(priceRub, priceInput, currency) {
 // prefix='CustomsValue') такого чекбокса не имеет вообще — тогда
 // getElementById вернёт null, и included остаётся true (как и раньше,
 // это поле не гейтится ничем), никакого спецкейса не понадобилось.
+//
+// T-149 (03.09.2026, по запросу пользователя: "окно своя сумма, свой
+// курс по умолчанию выключено через тумблер дополнительный") — добавлен
+// ВТОРОЙ уровень гейта: `calc${prefix}UseOverride` — отдельный тумблер
+// "Своя сумма" (по умолчанию ВЫКЛЮЧЕН), решает, показывать ли само поле
+// ввода + валюту, независимо от основного "Учитывать X" (который решает,
+// участвует ли пункт в расчёте вообще). У CustomsValue/EaeuCustoms
+// (T-136/T-142/T-147) отдельного тумблера "Своя сумма" нет — там ЕДИНЫЙ
+// тумблер уже совмещает обе роли (включить пункт = показать поле), тогда
+// useOverrideCheckbox будет null и useOverride падает обратно на
+// included — поведение этих двух полей не меняется вообще.
 function toggleOverrideRateRow(prefix) {
   const includeCheckbox = document.getElementById(`calcInclude${prefix}`);
   const included = includeCheckbox ? includeCheckbox.checked : true;
+  const subToggleWrap = document.getElementById(`calc${prefix}SubToggleWrap`);
+  if (subToggleWrap) subToggleWrap.style.display = included ? '' : 'none';
+  const useOverrideCheckbox = document.getElementById(`calc${prefix}UseOverride`);
+  const useOverride = useOverrideCheckbox ? useOverrideCheckbox.checked : included;
   const wrap = document.getElementById(`calc${prefix}OverrideWrap`);
-  if (wrap) wrap.style.display = included ? '' : 'none';
+  if (wrap) wrap.style.display = (included && useOverride) ? '' : 'none';
   const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
   const row = document.getElementById(`calc${prefix}OverrideRateRow`);
-  row.style.display = (included && (currency === 'EUR' || currency === 'USD')) ? '' : 'none';
+  row.style.display = (included && useOverride && (currency === 'EUR' || currency === 'USD')) ? '' : 'none';
 }
 
 // Читает поле "своя сумма" + выбранную валюту + (для €/$) необязательный
@@ -889,7 +904,16 @@ function calcCustoms() {
   // пустое — поведение не меняется, всё считается от цены авто, как
   // раньше. Валюта/свой курс работают так же, как у override-полей
   // T-134 — тот же overrideAmountRub()/toggleOverrideRateRow().
-  const customsValueOverride = overrideAmountRub('CustomsValue');
+  // T-147 (03.09.2026, по запросу пользователя, со скриншотом: "сделать
+  // тумблер и совсем убрать окно про курс") — раньше это поле было
+  // единственным override-полем без чекбокса "Учитывать" (не требовался —
+  // поле само optional, пусто просто не влияло). Теперь у него тоже есть
+  // тумблер (по умолчанию ВЫКЛЮЧЕН, в отличие от остальных override-полей
+  // ниже) — если выключен, оставшееся в скрытом поле число (если
+  // пользователь что-то вводил, затем выключил тумблер) игнорируется, не
+  // просто визуально прячется, но и не участвует в расчёте.
+  const includeCustomsValue = document.getElementById('calcIncludeCustomsValue').checked;
+  const customsValueOverride = includeCustomsValue ? overrideAmountRub('CustomsValue') : NaN;
   const dutyBaseRub = !isNaN(customsValueOverride) ? customsValueOverride : priceRub;
 
   // T-142 (03.09.2026, по запросу пользователя: "добавить в калькулятор
@@ -1295,13 +1319,26 @@ const COUNTRY_CURRENCY = {
   china: 'CNY',
 };
 
+// T-148 (03.09.2026, по запросу пользователя: "учитывать комиссию
+// импортера и учитывать услуги брокера всегда по умолчанию в рублях,
+// независимо от направления") — эти два поля исключены из
+// автопереключения валюты по направлению (в отличие от остальных 4).
+// Комиссия импортёра и услуги брокера — фиксированные ориентировочные
+// суммы (не % от сделки, IMPORTER_COMMISSION_RUB/BROKER_SERVICES_RUB в
+// app.js), не привязаны к валюте рынка продавца конкретной страны — в
+// отличие от доставки/комиссии экспортёра/таможенной стоимости/Таможни
+// ЕАЭС, которые логически связаны со страной вывоза. Пользователь может
+// вручную поставить другую валюту в любой момент — просто автоподстановка
+// по стране их больше не трогает.
+const CURRENCY_SYNC_PREFIXES = ['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission'];
+
 function syncCurrencyToCountry() {
   const country = document.getElementById('calcCountry').value;
   const currency = COUNTRY_CURRENCY[country];
   if (!currency) return; // Япония — валюту не трогаем, см. комментарий выше
   const priceCurrencyEl = document.getElementById('calcCurrency');
   if (priceCurrencyEl) { priceCurrencyEl.value = currency; togglePriceRateRow(); }
-  ['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission', 'ImporterCommission', 'Broker'].forEach(prefix => {
+  CURRENCY_SYNC_PREFIXES.forEach(prefix => {
     const el = document.getElementById(`calc${prefix}OverrideCurrency`);
     if (el) { el.value = currency; toggleOverrideRateRow(prefix); }
   });

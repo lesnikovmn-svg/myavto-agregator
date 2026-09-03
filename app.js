@@ -1274,7 +1274,17 @@ function calcCustoms() {
     extraLines = [];
   }
 
-  const util = utilFeeRub(age, engineType, cm3 || 0, kw, importerType, utilYear);
+  // T-154 (03.09.2026, поправка пользователя: "если включен тумблер ЕАЭС,
+  // коммерческий утиль считается всегда, даже если лс меньше 160 у двс и
+  // меньше 80 лс у электричек") — режим «Таможня ЕАЭС» уже подменяет
+  // пошлину на плоскую коммерческую ставку (T-142); утильсбор должен
+  // считаться по той же логике — ВСЕГДА по коммерческой таблице
+  // (UTIL_ICE_LEGAL/UTIL_EV_LEGAL), даже если реально выбрано "Физлицо" и
+  // мощность укладывается в персональные пороги (≤160 л.с. ДВС, ≤80 л.с.
+  // электро/гибрид), где обычно применяется более дешёвая личная таблица.
+  // Достаточно передать в utilFeeRub() 'legal' вместо importerType —
+  // функция сама выбирает UTIL_*_LEGAL по этому аргументу (см. выше).
+  const util = utilFeeRub(age, engineType, cm3 || 0, kw, eaeuCustoms ? 'legal' : importerType, utilYear);
   const deliveryInfo = DELIVERY_FROM[country];
   const delivery = includeDelivery
     ? (!isNaN(deliveryOverride) ? deliveryOverride : toRub(deliveryInfo.amount, deliveryInfo.currency))
@@ -1310,7 +1320,7 @@ function calcCustoms() {
   }
   lines.push(dutyLine, ...extraLines);
   lines.push(util !== null
-    ? `Утильсбор: ${fmtRub(util)}`
+    ? `Утильсбор${eaeuCustoms ? ' (по коммерческой таблице — режим «Таможня ЕАЭС» считает утильсбор всегда по ней, независимо от типа ввоза и мощности)' : ''}: ${fmtRub(util)}`
     : 'Утильсбор: не удалось рассчитать для этих параметров — проверьте ввод или уточняйте у компании из каталога');
   lines.push(customsFee !== null
     ? `Таможенный сбор за операции: ${fmtRub(customsFee)}`

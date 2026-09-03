@@ -331,6 +331,22 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .calc-methodology summary { cursor: pointer; color: var(--text); font-weight: 500; list-style: revert; padding: 2px 0; }
 .calc-methodology summary::marker { color: var(--muted); }
 .calc-methodology[open] summary { margin-bottom: 8px; }
+/* T-153 (03.09.2026, по запросу пользователя: "инструкцию нужно написать
+   с илюстрацией") — сворачиваемая инструкция "Как пользоваться
+   калькулятором" над полями калькулятора. Переопределяет размер шрифта
+   у унаследованного .calc-note (11px — рассчитан на плотный текст
+   методологии/источников под калькулятором, для инструкции с шагами и
+   иллюстрацией мелковато) на более читаемый 13px. */
+.calc-howto { font-size: 13px; margin-bottom: 14px; }
+.calc-howto-body { margin-top: 4px; }
+.calc-howto-illustration { width: 100%; height: auto; max-width: 600px; display: block; margin: 4px auto 14px; }
+.calc-howto-body ol { padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+.calc-howto-body li { color: var(--text); line-height: 1.55; }
+.calc-howto-body li b { color: var(--accent); font-weight: 600; }
+.calc-howto-disclaimer { margin-top: 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+@media (max-width: 480px) {
+  .calc-howto-illustration text { font-size: 10px; }
+}
 .calc-row select, .calc-row input[type="number"] { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; width: 100%; box-sizing: border-box; }
 .calc-input-unit { position: relative; }
 .calc-input-unit input[type="number"] { padding-right: 40px; }

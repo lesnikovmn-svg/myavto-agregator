@@ -242,6 +242,58 @@
 <section class="calc-standalone" id="calc">
   <div class="calc-section">
     <div class="calc-title">Калькулятор импорта</div>
+    <!-- T-153 (03.09.2026, по запросу пользователя: "инструкцию нужно
+         написать с илюстрацией" — уточнено через AskUserQuestion: как
+         пользоваться калькулятором, страница/раздел на самом сайте) —
+         сворачиваемая инструкция над полями калькулятора (не под ним,
+         рядом с "Как считается — методология и источники" — та для
+         проверки источников постфактум, эта наоборот, для первого
+         знакомства с калькулятором, ДО ввода параметров). Закрыта по
+         умолчанию (тот же .calc-methodology, что у методологии, T-127
+         комментарий) — не должна отталкивать вернувшихся пользователей,
+         которые уже умеют. Иллюстрация — инлайновый SVG (4 шага), не
+         внешний файл и не скриншот — единый файл, как и весь остальной
+         сайт (тот же принцип, что у значков мессенджеров, T-145). -->
+    <details class="calc-note calc-methodology calc-howto">
+      <summary>❓ Как пользоваться калькулятором</summary>
+      <div class="calc-howto-body">
+        <svg class="calc-howto-illustration" viewBox="0 0 600 108" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <line x1="60" y1="30" x2="540" y2="30" stroke="var(--border)" stroke-width="2"/>
+          <g>
+            <circle cx="60" cy="30" r="20" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="60" y="36" text-anchor="middle" font-family="Manrope, sans-serif" font-weight="800" font-size="16" fill="var(--accent)">1</text>
+            <text x="60" y="72" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">Параметры</text>
+            <text x="60" y="88" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">авто</text>
+          </g>
+          <g>
+            <circle cx="220" cy="30" r="20" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="220" y="36" text-anchor="middle" font-family="Manrope, sans-serif" font-weight="800" font-size="16" fill="var(--accent)">2</text>
+            <text x="220" y="72" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">Цена</text>
+            <text x="220" y="88" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">и валюта</text>
+          </g>
+          <g>
+            <circle cx="380" cy="30" r="20" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="380" y="36" text-anchor="middle" font-family="Manrope, sans-serif" font-weight="800" font-size="16" fill="var(--accent)">3</text>
+            <text x="380" y="72" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">Доп. платежи</text>
+            <text x="380" y="88" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">тумблерами</text>
+          </g>
+          <g>
+            <circle cx="540" cy="30" r="20" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="540" y="36" text-anchor="middle" font-family="Manrope, sans-serif" font-weight="800" font-size="16" fill="var(--accent)">4</text>
+            <text x="540" y="72" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">Результат</text>
+            <text x="540" y="88" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--text)">и отправка</text>
+          </g>
+        </svg>
+        <ol>
+          <li><b>Тип ввоза, направление, категория, возраст, объём/мощность.</b> Для юрлица считаются пошлина, акциз и НДС отдельно; для физлица — упрощённый порядок. Для пикапа/грузовика (N1) поля другие — переключаются автоматически при выборе категории.</li>
+          <li><b>Стоимость авто и валюта.</b> По умолчанию курс — ЦБ РФ на дату расчёта (+ надбавка для €/$, см. методологию ниже). Если знаете точный курс, по которому реально переводите деньги — включите тумблер «Свой курс» рядом с полем и впишите его целиком.</li>
+          <li><b>Таможенная стоимость и Таможня ЕАЭС — необязательно.</b> Если таможенная оценка отличается от цены авто (бывает ниже) — включите «Таможенная стоимость» и укажите её отдельно, вся налоговая математика пересчитается от неё. «Таможня ЕАЭС» — упрощённый режим: заменяет обычный расчёт пошлины на 24% от цены авто (или вашу сумму), выключен по умолчанию.</li>
+          <li><b>Доставка, комиссии, брокер, оплата инвойса.</b> У каждого пункта свой тумблер «Учитывать» (доставка/обе комиссии/брокер включены по умолчанию — считаются по нашей оценке; комиссия оплаты инвойса выключена, включается вручную). Рядом — тумблер «Своя сумма»: если знаете точную цифру для своего случая, впишите её вместо оценки; для комиссии оплаты инвойса можно указать либо свой процент, либо готовую сумму.</li>
+          <li><b>Итог и отправка.</b> Внизу — итоговая сумма с построчной разбивкой всех платежей. Кнопками «Отправить» результат уходит в Telegram или WhatsApp как готовое сообщение — получателя выбираете сами, ничего не сохраняется на сайте.</li>
+        </ol>
+        <p class="calc-howto-disclaimer">Это ориентировочный расчёт для справки, не официальная консультация — перед сделкой сверяйте цифры у брокера или компании из каталога. Источники и методология каждой формулы — в блоке ниже.</p>
+      </div>
+    </details>
     <div class="calc-row">
       <label for="calcImporterType" class="sr-only">Тип ввоза</label>
       <select id="calcImporterType" onchange="calcCustoms()">

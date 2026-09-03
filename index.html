@@ -360,7 +360,15 @@
          у override-полей в T-134: поле "свой курс" показывается только
          для €/$ (togglePriceRateRow() в app.js), пусто — берём курс ЦБ РФ
          + фиксированную надбавку из T-126 (не меняли), указано число —
-         используется целиком вместо ЦБ+надбавки, а не поверх неё. -->
+         используется целиком вместо ЦБ+надбавки, а не поверх неё.
+         T-152 (03.09.2026, по запросу пользователя: "стоимость авто, через
+         тумблер сделать свой курс") — раньше поле курса показывалось
+         СРАЗУ при выборе €/$, без тумблера (в отличие от остальных
+         override-полей, где к этому моменту уже везде тумблеры, T-149/
+         T-150/T-151). Добавлен тумблер "Свой курс" (по умолчанию
+         ВЫКЛЮЧЕН) — сам тумблер виден только для €/$ (для ¥/₩/₽ курса
+         своего никто не просил, см. PRICE_RATE_MARKUP_RUB в app.js),
+         поле ввода курса — только когда тумблер ещё и включён. -->
     <div class="calc-row" id="calcValueRow">
       <div class="calc-field-caption" style="grid-column: 1 / -1">Стоимость авто</div>
       <label for="calcValue" class="sr-only">Стоимость авто</label>
@@ -375,6 +383,12 @@
           <option value="KRW">₩ (вона)</option>
         </select>
       </div>
+    </div>
+    <div class="calc-row calc-row-single" id="calcValueRateToggleWrap" style="display:none">
+      <label class="calc-checkbox-toggle calc-checkbox-toggle-sub">
+        <span>Свой курс</span>
+        <input type="checkbox" id="calcValueUseOwnRate" onchange="togglePriceRateRow(); calcCustoms()">
+      </label>
     </div>
     <div class="calc-row calc-row-single calc-override-rate-row" id="calcValueRateRow" style="display:none">
       <div class="calc-field-caption">Свой курс (€/$) для стоимости авто выше</div>
@@ -638,6 +652,62 @@
       <div class="calc-field-caption">Свой курс (€/$) для услуг брокера выше</div>
       <div class="calc-input-unit">
         <input type="number" id="calcBrokerOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
+        <span class="calc-unit">₽</span>
+      </div>
+    </div>
+    <!-- T-151 (03.09.2026, по запросу пользователя: "добавляем пункт
+         комиссия оплаты инвойса, так же с двумя тумблерами, по умолчанию
+         отключены" — уточнил через AskUserQuestion: оценка по умолчанию —
+         процент от стоимости авто, пользователь назвал 3% (цифра от
+         пользователя, не сверена мной по источнику); затем мид-тёрн
+         уточнение: "тут нужно на выбор либо процент либо в валюте ручной
+         ввод") — единственное override-поле в калькуляторе с ВЫБОРОМ
+         РЕЖИМА "своей суммы": процент от стоимости авто (свой % вместо
+         дефолтных 3%) ИЛИ фиксированная сумма в любой валюте (тот же
+         паттерн, что у остальных override-полей, T-134). Оба тумблера
+         ("Учитывать" и "Своя сумма") ВЫКЛЮЧЕНЫ по умолчанию — в отличие
+         от Delivery/обеих старых комиссий/брокера выше (включены по
+         умолчанию), этот платёж нужен не всем и не должен быть на виду.
+         toggleOverrideRateRow() в app.js доработана: если у префикса есть
+         свой селектор режима (calc${prefix}OverrideMode), переключает
+         видимость процентного/суммового под-блоков и учитывает режим при
+         показе строки "свой курс" (курс нужен только для режима "сумма"). -->
+    <div class="calc-row">
+      <label class="calc-checkbox-toggle">
+        <span>Учитывать комиссию оплаты инвойса</span>
+        <input type="checkbox" id="calcIncludeInvoiceCommission" onchange="toggleOverrideRateRow('InvoiceCommission'); calcCustoms()">
+      </label>
+      <label class="calc-checkbox-toggle calc-checkbox-toggle-sub" id="calcInvoiceCommissionSubToggleWrap" style="display:none">
+        <span>Своя сумма</span>
+        <input type="checkbox" id="calcInvoiceCommissionUseOverride" onchange="toggleOverrideRateRow('InvoiceCommission'); calcCustoms()">
+      </label>
+    </div>
+    <div class="calc-row calc-row-single" id="calcInvoiceCommissionOverrideWrap" style="display:none">
+      <label for="calcInvoiceCommissionOverrideMode" class="sr-only">Тип своей суммы — комиссия оплаты инвойса</label>
+      <select id="calcInvoiceCommissionOverrideMode" class="calc-unit-select" onchange="toggleOverrideRateRow('InvoiceCommission'); calcCustoms()" style="width:100%; margin-bottom:8px;">
+        <option value="percent" selected>% от стоимости авто</option>
+        <option value="amount">Фиксированная сумма в валюте</option>
+      </select>
+      <div class="calc-input-unit" id="calcInvoiceCommissionPercentWrap">
+        <input type="number" id="calcInvoiceCommissionOverridePercent" placeholder="Свой процент, иначе 3%" min="0" step="0.1" oninput="calcCustoms()" onfocus="this.select()">
+        <span class="calc-unit">%</span>
+      </div>
+      <div class="calc-input-unit calc-input-currency" id="calcInvoiceCommissionAmountWrap" style="display:none">
+        <input type="number" id="calcInvoiceCommissionOverride" placeholder="Своя сумма" min="0" oninput="calcCustoms()" onfocus="this.select()">
+        <label for="calcInvoiceCommissionOverrideCurrency" class="sr-only">Валюта своей суммы — комиссия оплаты инвойса</label>
+        <select id="calcInvoiceCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('InvoiceCommission'); calcCustoms()">
+          <option value="RUB">₽</option>
+          <option value="USD">$</option>
+          <option value="EUR" selected>€</option>
+          <option value="CNY">¥</option>
+          <option value="KRW">₩</option>
+        </select>
+      </div>
+    </div>
+    <div class="calc-row calc-row-single calc-override-rate-row" id="calcInvoiceCommissionOverrideRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для комиссии оплаты инвойса выше</div>
+      <div class="calc-input-unit">
+        <input type="number" id="calcInvoiceCommissionOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
         <span class="calc-unit">₽</span>
       </div>
     </div>

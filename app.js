@@ -352,6 +352,16 @@ const BROKER_SERVICES_LABEL = "Услуги брокера (СВХ, оценоч
 // действительно не понадобился пользователю).
 const EXPORTER_COMMISSION_RATE = 0.06; // 6%, только для country === 'europe'
 
+// T-151 (03.09.2026, по запросу пользователя, ставка уточнена отдельным
+// вопросом: "3%") — комиссия платёжного агента за проведение оплаты
+// продавцу, применяется НЕЗАВИСИМО от страны (в отличие от комиссии
+// экспортёра выше, только для Европы). Цифра от пользователя, НЕ сверена
+// мной по официальному/рыночному источнику — честно помечено в строке
+// расшифровки, см. invoiceCommissionLine() ниже. Единственное
+// override-поле в калькуляторе с выбором режима "процент/сумма в валюте"
+// — см. calc${prefix}OverrideMode в toggleOverrideRateRow().
+const INVOICE_COMMISSION_RATE = 0.03; // 3%, цифра от пользователя, не сверена
+
 // Комиссия импортёра — фиксированная ориентировочная сумма (не % от
 // стоимости, в отличие от комиссии экспортёра выше), от пользователя,
 // применяется независимо от страны — это плата за организацию сделки на
@@ -476,9 +486,16 @@ const PRICE_RATE_MARKUP_RUB = { EUR: 1, USD: 3, CNY: 0, KRW: 0 };
 function priceRateFor(currency) {
   if (currency === 'RUB') return 1;
   if (currency === 'EUR' || currency === 'USD') {
-    const manualRateEl = document.getElementById('calcValueRate');
-    const manualRate = manualRateEl ? parseFloat(manualRateEl.value) : NaN;
-    if (!isNaN(manualRate)) return manualRate;
+    // T-152: "свой курс" учитывается, только если тумблер "Свой курс"
+    // реально включён — та же логика, что overrideAmountRub() для
+    // остальных override-полей (не читать значение из скрытого поля вслепую).
+    const useOwnRateEl = document.getElementById('calcValueUseOwnRate');
+    const useOwnRate = useOwnRateEl ? useOwnRateEl.checked : true;
+    if (useOwnRate) {
+      const manualRateEl = document.getElementById('calcValueRate');
+      const manualRate = manualRateEl ? parseFloat(manualRateEl.value) : NaN;
+      if (!isNaN(manualRate)) return manualRate;
+    }
   }
   return CBR_RATES[currency] + (PRICE_RATE_MARKUP_RUB[currency] || 0);
 }
@@ -490,10 +507,19 @@ function priceCurrencyToRub(amount, currency) {
 // T-135 — показывает/прячет строку "свой курс" под полем "Стоимость авто"
 // в зависимости от выбранной валюты (только €/$, как и у override-полей
 // в T-134).
+// T-152 (03.09.2026, по запросу пользователя: "стоимость авто, через
+// тумблер сделать свой курс") — тумблер "Свой курс" сам по себе виден
+// только для €/$ (calcValueRateToggleWrap), поле ввода курса — только
+// когда тумблер ещё и включён (calcValueRateRow), по умолчанию выключен.
 function togglePriceRateRow() {
   const currency = document.getElementById('calcCurrency').value;
+  const isEurUsd = (currency === 'EUR' || currency === 'USD');
+  const toggleWrap = document.getElementById('calcValueRateToggleWrap');
+  if (toggleWrap) toggleWrap.style.display = isEurUsd ? '' : 'none';
+  const useOwnRateEl = document.getElementById('calcValueUseOwnRate');
+  const useOwnRate = useOwnRateEl ? useOwnRateEl.checked : false;
   const row = document.getElementById('calcValueRateRow');
-  row.style.display = (currency === 'EUR' || currency === 'USD') ? '' : 'none';
+  row.style.display = (isEurUsd && useOwnRate) ? '' : 'none';
 }
 
 // Строка "Стоимость авто: ..." для расшифровки расчёта — общая для веток
@@ -513,8 +539,10 @@ function priceLine(priceRub, priceInput, currency) {
   const rate = priceRateFor(currency);
   let rateSource;
   if (currency === 'EUR' || currency === 'USD') {
+    const useOwnRateEl = document.getElementById('calcValueUseOwnRate');
+    const useOwnRate = useOwnRateEl ? useOwnRateEl.checked : true;
     const manualRateEl = document.getElementById('calcValueRate');
-    const manualRate = manualRateEl ? parseFloat(manualRateEl.value) : NaN;
+    const manualRate = useOwnRate && manualRateEl ? parseFloat(manualRateEl.value) : NaN;
     rateSource = !isNaN(manualRate) ? 'свой курс' : `курс ЦБ РФ на ${CBR_RATES._date} + надбавка ${PRICE_RATE_MARKUP_RUB[currency]}₽`;
   } else {
     rateSource = `курс ЦБ РФ на ${CBR_RATES._date}`;
@@ -553,6 +581,16 @@ function priceLine(priceRub, priceInput, currency) {
 // тумблер уже совмещает обе роли (включить пункт = показать поле), тогда
 // useOverrideCheckbox будет null и useOverride падает обратно на
 // included — поведение этих двух полей не меняется вообще.
+// T-151 (03.09.2026, по запросу пользователя: "тут нужно на выбор либо
+// процент либо в валюте ручной ввод" — для нового поля "Комиссия оплаты
+// инвойса") — добавлен ТРЕТИЙ, необязательный уровень: если у префикса
+// есть свой селектор режима (`calc${prefix}OverrideMode`, значения
+// 'percent'/'amount'), переключает видимость процентного/суммового
+// под-блоков (`calc${prefix}PercentWrap`/`calc${prefix}AmountWrap`) и
+// учитывает режим при показе строки "свой курс" — курс нужен только в
+// режиме "сумма" (в режиме "процент" нет валюты вообще, показывать курс
+// бессмысленно). У остальных полей своего селектора режима нет —
+// modeEl будет null, isAmountMode остаётся true, поведение не меняется.
 function toggleOverrideRateRow(prefix) {
   const includeCheckbox = document.getElementById(`calcInclude${prefix}`);
   const included = includeCheckbox ? includeCheckbox.checked : true;
@@ -562,9 +600,20 @@ function toggleOverrideRateRow(prefix) {
   const useOverride = useOverrideCheckbox ? useOverrideCheckbox.checked : included;
   const wrap = document.getElementById(`calc${prefix}OverrideWrap`);
   if (wrap) wrap.style.display = (included && useOverride) ? '' : 'none';
-  const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
+
+  const modeEl = document.getElementById(`calc${prefix}OverrideMode`);
+  let isAmountMode = true;
+  if (modeEl) {
+    isAmountMode = modeEl.value === 'amount';
+    const percentWrap = document.getElementById(`calc${prefix}PercentWrap`);
+    const amountWrap = document.getElementById(`calc${prefix}AmountWrap`);
+    if (percentWrap) percentWrap.style.display = isAmountMode ? 'none' : '';
+    if (amountWrap) amountWrap.style.display = isAmountMode ? '' : 'none';
+  }
+
+  const currency = document.getElementById(`calc${prefix}OverrideCurrency`)?.value;
   const row = document.getElementById(`calc${prefix}OverrideRateRow`);
-  if (row) row.style.display = (included && useOverride && (currency === 'EUR' || currency === 'USD')) ? '' : 'none';
+  if (row) row.style.display = (included && useOverride && isAmountMode && (currency === 'EUR' || currency === 'USD')) ? '' : 'none';
 }
 
 // Читает поле "своя сумма" + выбранную валюту + (для €/$) необязательный
@@ -581,7 +630,23 @@ function toggleOverrideRateRow(prefix) {
 // а не жёсткая привязка к prefix==='CustomsValue' — так безопаснее для
 // остальных 6 override-полей, если у кого-то из них тоже когда-нибудь
 // уберут это поле, ничего не сломается молча.
+// T-152 (03.09.2026, обнаружено попутно при добавлении тумблера "свой
+// курс" для стоимости авто — реальный баг, не гипотетический) —
+// раньше эта функция читала поле "своя сумма" НАПРЯМУЮ, не проверяя
+// тумблер "Своя сумма" (calc${prefix}UseOverride, T-149): если
+// пользователь один раз вводил число, потом выключал тумблер (поле
+// визуально прячется), оставшееся в СКРЫТОМ поле число всё равно молча
+// участвовало в расчёте — тумблер выглядел выключенным, но ни на что не
+// влиял. Добавлена проверка в самом начале: если у префикса есть
+// тумблер "Своя сумма" и он выключен — сразу NaN, независимо от того,
+// что реально записано в скрытом поле. У CustomsValue/EaeuCustoms
+// (T-136/T-142/T-147) отдельного тумблера "Своя сумма" нет — там
+// единственный главный тумблер и так проверяется отдельно на месте
+// вызова (см. `includeCustomsValue ? overrideAmountRub(...) : NaN` в
+// calcCustoms()), здесь для них ничего не меняется.
 function overrideAmountRub(prefix) {
+  const useOverrideCheckbox = document.getElementById(`calc${prefix}UseOverride`);
+  if (useOverrideCheckbox && !useOverrideCheckbox.checked) return NaN;
   const amount = parseFloat(document.getElementById(`calc${prefix}Override`).value);
   if (isNaN(amount)) return NaN;
   const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
@@ -598,7 +663,12 @@ function overrideAmountRub(prefix) {
 // Уточняющая приписка к строке расшифровки, когда "своя сумма" введена
 // не в рублях — какая валюта/сумма/курс были использованы, и чей это
 // курс (свой или ЦБ РФ). Пустая строка для RUB — там уточнять нечего.
+// T-152: та же проверка тумблера "Своя сумма", что и в overrideAmountRub
+// выше — иначе приписка "(своя сумма ... по курсу ...)" могла бы
+// появиться в расшифровке даже когда своя сумма фактически выключена.
 function overrideCurrencyNote(prefix) {
+  const useOverrideCheckbox = document.getElementById(`calc${prefix}UseOverride`);
+  if (useOverrideCheckbox && !useOverrideCheckbox.checked) return '';
   const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
   if (currency === 'RUB') return '';
   const amount = parseFloat(document.getElementById(`calc${prefix}Override`).value);
@@ -641,6 +711,19 @@ function importerCommissionLine(importerCommission, importerCommissionOverride, 
   return !isNaN(importerCommissionOverride)
     ? `Комиссия импортёра: ${fmtRub(importerCommission)}${overrideNote} — указано вручную`
     : `Комиссия импортёра: от ${fmtRub(importerCommission)} — ориентировочно`;
+}
+
+// T-151: единственная из пяти *Line()-функций, у которой ДВА возможных
+// "указано вручную" варианта (процент или сумма в валюте), плюс третий,
+// дефолтный (наша оценка 3%) — см. calc${prefix}OverrideMode.
+function invoiceCommissionLine(invoiceCommission, mode, customPercent, invoiceCommissionOverride, overrideNote) {
+  if (mode === 'percent' && !isNaN(customPercent)) {
+    return `Комиссия оплаты инвойса (свой процент ${customPercent}% от стоимости авто): ${fmtRub(invoiceCommission)} — указано вручную`;
+  }
+  if (mode === 'amount' && !isNaN(invoiceCommissionOverride)) {
+    return `Комиссия оплаты инвойса: ${fmtRub(invoiceCommission)}${overrideNote} — указано вручную`;
+  }
+  return `Комиссия оплаты инвойса (${INVOICE_COMMISSION_RATE * 100}% от стоимости авто — цифра от пользователя, не сверена по источнику): ${fmtRub(invoiceCommission)}`;
 }
 
 function brokerLine(broker, brokerOverride, overrideNote) {
@@ -853,6 +936,18 @@ function calcCustoms() {
   const includeExporterCommission = document.getElementById('calcIncludeExporterCommission').checked;
   const includeImporterCommission = document.getElementById('calcIncludeImporterCommission').checked;
   const includeBroker = document.getElementById('calcIncludeBroker').checked;
+  // T-151 (03.09.2026, по запросу пользователя: "добавляем пункт комиссия
+  // оплаты инвойса, так же с двумя тумблерами, по умолчанию отключены") —
+  // в отличие от Delivery/ExporterCommission/ImporterCommission/Broker
+  // выше (включены по умолчанию), этот пункт ВЫКЛЮЧЕН по умолчанию —
+  // редкий/не всем нужный платёж (комиссия платёжного агента за проведение
+  // оплаты продавцу), не должен маячить у всех сразу. Ставка по умолчанию
+  // (3% от стоимости авто, INVOICE_COMMISSION_RATE ниже) — цифра от
+  // пользователя, НЕ сверена мной по официальному/рыночному источнику (в
+  // отличие от EXPORTER_COMMISSION_RATE=6%, которая тоже от пользователя,
+  // но давно в проекте и не переспрашивалась заново) — честно помечено в
+  // строке расшифровки, см. invoiceCommissionLine() ниже.
+  const includeInvoiceCommission = document.getElementById('calcIncludeInvoiceCommission').checked;
   // T-131 (02.09.2026, по запросу пользователя: "нужно добавить самому
   // ставить значения: доставка, комиссия импортера, экспортера, услуги
   // брокера") — необязательные поля "своя сумма" рядом с каждым чекбоксом
@@ -867,6 +962,22 @@ function calcCustoms() {
   const exporterCommissionOverride = overrideAmountRub('ExporterCommission');
   const importerCommissionOverride = overrideAmountRub('ImporterCommission');
   const brokerOverride = overrideAmountRub('Broker');
+  const invoiceCommissionOverride = overrideAmountRub('InvoiceCommission');
+  // T-151 (мид-тёрн уточнение: "тут нужно на выбор либо процент либо в
+  // валюте ручной ввод") — режим "своей суммы" для комиссии оплаты
+  // инвойса: 'percent' (свой % от стоимости авто вместо дефолтных 3%)
+  // или 'amount' (фиксированная сумма в валюте — тот же invoiceCommissionOverride
+  // выше). Единственное override-поле в калькуляторе с таким выбором.
+  const invoiceCommissionModeEl = document.getElementById('calcInvoiceCommissionOverrideMode');
+  const invoiceCommissionMode = invoiceCommissionModeEl ? invoiceCommissionModeEl.value : 'amount';
+  // T-152: читаем свой процент, только если тумблер "Своя сумма" реально
+  // включён — иначе (см. комментарий у overrideAmountRub()) оставшееся в
+  // скрытом поле число молча продолжало бы влиять на расчёт.
+  const invoiceCommissionUseOverrideEl = document.getElementById('calcInvoiceCommissionUseOverride');
+  const invoiceCommissionUseOverride = invoiceCommissionUseOverrideEl ? invoiceCommissionUseOverrideEl.checked : true;
+  const invoiceCommissionPercentInput = invoiceCommissionUseOverride
+    ? parseFloat(document.getElementById('calcInvoiceCommissionOverridePercent').value)
+    : NaN;
   const country = document.getElementById('calcCountry').value;
   const age = document.getElementById('calcAge').value; // lt3 | 3-5 | 5-7 | gt7
   const cm3 = parseFloat(document.getElementById('calcVolume').value);
@@ -994,6 +1105,13 @@ function calcCustoms() {
     const importerCommission = includeImporterCommission
       ? (!isNaN(importerCommissionOverride) ? importerCommissionOverride : IMPORTER_COMMISSION_RUB)
       : 0;
+    const invoiceCommission = includeInvoiceCommission
+      ? (invoiceCommissionMode === 'percent' && !isNaN(invoiceCommissionPercentInput)
+          ? priceRub * (invoiceCommissionPercentInput / 100)
+          : (invoiceCommissionMode === 'amount' && !isNaN(invoiceCommissionOverride)
+              ? invoiceCommissionOverride
+              : priceRub * INVOICE_COMMISSION_RATE))
+      : 0;
     const customsFee = customsFeeRub(dutyBaseRub);
 
     labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + НДС + утильсбор + доставка + комиссии (грузовой N1, см. расшифровку)' : 'Пошлина + НДС + утильсбор + доставка + комиссии, без стоимости авто (грузовой N1, см. расшифровку)');
@@ -1030,12 +1148,15 @@ function calcCustoms() {
     if (includeBroker) {
       lines.push(brokerLine(broker, brokerOverride, overrideCurrencyNote('Broker')));
     }
+    if (includeInvoiceCommission) {
+      lines.push(invoiceCommissionLine(invoiceCommission, invoiceCommissionMode, invoiceCommissionPercentInput, invoiceCommissionOverride, overrideCurrencyNote('InvoiceCommission')));
+    }
     breakdownEl.innerHTML = lines.filter(Boolean).join('<br>');
 
     if (util !== null) {
-      resultEl.textContent = `от ${fmtRub(priceForTotal + dutyOrEaeuTotal + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
+      resultEl.textContent = `от ${fmtRub(priceForTotal + dutyOrEaeuTotal + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission + invoiceCommission)}`;
     } else {
-      const known = priceForTotal + dutyOrEaeuTotal + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
+      const known = priceForTotal + dutyOrEaeuTotal + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission + invoiceCommission;
       resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
     }
     window.calcOfferText = buildCalcOfferText('n1', lines, resultEl.textContent);
@@ -1167,6 +1288,13 @@ function calcCustoms() {
   const importerCommission = includeImporterCommission
     ? (!isNaN(importerCommissionOverride) ? importerCommissionOverride : IMPORTER_COMMISSION_RUB)
     : 0;
+  const invoiceCommission = includeInvoiceCommission
+    ? (invoiceCommissionMode === 'percent' && !isNaN(invoiceCommissionPercentInput)
+        ? priceRub * (invoiceCommissionPercentInput / 100)
+        : (invoiceCommissionMode === 'amount' && !isNaN(invoiceCommissionOverride)
+            ? invoiceCommissionOverride
+            : priceRub * INVOICE_COMMISSION_RATE))
+    : 0;
   const customsFee = customsFeeRub(dutyBaseRub); // T-123, null если таможенная база не указана
 
   labelEl.textContent = (preview2027 ? '[Предпросмотр ставок 2027] ' : '') + (usePrice ? 'Стоимость авто + пошлина + утильсбор + доставка + комиссии + услуги брокера (см. расшифровку)' : 'Пошлина + утильсбор + доставка + комиссии + услуги брокера, без стоимости авто (см. расшифровку)');
@@ -1202,12 +1330,15 @@ function calcCustoms() {
   if (includeBroker) {
     lines.push(brokerLine(broker, brokerOverride, overrideCurrencyNote('Broker')));
   }
+  if (includeInvoiceCommission) {
+    lines.push(invoiceCommissionLine(invoiceCommission, invoiceCommissionMode, invoiceCommissionPercentInput, invoiceCommissionOverride, overrideCurrencyNote('InvoiceCommission')));
+  }
   breakdownEl.innerHTML = lines.join('<br>');
 
   if (dutyTotal !== null && util !== null) {
-    resultEl.textContent = `от ${fmtRub(priceForTotal + dutyTotal + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
+    resultEl.textContent = `от ${fmtRub(priceForTotal + dutyTotal + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission + invoiceCommission)}`;
   } else {
-    const known = priceForTotal + (dutyTotal || 0) + (util || 0) + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
+    const known = priceForTotal + (dutyTotal || 0) + (util || 0) + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission + invoiceCommission;
     resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
   }
   window.calcOfferText = buildCalcOfferText('m1', lines, resultEl.textContent);
@@ -1339,7 +1470,7 @@ const COUNTRY_CURRENCY = {
 // ЕАЭС, которые логически связаны со страной вывоза. Пользователь может
 // вручную поставить другую валюту в любой момент — просто автоподстановка
 // по стране их больше не трогает.
-const CURRENCY_SYNC_PREFIXES = ['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission'];
+const CURRENCY_SYNC_PREFIXES = ['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission', 'InvoiceCommission'];
 
 function syncCurrencyToCountry() {
   const country = document.getElementById('calcCountry').value;
@@ -1360,7 +1491,7 @@ function syncCurrencyToCountry() {
 // страницы, а не только по onchange — иначе строки "свой курс" остались
 // бы скрытыми до первого ручного переключения валюты пользователем.
 togglePriceRateRow();
-['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission', 'ImporterCommission', 'Broker'].forEach(toggleOverrideRateRow);
+['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission', 'ImporterCommission', 'Broker', 'InvoiceCommission'].forEach(toggleOverrideRateRow);
 
 function toggleFaq(el) {
   el.classList.toggle('open');

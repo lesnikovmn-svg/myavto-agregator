@@ -586,6 +586,18 @@
       <div class="calc-price" id="calcResult">—</div>
       <div class="calc-note" id="calcBreakdown"></div>
     </div>
+    <!-- T-143 (03.09.2026, по запросу пользователя: "давай сделаем отправку
+         в месенджер результат расчета", уточнение "как коммерческое
+         предложение") — оформляет текущий расчёт как текст коммерческого
+         предложения (параметры + расшифровка + итог + ссылка на сайт) и
+         открывает системный диалог "поделиться" Telegram/WhatsApp —
+         получателя выбирает сам пользователь (себе/другу/в чат), никакие
+         данные никуда на сервер не отправляются. См. buildCalcOfferText()/
+         shareCalcResult() в app.js. -->
+    <div class="calc-share-row">
+      <button type="button" class="calc-share-btn calc-share-tg" onclick="shareCalcResult('telegram')">📤 Отправить в Telegram</button>
+      <button type="button" class="calc-share-btn calc-share-wa" onclick="shareCalcResult('whatsapp')">📤 Отправить в WhatsApp</button>
+    </div>
     <!-- T-127 (02.09.2026) — предпросмотр утильсбора по ставкам 2027 года.
          Таблицы в app.js уже содержат коэффициенты по годам вплоть до
          2030 (взяты с той же официальной страницы, что и текущий год), и

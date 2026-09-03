@@ -360,6 +360,19 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
 .calc-note { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
 #calcBreakdown { font-size: 13px; color: var(--text); line-height: 1.7; margin-top: 8px; }
 
+/* T-143 (03.09.2026, по запросу пользователя: "давай сделаем отправку в
+   месенджер результат расчета", "как коммерческое предложение") — две
+   кнопки под блоком результата, открывают системный диалог "поделиться"
+   Telegram/WhatsApp с текстом расчёта, оформленным как КП (см. app.js
+   buildCalcOfferText()/shareCalcResult()). Цвета — фирменные для каждого
+   мессенджера (Telegram #229ED9, WhatsApp #25D366), не акцентный зелёный
+   сайта — так кнопки узнаваемы по иконке+цвету с первого взгляда. */
+.calc-share-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.calc-share-btn { flex: 1; min-width: 160px; border: none; border-radius: var(--radius); padding: 10px 14px; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; color: #fff; cursor: pointer; transition: opacity .15s; }
+.calc-share-btn:hover { opacity: 0.88; }
+.calc-share-tg { background: #229ED9; }
+.calc-share-wa { background: #25D366; }
+
 /* Массовая заявка по всем компаниям (задача #49) — CloudPayments пока не
    подключён, поэтому это заглушка: форма реально собирает данные заявки
    и отправляет её в Telegram-бот (тот же приём, что и submitForm() для

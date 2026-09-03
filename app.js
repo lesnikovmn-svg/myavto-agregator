@@ -917,6 +917,7 @@ function calcCustoms() {
     labelEl.textContent = 'Для расчёта по «Таможня ЕАЭС» (24%) укажите стоимость авто — или впишите готовую сумму пошлины вручную в поле «Таможня ЕАЭС»';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
+    window.calcOfferText = null;
     return;
   }
 
@@ -929,12 +930,14 @@ function calcCustoms() {
       labelEl.textContent = 'Выберите массу транспортного средства';
       resultEl.textContent = '—';
       breakdownEl.innerHTML = '';
+      window.calcOfferText = null;
       return;
     }
     if (!dutyBaseRub) {
       labelEl.textContent = 'Укажите стоимость авто (или таможенную стоимость, если знаете) — пошлина и НДС для N1 считаются от неё';
       resultEl.textContent = '—';
       breakdownEl.innerHTML = '';
+      window.calcOfferText = null;
       return;
     }
     const d = dutyTruckRub(fuelType, dutyBaseRub);
@@ -999,6 +1002,7 @@ function calcCustoms() {
       const known = priceForTotal + dutyOrEaeuTotal + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
       resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
     }
+    window.calcOfferText = buildCalcOfferText('n1', lines, resultEl.textContent);
     return;
   }
 
@@ -1007,6 +1011,7 @@ function calcCustoms() {
     labelEl.textContent = 'Заполните параметры выше';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
+    window.calcOfferText = null;
     return;
   }
 
@@ -1029,6 +1034,7 @@ function calcCustoms() {
       : 'Для авто младше 3 лет укажите стоимость авто или таможенную стоимость';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
+    window.calcOfferText = null;
     return;
   }
   // Комиссия экспортёра (см. EXPORTER_COMMISSION_RATE ниже) — % от РЕАЛЬНОЙ
@@ -1039,6 +1045,7 @@ function calcCustoms() {
     labelEl.textContent = 'Для Европы укажите стоимость авто — нужна для комиссии экспортёра';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
+    window.calcOfferText = null;
     return;
   }
   // Для электро формула (пошлина+акциз+НДС) считается от таможенной базы
@@ -1048,6 +1055,7 @@ function calcCustoms() {
     labelEl.textContent = 'Для электромобиля укажите стоимость авто (или таможенную стоимость) — нужна для расчёта пошлины';
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
+    window.calcOfferText = null;
     return;
   }
 
@@ -1161,6 +1169,69 @@ function calcCustoms() {
     const known = priceForTotal + (dutyTotal || 0) + (util || 0) + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
     resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
   }
+  window.calcOfferText = buildCalcOfferText('m1', lines, resultEl.textContent);
+}
+
+// T-143 (03.09.2026, по запросу пользователя: "давай сделаем отправку в
+// месенджер результат расчета", уточнение "как коммерческое предложение")
+// — оформляет последний посчитанный результат как текстовое "коммерческое
+// предложение" (параметры + построчная расшифровка + итог + ссылка на
+// сайт) и кладёт в window.calcOfferText — используется shareCalcResult()
+// ниже. Пересчитывается заново в конце КАЖДОГО calcCustoms() (обе ветки,
+// M1/N1) — всегда отражает то, что видно в калькуляторе именно сейчас.
+// Никуда на сервер не уходит — только формирует текст для диалога
+// "поделиться" в Telegram/WhatsApp, получателя выбирает сам пользователь.
+function calcOptionText(id) {
+  const el = document.getElementById(id);
+  if (!el || !el.selectedOptions || !el.selectedOptions[0]) return '';
+  return el.selectedOptions[0].textContent.trim();
+}
+
+function buildCalcOfferText(vehicleCategory, lines, resultText) {
+  const parts = [];
+  parts.push('📋 Коммерческое предложение — расчёт стоимости импорта авто');
+  parts.push('My Avto Agregator (myavto-agregator.ru)');
+  parts.push('Дата расчёта: ' + new Date().toLocaleDateString('ru-RU'));
+  parts.push('');
+  parts.push('Параметры:');
+  parts.push('• Тип ввоза: ' + calcOptionText('calcImporterType'));
+  parts.push('• Направление: ' + calcOptionText('calcCountry'));
+  parts.push('• Категория ТС: ' + calcOptionText('calcVehicleCategory'));
+  parts.push('• Возраст авто: ' + calcOptionText('calcAge'));
+  if (vehicleCategory === 'n1') {
+    parts.push('• Топливо: ' + calcOptionText('calcTruckFuel'));
+    parts.push('• Максимальная масса: ' + calcOptionText('calcTruckMass'));
+  } else {
+    const cm3Val = document.getElementById('calcVolume').value;
+    if (cm3Val) parts.push('• Объём двигателя: ' + cm3Val + ' см³');
+    parts.push('• Тип двигателя: ' + calcOptionText('calcEngineType'));
+    const powerVal = document.getElementById('calcPower').value;
+    if (powerVal) parts.push('• Мощность: ' + powerVal + ' ' + calcOptionText('calcPowerUnit'));
+  }
+  const priceVal = document.getElementById('calcValue').value;
+  if (priceVal) parts.push('• Стоимость авто: ' + Number(priceVal).toLocaleString('ru-RU') + ' ' + calcOptionText('calcCurrency'));
+  parts.push('');
+  parts.push('Расчёт:');
+  lines.filter(Boolean).forEach(l => parts.push('• ' + l));
+  parts.push('');
+  parts.push('Итого: ' + resultText);
+  parts.push('');
+  parts.push('⚠️ Ориентировочный расчёт для справки, не официальная консультация — перед сделкой сверяйте у брокера или компании из каталога.');
+  parts.push('');
+  parts.push('Полный калькулятор и каталог проверенных компаний: https://myavto-agregator.ru/#calc');
+  return parts.join('\n');
+}
+
+function shareCalcResult(channel) {
+  if (!window.calcOfferText) {
+    alert('Сначала заполните параметры расчёта выше');
+    return;
+  }
+  const text = encodeURIComponent(window.calcOfferText);
+  const url = channel === 'whatsapp'
+    ? `https://wa.me/?text=${text}`
+    : `https://t.me/share/url?url=${encodeURIComponent('https://myavto-agregator.ru/#calc')}&text=${text}`;
+  window.open(url, '_blank');
 }
 
 function toggleFaq(el) {

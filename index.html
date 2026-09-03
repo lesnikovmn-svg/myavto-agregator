@@ -400,6 +400,48 @@
         <span class="calc-unit">₽</span>
       </div>
     </div>
+    <!-- T-142 (03.09.2026, по запросу пользователя: "добавить в калькулятор
+         строку Таможня ЕАЭС с переключателем, по умолчанию выключен, когда
+         включен считается по Таможне ЕАЭС 24%, и оставить ввод вручную,
+         выбор валют и рубли можно вводить") — альтернативный, УПРОЩЁННЫЙ
+         режим расчёта пошлины: выключен по умолчанию (ничего не меняет,
+         пока пользователь явно не включит) — при включении заменяет ВЕСЬ
+         обычный расчёт пошлины (для юрлица/электро — вместе с акцизом и
+         НДС, см. app.js) на плоские 24% от СТОИМОСТИ АВТО (не от таможенной
+         стоимости выше, если она указана отдельно — пользователь явно
+         сказал "от стоимости авто"). Утильсбор и таможенный сбор за
+         операции — отдельные, самостоятельные платежи, этим переключателем
+         не затрагиваются. Ставка "24%" — цифра от пользователя, а не
+         сверена мной по официальному источнику (в отличие от остальных
+         ставок на этой странице, см. методологию ниже) — это явно
+         помечено в самой расшифровке расчёта, когда режим включён. Как и у
+         остальных override-полей (T-134): пустое поле "своя сумма" — берём
+         24% от цены авто; заполнено — это и есть готовая сумма пошлины
+         целиком, никакого умножения на 24% поверх неё. -->
+    <div class="calc-row">
+      <label class="calc-checkbox-toggle">
+        <span>Таможня ЕАЭС</span>
+        <input type="checkbox" id="calcIncludeEaeuCustoms" onchange="toggleOverrideRateRow('EaeuCustoms'); calcCustoms()">
+      </label>
+      <div class="calc-input-unit calc-input-currency" id="calcEaeuCustomsOverrideWrap" style="display:none">
+        <input type="number" id="calcEaeuCustomsOverride" placeholder="Своя сумма, иначе 24% от стоимости авто" min="0" oninput="calcCustoms()" onfocus="this.select()">
+        <label for="calcEaeuCustomsOverrideCurrency" class="sr-only">Валюта своей суммы — Таможня ЕАЭС</label>
+        <select id="calcEaeuCustomsOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('EaeuCustoms'); calcCustoms()">
+          <option value="RUB">₽</option>
+          <option value="USD">$</option>
+          <option value="EUR">€</option>
+          <option value="CNY">¥</option>
+          <option value="KRW">₩</option>
+        </select>
+      </div>
+    </div>
+    <div class="calc-row calc-row-single calc-override-rate-row" id="calcEaeuCustomsOverrideRateRow" style="display:none">
+      <div class="calc-field-caption">Свой курс (€/$) для суммы Таможня ЕАЭС выше</div>
+      <div class="calc-input-unit">
+        <input type="number" id="calcEaeuCustomsOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
+        <span class="calc-unit">₽</span>
+      </div>
+    </div>
     <div class="calc-row calc-row-single">
       <label class="calc-checkbox-toggle">
         <span>Прибавлять стоимость авто к итоговой сумме</span>

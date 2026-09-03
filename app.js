@@ -892,9 +892,33 @@ function calcCustoms() {
   const customsValueOverride = overrideAmountRub('CustomsValue');
   const dutyBaseRub = !isNaN(customsValueOverride) ? customsValueOverride : priceRub;
 
+  // T-142 (03.09.2026, по запросу пользователя: "добавить в калькулятор
+  // строку Таможня ЕАЭС с переключателем, по умолчанию выключен, когда
+  // включен считается по Таможне ЕАЭС 24%, и оставить ввод вручную, выбор
+  // валют и рубли можно вводить") — выключено по умолчанию, ничего не
+  // меняет в обычном расчёте. Включено — заменяет ВЕСЬ обычный расчёт
+  // пошлины (для юрлица/электро — вместе с акцизом и НДС, см. ниже) на
+  // плоские 24% от СТОИМОСТИ АВТО (priceRub, не dutyBaseRub — пользователь
+  // явно сказал "от стоимости авто", не от отдельно указанной таможенной
+  // стоимости). Пустое поле "своя сумма" — 24% от цены авто; заполнено —
+  // это готовая сумма пошлины целиком (не умножается на 24% дополнительно).
+  // Утильсбор и таможенный сбор за операции — отдельные платежи, этим
+  // переключателем не затрагиваются. "24%" — цифра от пользователя, не
+  // сверена мной по официальному источнику ЕАЭС (см. пометку в самой
+  // расшифровке расчёта, когда режим включён).
+  const eaeuCustoms = document.getElementById('calcIncludeEaeuCustoms').checked;
+  const eaeuCustomsOverride = overrideAmountRub('EaeuCustoms');
+
   const labelEl = document.querySelector('#calcResultBlock .calc-label');
   const resultEl = document.getElementById('calcResult');
   const breakdownEl = document.getElementById('calcBreakdown');
+
+  if (eaeuCustoms && isNaN(eaeuCustomsOverride) && !priceRub) {
+    labelEl.textContent = 'Для расчёта по «Таможня ЕАЭС» (24%) укажите стоимость авто — или впишите готовую сумму пошлины вручную в поле «Таможня ЕАЭС»';
+    resultEl.textContent = '—';
+    breakdownEl.innerHTML = '';
+    return;
+  }
 
   // T-124: пикап/грузовик до 5т — отдельная ветка с самого начала, поля и
   // формулы у M1 (легковые) и N1 (грузовые) не пересекаются вообще.
@@ -914,6 +938,9 @@ function calcCustoms() {
       return;
     }
     const d = dutyTruckRub(fuelType, dutyBaseRub);
+    // T-142: режим "Таможня ЕАЭС" заменяет d.total (пошлина+НДС) целиком.
+    const eaeuDutyRub = eaeuCustoms ? (!isNaN(eaeuCustomsOverride) ? eaeuCustomsOverride : priceRub * 0.24) : null;
+    const dutyOrEaeuTotal = eaeuCustoms ? eaeuDutyRub : d.total;
     const util = utilFeeTruckRub(age, maxMass, utilYear);
     const deliveryInfo = DELIVERY_FROM[country];
     const delivery = includeDelivery
@@ -939,8 +966,12 @@ function calcCustoms() {
     if (!isNaN(customsValueOverride)) {
       lines.push(`Таможенная стоимость для расчёта пошлины/НДС/сбора: ${fmtRub(dutyBaseRub)}${overrideCurrencyNote('CustomsValue')} — указано вручную, отличается от стоимости авто`);
     }
-    lines.push(`Пошлина (${fuelType === 'diesel' ? '10%, дизель' : '15%, бензин'} от таможенной стоимости — источник один, не сверено по второй площадке): ${fmtRub(d.duty)}`);
-    lines.push(`НДС 22% (акциза для N1 нет): ${fmtRub(d.vat)}`);
+    if (eaeuCustoms) {
+      lines.push(`Пошлина и НДС — по режиму «Таможня ЕАЭС» (${!isNaN(eaeuCustomsOverride) ? 'сумма указана вручную' + overrideCurrencyNote('EaeuCustoms') : '24% от стоимости авто — цифра от пользователя, отдельно не сверялась по официальному источнику'}), заменяет обычный расчёт пошлины (${fuelType === 'diesel' ? '10%, дизель' : '15%, бензин'}) + НДС 22%: ${fmtRub(eaeuDutyRub)}`);
+    } else {
+      lines.push(`Пошлина (${fuelType === 'diesel' ? '10%, дизель' : '15%, бензин'} от таможенной стоимости — источник один, не сверено по второй площадке): ${fmtRub(d.duty)}`);
+      lines.push(`НДС 22% (акциза для N1 нет): ${fmtRub(d.vat)}`);
+    }
     lines.push(util !== null
       ? `Утильсбор (по массе, категория N1): ${fmtRub(util)}`
       : 'Утильсбор: не удалось рассчитать');
@@ -963,9 +994,9 @@ function calcCustoms() {
     breakdownEl.innerHTML = lines.filter(Boolean).join('<br>');
 
     if (util !== null) {
-      resultEl.textContent = `от ${fmtRub(priceForTotal + d.total + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
+      resultEl.textContent = `от ${fmtRub(priceForTotal + dutyOrEaeuTotal + util + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission)}`;
     } else {
-      const known = priceForTotal + d.total + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
+      const known = priceForTotal + dutyOrEaeuTotal + (customsFee || 0) + delivery + broker + exporterCommission + importerCommission;
       resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
     }
     return;
@@ -1061,6 +1092,16 @@ function calcCustoms() {
       ? dutyEurUnder3(dutyBaseRub / EUR_RATE, cm3) * EUR_RATE
       : dutyRatePerCm3(physicalAgeBucket, cm3) * cm3 * EUR_RATE;
     dutyLine = `Пошлина: ${fmtRub(dutyTotal)}`;
+  }
+
+  // T-142: режим "Таможня ЕАЭС" заменяет весь блок выше (пошлина, а для
+  // юрлица/электро — вместе с акцизом и НДС, см. extraLines) на плоские
+  // 24% от стоимости авто / готовую сумму, если она указана вручную.
+  if (eaeuCustoms) {
+    dutyTotal = !isNaN(eaeuCustomsOverride) ? eaeuCustomsOverride : priceRub * 0.24;
+    const includesExtra = engineType === 'electric' || isLegal;
+    dutyLine = `Пошлина${includesExtra ? ' (включая акциз и НДС)' : ''} — по режиму «Таможня ЕАЭС» (${!isNaN(eaeuCustomsOverride) ? 'сумма указана вручную' + overrideCurrencyNote('EaeuCustoms') : '24% от стоимости авто — цифра от пользователя, отдельно не сверялась по официальному источнику'}), заменяет обычный расчёт: ${fmtRub(dutyTotal)}`;
+    extraLines = [];
   }
 
   const util = utilFeeRub(age, engineType, cm3 || 0, kw, importerType, utilYear);

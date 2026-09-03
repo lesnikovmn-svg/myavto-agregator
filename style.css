@@ -290,6 +290,14 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    input, чтобы переключатель был прижат к правому краю строки, как в
    макете). */
 .calc-checkbox-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+/* T-150 (03.09.2026, по скриншоту пользователя: "своя сумма сдвинуть
+   вправо ближе к тумблеру") — у "Своя сумма" (второй тумблер в строке
+   рядом с "Учитывать X", T-149) обычный .calc-checkbox-toggle растягивал
+   подпись и переключатель на всю ширину колонки через space-between —
+   между текстом и его собственным тумблером получался неоправданно
+   большой зазор. flex-end прижимает подпись и переключатель друг к другу
+   и сдвигает пару к правому краю колонки. */
+.calc-checkbox-toggle-sub { justify-content: flex-end; }
 .calc-checkbox-toggle input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;

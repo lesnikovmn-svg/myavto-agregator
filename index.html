@@ -422,13 +422,17 @@
         </select>
       </div>
     </div>
-    <div class="calc-row calc-row-single calc-override-rate-row" id="calcCustomsValueOverrideRateRow" style="display:none">
-      <div class="calc-field-caption">Свой курс (€/$) для таможенной стоимости выше</div>
-      <div class="calc-input-unit">
-        <input type="number" id="calcCustomsValueOverrideRate" placeholder="Свой курс, ₽ за 1 — иначе курс ЦБ РФ" min="0" step="0.01" oninput="calcCustoms()" onfocus="this.select()">
-        <span class="calc-unit">₽</span>
-      </div>
-    </div>
+    <!-- T-150 (03.09.2026, по скриншоту пользователя: "свой курс для
+         таможни обведенный убрать совсем") — поле "свой курс" (€/$) для
+         "Таможенной стоимости" убрано полностью, не просто скрыто —
+         раньше здесь была строка calcCustomsValueOverrideRateRow с полем
+         calcCustomsValueOverrideRate (T-134). Для этого поля курс всегда
+         теперь берётся по ЦБ РФ на дату расчёта (без надбавки — надбавка
+         PRICE_RATE_MARKUP_RUB существует только для "Стоимость авто",
+         T-126, к таможенной стоимости никогда не применялась). См. app.js
+         overrideAmountRub()/overrideCurrencyNote() — там добавлен
+         defensive null-check на отсутствующий элемент курса (на случай,
+         если это поле уберут и у других 6 override-полей в будущем). -->
     <!-- T-142 (03.09.2026, по запросу пользователя: "добавить в калькулятор
          строку Таможня ЕАЭС с переключателем, по умолчанию выключен, когда
          включен считается по Таможне ЕАЭС 24%, и оставить ввод вручную,
@@ -530,7 +534,7 @@
         <span>Учитывать доставку</span>
         <input type="checkbox" id="calcIncludeDelivery" checked onchange="toggleOverrideRateRow('Delivery'); calcCustoms()">
       </label>
-      <label class="calc-checkbox-toggle" id="calcDeliverySubToggleWrap">
+      <label class="calc-checkbox-toggle calc-checkbox-toggle-sub" id="calcDeliverySubToggleWrap">
         <span>Своя сумма</span>
         <input type="checkbox" id="calcDeliveryUseOverride" onchange="toggleOverrideRateRow('Delivery'); calcCustoms()">
       </label>
@@ -558,7 +562,7 @@
         <span>Учитывать комиссию экспортёра</span>
         <input type="checkbox" id="calcIncludeExporterCommission" checked onchange="toggleOverrideRateRow('ExporterCommission'); calcCustoms()">
       </label>
-      <label class="calc-checkbox-toggle" id="calcExporterCommissionSubToggleWrap">
+      <label class="calc-checkbox-toggle calc-checkbox-toggle-sub" id="calcExporterCommissionSubToggleWrap">
         <span>Своя сумма</span>
         <input type="checkbox" id="calcExporterCommissionUseOverride" onchange="toggleOverrideRateRow('ExporterCommission'); calcCustoms()">
       </label>
@@ -586,7 +590,7 @@
         <span>Учитывать комиссию импортёра</span>
         <input type="checkbox" id="calcIncludeImporterCommission" checked onchange="toggleOverrideRateRow('ImporterCommission'); calcCustoms()">
       </label>
-      <label class="calc-checkbox-toggle" id="calcImporterCommissionSubToggleWrap">
+      <label class="calc-checkbox-toggle calc-checkbox-toggle-sub" id="calcImporterCommissionSubToggleWrap">
         <span>Своя сумма</span>
         <input type="checkbox" id="calcImporterCommissionUseOverride" onchange="toggleOverrideRateRow('ImporterCommission'); calcCustoms()">
       </label>
@@ -614,7 +618,7 @@
         <span>Учитывать услуги брокера</span>
         <input type="checkbox" id="calcIncludeBroker" checked onchange="toggleOverrideRateRow('Broker'); calcCustoms()">
       </label>
-      <label class="calc-checkbox-toggle" id="calcBrokerSubToggleWrap">
+      <label class="calc-checkbox-toggle calc-checkbox-toggle-sub" id="calcBrokerSubToggleWrap">
         <span>Своя сумма</span>
         <input type="checkbox" id="calcBrokerUseOverride" onchange="toggleOverrideRateRow('Broker'); calcCustoms()">
       </label>

@@ -564,7 +564,7 @@ function toggleOverrideRateRow(prefix) {
   if (wrap) wrap.style.display = (included && useOverride) ? '' : 'none';
   const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
   const row = document.getElementById(`calc${prefix}OverrideRateRow`);
-  row.style.display = (included && useOverride && (currency === 'EUR' || currency === 'USD')) ? '' : 'none';
+  if (row) row.style.display = (included && useOverride && (currency === 'EUR' || currency === 'USD')) ? '' : 'none';
 }
 
 // Читает поле "своя сумма" + выбранную валюту + (для €/$) необязательный
@@ -574,13 +574,21 @@ function toggleOverrideRateRow(prefix) {
 // курс — пусто, значит берём курс ЦБ РФ, как обычно (для ¥/₩ свой курс
 // вообще не предлагаем — этого никто не просил, см. комментарий в
 // index.html).
+// T-150 (03.09.2026, по скриншоту пользователя: "свой курс для таможни
+// обведенный убрать совсем") — поле "свой курс" у "Таможенной стоимости"
+// (calc${prefix}OverrideRate для prefix='CustomsValue') убрано из HTML
+// целиком. Ниже — defensive null-check на getElementById(...OverrideRate),
+// а не жёсткая привязка к prefix==='CustomsValue' — так безопаснее для
+// остальных 6 override-полей, если у кого-то из них тоже когда-нибудь
+// уберут это поле, ничего не сломается молча.
 function overrideAmountRub(prefix) {
   const amount = parseFloat(document.getElementById(`calc${prefix}Override`).value);
   if (isNaN(amount)) return NaN;
   const currency = document.getElementById(`calc${prefix}OverrideCurrency`).value;
   if (currency === 'RUB') return amount;
   if (currency === 'EUR' || currency === 'USD') {
-    const rateInput = parseFloat(document.getElementById(`calc${prefix}OverrideRate`).value);
+    const rateEl = document.getElementById(`calc${prefix}OverrideRate`);
+    const rateInput = rateEl ? parseFloat(rateEl.value) : NaN;
     const rate = !isNaN(rateInput) ? rateInput : CBR_RATES[currency];
     return amount * rate;
   }
@@ -599,7 +607,8 @@ function overrideCurrencyNote(prefix) {
   let rate = CBR_RATES[currency];
   let rateSource = `курс ЦБ РФ на ${CBR_RATES._date}`;
   if (currency === 'EUR' || currency === 'USD') {
-    const rateInput = parseFloat(document.getElementById(`calc${prefix}OverrideRate`).value);
+    const rateEl = document.getElementById(`calc${prefix}OverrideRate`);
+    const rateInput = rateEl ? parseFloat(rateEl.value) : NaN;
     if (!isNaN(rateInput)) {
       rate = rateInput;
       rateSource = 'свой курс';

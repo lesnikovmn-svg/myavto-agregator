@@ -918,6 +918,7 @@ function calcCustoms() {
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     window.calcOfferText = null;
+    window.calcOfferShortText = null;
     return;
   }
 
@@ -931,6 +932,7 @@ function calcCustoms() {
       resultEl.textContent = '—';
       breakdownEl.innerHTML = '';
       window.calcOfferText = null;
+      window.calcOfferShortText = null;
       return;
     }
     if (!dutyBaseRub) {
@@ -938,6 +940,7 @@ function calcCustoms() {
       resultEl.textContent = '—';
       breakdownEl.innerHTML = '';
       window.calcOfferText = null;
+      window.calcOfferShortText = null;
       return;
     }
     const d = dutyTruckRub(fuelType, dutyBaseRub);
@@ -1003,6 +1006,7 @@ function calcCustoms() {
       resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
     }
     window.calcOfferText = buildCalcOfferText('n1', lines, resultEl.textContent);
+    window.calcOfferShortText = buildCalcOfferShortText('n1', resultEl.textContent);
     return;
   }
 
@@ -1012,6 +1016,7 @@ function calcCustoms() {
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     window.calcOfferText = null;
+    window.calcOfferShortText = null;
     return;
   }
 
@@ -1035,6 +1040,7 @@ function calcCustoms() {
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     window.calcOfferText = null;
+    window.calcOfferShortText = null;
     return;
   }
   // Комиссия экспортёра (см. EXPORTER_COMMISSION_RATE ниже) — % от РЕАЛЬНОЙ
@@ -1046,6 +1052,7 @@ function calcCustoms() {
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     window.calcOfferText = null;
+    window.calcOfferShortText = null;
     return;
   }
   // Для электро формула (пошлина+акциз+НДС) считается от таможенной базы
@@ -1056,6 +1063,7 @@ function calcCustoms() {
     resultEl.textContent = '—';
     breakdownEl.innerHTML = '';
     window.calcOfferText = null;
+    window.calcOfferShortText = null;
     return;
   }
 
@@ -1170,6 +1178,7 @@ function calcCustoms() {
     resultEl.textContent = `от ${fmtRub(known)} + то, что считается индивидуально`;
   }
   window.calcOfferText = buildCalcOfferText('m1', lines, resultEl.textContent);
+  window.calcOfferShortText = buildCalcOfferShortText('m1', resultEl.textContent);
 }
 
 // T-143 (03.09.2026, по запросу пользователя: "давай сделаем отправку в
@@ -1189,8 +1198,8 @@ function calcOptionText(id) {
 
 function buildCalcOfferText(vehicleCategory, lines, resultText) {
   const parts = [];
-  parts.push('📋 Коммерческое предложение — расчёт стоимости импорта авто');
-  parts.push('My Avto Agregator (myavto-agregator.ru)');
+  parts.push('📋 Расчёт импорта — My Avto Agregator');
+  parts.push('Коммерческое предложение (myavto-agregator.ru)');
   parts.push('Дата расчёта: ' + new Date().toLocaleDateString('ru-RU'));
   parts.push('');
   parts.push('Параметры:');
@@ -1222,16 +1231,44 @@ function buildCalcOfferText(vehicleCategory, lines, resultText) {
   return parts.join('\n');
 }
 
+// T-146 (03.09.2026, по запросу пользователя после жалобы: "при отправке
+// в тг ошибка вышла, вацап отправил" — подтвердил и воспроизвёл сам:
+// полный текст КП (~980 символов, кириллица) при percent-encoding
+// раздувается почти в 5 раз (~4600 символов) — t.me/share/url на такой
+// длине URL стабильно падает 400 Bad Request (вживую проверено на
+// реальном сайте через браузер); wa.me/?text= с тем же полным текстом
+// отработал у пользователя без ошибок — значит короткий текст нужен
+// ИМЕННО для Telegram, WhatsApp можно оставить полным. Точного
+// официального лимита у t.me/share/url нет (это не документированный
+// Telegram API, а служебная ссылка) — судя по сообществу, длинный текст
+// в принципе рискован для неё, безопасный запас — держать сырой текст на
+// порядок короче, чем у нас получилось. Короткая версия — заголовок +
+// ключевые параметры в одну строку + итог + ссылка на калькулятор
+// (полная разбивка доступна по ссылке на сайте, не дублируется в
+// сообщении Telegram).
+function buildCalcOfferShortText(vehicleCategory, resultText) {
+  const parts = [];
+  parts.push('📋 Расчёт импорта — My Avto Agregator');
+  const bits = [calcOptionText('calcImporterType'), calcOptionText('calcCountry'), calcOptionText('calcVehicleCategory')].filter(Boolean);
+  if (bits.length) parts.push(bits.join(', '));
+  parts.push('Итого: ' + resultText);
+  parts.push('Полный расчёт: https://myavto-agregator.ru/#calc');
+  return parts.join('\n');
+}
+
 function shareCalcResult(channel) {
   if (!window.calcOfferText) {
     alert('Сначала заполните параметры расчёта выше');
     return;
   }
-  const text = encodeURIComponent(window.calcOfferText);
-  const url = channel === 'whatsapp'
-    ? `https://wa.me/?text=${text}`
-    : `https://t.me/share/url?url=${encodeURIComponent('https://myavto-agregator.ru/#calc')}&text=${text}`;
-  window.open(url, '_blank');
+  if (channel === 'whatsapp') {
+    const text = encodeURIComponent(window.calcOfferText);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  } else {
+    // T-146: короткий текст, не полное КП — см. комментарий выше.
+    const text = encodeURIComponent(window.calcOfferShortText || window.calcOfferText);
+    window.open(`https://t.me/share/url?url=${encodeURIComponent('https://myavto-agregator.ru/#calc')}&text=${text}`, '_blank');
+  }
 }
 
 // T-144 (03.09.2026, по запросу пользователя: "по умолчанию в калькуляторе

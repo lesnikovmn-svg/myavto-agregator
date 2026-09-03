@@ -249,12 +249,27 @@
         <option value="legal">Юр.лицо (коммерческий ввоз)</option>
       </select>
       <label for="calcCountry" class="sr-only">Страна вывоза</label>
-      <select id="calcCountry" onchange="calcCustoms()">
+      <!-- T-144 (03.09.2026, по запросу пользователя: "по умолчанию в
+           калькуляторе направление европа стоит, валюта во всех окнах
+           соответственно евро, при выборе направления Грузия, Киргизия,
+           США валюта автоматически доллары, при выборе кореи валюта воны,
+           при выборе китая валюта юани") — Европа теперь выбрана по
+           умолчанию (`selected`, был первым в списке — Корея, теперь
+           явный selected побеждает порядок). Смена направления вызывает
+           syncCurrencyToCountry() в app.js — переключает валюту во ВСЕХ
+           6 окнах выбора валюты сразу (стоимость авто, таможенная
+           стоимость, Таможня ЕАЭС, доставка, обе комиссии, брокер).
+           Пользователь может после этого вручную поменять валюту в любом
+           отдельном окне — автопереключение срабатывает только на смену
+           направления, не перезаписывает ручной выбор при каждом
+           пересчёте. Япония не упомянута пользователем — валюту не
+           трогаем (нет варианта "иена" среди валют калькулятора вообще). -->
+      <select id="calcCountry" onchange="syncCurrencyToCountry(); calcCustoms()">
         <option value="korea">Корея</option>
         <option value="china">Китай</option>
         <option value="japan">Япония</option>
         <option value="usa">США</option>
-        <option value="europe">Европа</option>
+        <option value="europe" selected>Европа</option>
         <option value="georgia">Грузия</option>
         <option value="kyrgyzstan">Киргизия</option>
       </select>
@@ -355,7 +370,7 @@
         <select id="calcCurrency" class="calc-unit-select" onchange="togglePriceRateRow(); calcCustoms()">
           <option value="RUB">₽</option>
           <option value="USD">$</option>
-          <option value="EUR">€</option>
+          <option value="EUR" selected>€</option>
           <option value="CNY">¥ (юань)</option>
           <option value="KRW">₩ (вона)</option>
         </select>
@@ -387,7 +402,7 @@
         <select id="calcCustomsValueOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('CustomsValue'); calcCustoms()">
           <option value="RUB">₽</option>
           <option value="USD">$</option>
-          <option value="EUR">€</option>
+          <option value="EUR" selected>€</option>
           <option value="CNY">¥</option>
           <option value="KRW">₩</option>
         </select>
@@ -429,7 +444,7 @@
         <select id="calcEaeuCustomsOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('EaeuCustoms'); calcCustoms()">
           <option value="RUB">₽</option>
           <option value="USD">$</option>
-          <option value="EUR">€</option>
+          <option value="EUR" selected>€</option>
           <option value="CNY">¥</option>
           <option value="KRW">₩</option>
         </select>
@@ -495,7 +510,7 @@
         <select id="calcDeliveryOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Delivery'); calcCustoms()">
           <option value="RUB">₽</option>
           <option value="USD">$</option>
-          <option value="EUR">€</option>
+          <option value="EUR" selected>€</option>
           <option value="CNY">¥</option>
           <option value="KRW">₩</option>
         </select>
@@ -519,7 +534,7 @@
         <select id="calcExporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ExporterCommission'); calcCustoms()">
           <option value="RUB">₽</option>
           <option value="USD">$</option>
-          <option value="EUR">€</option>
+          <option value="EUR" selected>€</option>
           <option value="CNY">¥</option>
           <option value="KRW">₩</option>
         </select>
@@ -543,7 +558,7 @@
         <select id="calcImporterCommissionOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('ImporterCommission'); calcCustoms()">
           <option value="RUB">₽</option>
           <option value="USD">$</option>
-          <option value="EUR">€</option>
+          <option value="EUR" selected>€</option>
           <option value="CNY">¥</option>
           <option value="KRW">₩</option>
         </select>
@@ -567,7 +582,7 @@
         <select id="calcBrokerOverrideCurrency" class="calc-unit-select" onchange="toggleOverrideRateRow('Broker'); calcCustoms()">
           <option value="RUB">₽</option>
           <option value="USD">$</option>
-          <option value="EUR">€</option>
+          <option value="EUR" selected>€</option>
           <option value="CNY">¥</option>
           <option value="KRW">₩</option>
         </select>
@@ -594,9 +609,20 @@
          получателя выбирает сам пользователь (себе/другу/в чат), никакие
          данные никуда на сервер не отправляются. См. buildCalcOfferText()/
          shareCalcResult() в app.js. -->
+    <!-- T-145 (03.09.2026, по запросу пользователя: "кнопки отправки в
+         месенджеры сделай: отправить и рядом ориг значок месенджера") —
+         вместо эмодзи 📤 и полного названия мессенджера в тексте — просто
+         "Отправить" + официальный значок бренда (инлайновый SVG, не
+         внешний файл/иконшрифт — единый файл, как и весь остальной сайт). -->
     <div class="calc-share-row">
-      <button type="button" class="calc-share-btn calc-share-tg" onclick="shareCalcResult('telegram')">📤 Отправить в Telegram</button>
-      <button type="button" class="calc-share-btn calc-share-wa" onclick="shareCalcResult('whatsapp')">📤 Отправить в WhatsApp</button>
+      <button type="button" class="calc-share-btn calc-share-tg" onclick="shareCalcResult('telegram')">
+        Отправить
+        <svg class="calc-share-icon" viewBox="0 0 240 240" aria-hidden="true"><circle cx="120" cy="120" r="120" fill="#229ED9"/><path fill="#fff" d="M180.5 72.3 158.9 176c-1.6 7.2-5.9 9-11.9 5.6l-33-24.3-15.9 15.3c-1.8 1.8-3.3 3.3-6.7 3.3l2.4-33.9L157 84.7c3.4-3 -.7-4.7-5.2-1.7l-83.4 52.5-35.9-11.2c-7.8-2.4-8-7.8 1.6-11.6l140.4-54.1c6.5-2.4 12.2 1.6 10 13.7z"/></svg>
+      </button>
+      <button type="button" class="calc-share-btn calc-share-wa" onclick="shareCalcResult('whatsapp')">
+        Отправить
+        <svg class="calc-share-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#25D366"/><path fill="#fff" d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.46-2.39-1.48-.88-.78-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.44-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51-.17-.01-.37-.01-.57-.01-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.87 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.62.71.23 1.36.2 1.87.12.57-.08 1.76-.72 2.01-1.41.25-.7.25-1.29.17-1.42-.07-.12-.27-.2-.57-.35z"/></svg>
+      </button>
     </div>
     <!-- T-127 (02.09.2026) — предпросмотр утильсбора по ставкам 2027 года.
          Таблицы в app.js уже содержат коэффициенты по годам вплоть до

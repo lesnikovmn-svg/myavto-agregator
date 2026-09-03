@@ -364,14 +364,17 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); paddin
    месенджер результат расчета", "как коммерческое предложение") — две
    кнопки под блоком результата, открывают системный диалог "поделиться"
    Telegram/WhatsApp с текстом расчёта, оформленным как КП (см. app.js
-   buildCalcOfferText()/shareCalcResult()). Цвета — фирменные для каждого
-   мессенджера (Telegram #229ED9, WhatsApp #25D366), не акцентный зелёный
-   сайта — так кнопки узнаваемы по иконке+цвету с первого взгляда. */
+   buildCalcOfferText()/shareCalcResult()).
+   T-145 (03.09.2026, по запросу пользователя: "кнопки отправки в
+   месенджеры сделай: отправить и рядом ориг значок месенджера") — раньше
+   фон самой кнопки был залит фирменным цветом мессенджера + эмодзи 📤;
+   теперь бренд несёт сам значок (цветной кружок с логотипом, инлайновый
+   SVG), кнопка — нейтральная светлая с рамкой, чтобы цвет не задваивался
+   и не спорил сам с собой. */
 .calc-share-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.calc-share-btn { flex: 1; min-width: 160px; border: none; border-radius: var(--radius); padding: 10px 14px; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; color: #fff; cursor: pointer; transition: opacity .15s; }
-.calc-share-btn:hover { opacity: 0.88; }
-.calc-share-tg { background: #229ED9; }
-.calc-share-wa { background: #25D366; }
+.calc-share-btn { flex: 1; min-width: 160px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 9px 14px; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; color: var(--text); background: #fff; cursor: pointer; transition: border-color .15s, background .15s; }
+.calc-share-btn:hover { background: var(--accent-light); }
+.calc-share-icon { width: 20px; height: 20px; flex-shrink: 0; }
 
 /* Массовая заявка по всем компаниям (задача #49) — CloudPayments пока не
    подключён, поэтому это заглушка: форма реально собирает данные заявки

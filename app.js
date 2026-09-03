@@ -1234,6 +1234,51 @@ function shareCalcResult(channel) {
   window.open(url, '_blank');
 }
 
+// T-144 (03.09.2026, по запросу пользователя: "по умолчанию в калькуляторе
+// направление европа стоит, валюта во всех окнах соответственно евро, при
+// выборе направления Грузия, Киргизия, США валюта автоматически доллары,
+// при выборе кореи валюта воны, при выборе китая валюта юани") — меняет
+// валюту во ВСЕХ 6 окнах выбора валюты калькулятора разом при смене
+// направления (страны вывоза). Вызывается из onchange у #calcCountry, ДО
+// calcCustoms() — сама по себе ничего не считает. Только устанавливает
+// .value и вызывает соответствующий toggle-обработчик (чтобы строка "свой
+// курс" для €/$ и видимость override-блока обновились сразу, как при
+// ручном выборе валюты пользователем) — дальше calcCustoms() уже досчитает
+// с новыми валютами. Пользователь может после этого вручную поменять
+// валюту в любом отдельном окне — функция срабатывает только на смену
+// направления, не перезаписывает ручной выбор при каждом пересчёте.
+// Япония не упомянута пользователем в этом запросе — валюту не трогаем
+// (среди валют калькулятора вообще нет иены, только ₽/$/€/¥ юань/₩ вона).
+const COUNTRY_CURRENCY = {
+  europe: 'EUR',
+  georgia: 'USD',
+  kyrgyzstan: 'USD',
+  usa: 'USD',
+  korea: 'KRW',
+  china: 'CNY',
+};
+
+function syncCurrencyToCountry() {
+  const country = document.getElementById('calcCountry').value;
+  const currency = COUNTRY_CURRENCY[country];
+  if (!currency) return; // Япония — валюту не трогаем, см. комментарий выше
+  const priceCurrencyEl = document.getElementById('calcCurrency');
+  if (priceCurrencyEl) { priceCurrencyEl.value = currency; togglePriceRateRow(); }
+  ['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission', 'ImporterCommission', 'Broker'].forEach(prefix => {
+    const el = document.getElementById(`calc${prefix}OverrideCurrency`);
+    if (el) { el.value = currency; toggleOverrideRateRow(prefix); }
+  });
+}
+
+// Разметка по умолчанию грузится с направлением "Европа" и валютой €
+// везде (T-144) — но строки "свой курс" у полей €/$ в HTML жёстко скрыты
+// (`style="display:none"`), потому что раньше валютой по умолчанию везде
+// был ₽ и скрывать было верно. Синхронизируем видимость сразу при загрузке
+// страницы, а не только по onchange — иначе строки "свой курс" остались
+// бы скрытыми до первого ручного переключения валюты пользователем.
+togglePriceRateRow();
+['CustomsValue', 'EaeuCustoms', 'Delivery', 'ExporterCommission', 'ImporterCommission', 'Broker'].forEach(toggleOverrideRateRow);
+
 function toggleFaq(el) {
   el.classList.toggle('open');
 }

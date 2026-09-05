@@ -1280,6 +1280,18 @@ _TG_HANDLE_TO_SOURCE = {v: k for k, v in SOURCE_TG_HANDLE.items()}
 
 PHOTO_PROCESSORS = {"winner_auto_club": remove_watermark}
 
+# T-155 (05.09.2026, запрошено пользователем — "видео от тамсямыча уберем
+# из боевых груп, у него там бейдж и пост берем только фото и описание без
+# видео"): у tamsyam26 на видео есть свой бейдж/водяной знак — в отличие от
+# winner_auto_club, для него НЕТ ни OCR-детекта (детект в auto_montage.py
+# жёстко привязан к source == "winner_auto_club", T-110), ни auto-montage
+# перемонтажа (tamsyam26 нет в AUTO_MONTAGE_SOURCES) — то есть его видео
+# сейчас уходит в боевые группы КАК ЕСТЬ, с видимым чужим бейджем. Строить
+# для него отдельный OCR/перемонтаж — отдельная задача (бейдж другой,
+# калибровка не проверялась); пока проще и честнее не публиковать видео
+# этого источника в принципе, только фото+текст (см. _prepare_media_list).
+PHOTO_ONLY_SOURCES = {"tamsyam26"}
+
 # T-86 (27.08.2026, запрошено пользователем — "давай в автомат ставь видео
 # монтаж не в ручной режим"): источники, для которых видео автоматически
 # перемонтируется в короткий вертикальный ролик (auto_montage.build_short) —
@@ -1351,10 +1363,19 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
     build_repost_text)."""
     processor = PHOTO_PROCESSORS.get(source_username)
     auto_montage_on = source_username in AUTO_MONTAGE_SOURCES
+    photo_only = source_username in PHOTO_ONLY_SOURCES
     montage_used = False
+    skipped_video = 0
     media_list = []
     for m in messages:
         if not m.media:
+            continue
+        if photo_only and m.video:
+            # T-155: этот источник — видео с чужим бейджем без снятия, не
+            # публикуем его вообще (см. комментарий у PHOTO_ONLY_SOURCES).
+            # Остальные media того же поста (фото) обрабатываются как
+            # обычно ниже — просто пропускаем этот конкретный элемент.
+            skipped_video += 1
             continue
         if processor and m.photo:
             try:
@@ -1428,6 +1449,11 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
                 media_list.append(m.media)
         else:
             media_list.append(m.media)
+    if skipped_video:
+        logger.info(
+            "[%s] пропущено видео с бейджем (T-155, PHOTO_ONLY_SOURCES): %s шт — публикуется только фото+текст",
+            source_username, skipped_video,
+        )
     return media_list, montage_used
 
 

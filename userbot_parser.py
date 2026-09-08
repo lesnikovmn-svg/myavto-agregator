@@ -90,6 +90,7 @@ TEST_ONLY_SOURCES — обработка идёт только в тестову
   (handle_group()/_prepare_media_list() его не вызывают).
 """
 import asyncio
+import hashlib
 import io
 import json
 import logging
@@ -972,21 +973,42 @@ def _ocr_badge_hits(gray, scale=3, psm=11):
 
 
 def _badge_corner_regions(img):
-    """Нижние левый/правый углы кадра — единственное место, где бейдж
-    реально встречается на присланных пользователем фото (T-85).
+    """Нижняя полоса кадра целиком (не только углы) — см. T-156.
 
     26.08.2026: полоса 0.62-0.88 была подобрана только по 5 исходным
     Jeep-фото и оказалась слишком узкой — реальное фото Nissan Altima
     (задний ракурс) показало бейдж на 0.597-0.636h, то есть ВЫШЕ нижней
-    границы старой полосы (0.62h). Расширяем до 0.55-0.92 — то же самое
+    границы старой полосы (0.62h). Расширили до 0.55-0.92 — то же самое
     значение, что уже проверено на видео (_badge_video_regions в
-    watermark_video.py) и покрывает оба случая с запасом."""
+    watermark_video.py) и покрывает оба случая с запасом.
+
+    07.09.2026 (T-156, жалоба "из тестовой группы много не определило
+    бейдж" — 10+ реальных фото WINNER AUTO CLUB): до этой правки поиск
+    ограничивался ДВУМЯ узкими угловыми кропами (левые 0-30% и правые
+    70-100% ширины) — предположение T-85 было, что бейдж всегда сбоку.
+    На реальных фото из этой жалобы (студийная съёмка, серый фон)
+    табличка стоит по ЦЕНТРУ бампера, как настоящий номер — то есть в
+    зоне 30-70% ширины, которую старый код вообще не сканировал. Это НЕ
+    случай ракурса/OCR-качества (T-104, фолбэк с поворотом) — на этих
+    фото бейдж читается прямо и чётко, его просто не искали в нужном
+    месте. Проверено на 4 реальных фото из жалобы: и обычный проход, и
+    _find_badge_box_rotated (использующий тот же набор регионов) уверенно
+    возвращали None ДО правки.
+
+    Видео-пайплайн уже давно сканирует всю ширину нижней полосы одним
+    диапазоном именно по этой причине (см. комментарий у
+    _badge_video_regions в watermark_video.py: "на реальном тестовом
+    видео бейдж висит по ЦЕНТРУ низа кадра... не только по углам, как на
+    фото из T-85") — переносим тот же подход на фото. Раньше это не
+    делали для фото, видимо, потому что тестовая выборка T-85 (5 фото
+    Jeep + 1 Nissan) не содержала ни одного примера с центральным
+    креплением. Цена — область поиска шире (было 2×30%=60% ширины,
+    стало 100%), то есть OCR-вызовов на фото станет больше, но того же
+    порядка, что уже подтверждали видео и T-104 (~в 1.5-2 раза
+    медленнее на фото без раннего None)."""
     h, w = img.shape[:2]
-    band_y0, band_y1 = int(h * 0.55), int(h * 0.92)
-    return (
-        (0, band_y0, int(w * 0.30), band_y1),
-        (int(w * 0.70), band_y0, w, band_y1),
-    )
+    band_y0, band_y1 = int(h * 0.45), int(h * 0.92)
+    return ((0, band_y0, w, band_y1),)
 
 
 _BADGE_OCR_SCALES = (3, 2)  # 26.08.2026: одного scale=3 не хватило — на фото
@@ -1023,6 +1045,87 @@ _BADGE_OCR_PSMS = (11, 6)
 _BADGE_EXTRA_MULT = 5.0
 
 
+_BADGE_CLAHE = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+
+
+def _clahe_enhance(gray):
+    """Локальное повышение контраста (CLAHE) — см. T-156,
+    BADGE_DETECTION_SPEC_2026-09-07.md, проблема B: на части реальных фото
+    жалобы (BMW X5, Mercedes G-class) табличка того же цвета, что и бампер
+    (чёрное на чёрном) — обычный серый и инвертированный варианты не дают
+    OCR достаточно контраста для бинаризации. Пробуем этот вариант ДОПОЛНИТЕЛЬНО
+    к ним (не вместо) в _find_badge_box/_find_badge_box_rotated."""
+    return _BADGE_CLAHE.apply(gray)
+
+
+def _hits_overlap(box_a, box_b, tol_frac=0.6):
+    """True, если два (x, y, w, h) бокса — физически один и тот же фрагмент
+    кадра, с запасом на дрожание координат между разными scale/psm/variant
+    прогонами OCR. Используется _accept_badge_hits, чтобы отличить текст,
+    который детектится в одном и том же месте независимо от настроек, от
+    случайного одноразового совпадения на текстуре (см. T-156)."""
+    ax, ay, aw, ah = box_a
+    bx, by, bw, bh = box_b
+    cx_a, cy_a = ax + aw / 2, ay + ah / 2
+    cx_b, cy_b = bx + bw / 2, by + bh / 2
+    tol = tol_frac * max(aw, ah, bw, bh, 1)
+    return abs(cx_a - cx_b) <= tol and abs(cy_a - cy_b) <= tol
+
+
+def _accept_badge_hits(all_hits):
+    """Общая логика принятия решения "нашли/не нашли бейдж" по накопленным
+    OCR-совпадениям (target, dist, x, y, w, h в системе координат кадра) —
+    используется и обычным проходом (_find_badge_box), и фолбэком с
+    поворотом (_find_badge_box_rotated). Возвращает (box, words) либо
+    (None, set()).
+
+    07.09.2026 (T-156, см. BADGE_DETECTION_SPEC_2026-09-07.md, проблема A):
+    раньше одно "сильное" совпадение (_BADGE_STRONG_MAX_DIST) принималось
+    без дополнительной проверки — на реальном фото из жалобы (Nissan
+    Patrol, спицы переднего колёсного диска дали fuzzy-совпадение со
+    словом "AUTO") это давало ложный бокс НА ДИСКЕ вместо непойманного
+    бейджа, который лежал совсем в другом месте кадра. Испорченное фото
+    (закрашенный кусок диска) заметнее непойманного бейджа, поэтому такую
+    находку нельзя было просто принимать на веру.
+
+    Теперь для ЕДИНСТВЕННОГО слова дополнительно требуем, чтобы оно было
+    найдено НЕЗАВИСИМО больше одного раза — в разных scale/psm/variant-
+    прогонах (см. циклы в _find_badge_box/_find_badge_box_rotated) — примерно
+    в той же точке кадра (_hits_overlap). Настоящий текст на табличке
+    обычно детектится в одном и том же месте почти при любых настройках
+    OCR; случайное совпадение на текстуре (спицы диска, хром, шторка) —
+    как правило разовая случайность одного конкретного прогона."""
+    if not all_hits:
+        return None, set()
+
+    best_per_word = {}
+    for target, dist, x, y, ww, hh in all_hits:
+        if target not in best_per_word or dist < best_per_word[target][0]:
+            best_per_word[target] = (dist, x, y, ww, hh)
+
+    strong = any(dist <= _BADGE_STRONG_MAX_DIST for dist, *_ in best_per_word.values())
+    if strong and len(best_per_word) < _BADGE_MIN_DISTINCT_WORDS:
+        strong_word, (_, sx, sy, sw, sh) = next(
+            (t, v) for t, v in best_per_word.items() if v[0] <= _BADGE_STRONG_MAX_DIST
+        )
+        corroborating = sum(
+            1 for target, _, hx, hy, hw, hh2 in all_hits
+            if target == strong_word and _hits_overlap((sx, sy, sw, sh), (hx, hy, hw, hh2))
+        )
+        if corroborating < 2:  # сам найденный хит + хотя бы ещё один независимый
+            strong = False
+
+    if not strong and len(best_per_word) < _BADGE_MIN_DISTINCT_WORDS:
+        return None, set()
+
+    xs0 = min(x for _, x, y, ww, hh in best_per_word.values())
+    ys0 = min(y for _, x, y, ww, hh in best_per_word.values())
+    xs1 = max(x + ww for _, x, y, ww, hh in best_per_word.values())
+    ys1 = max(y + hh for _, x, y, ww, hh in best_per_word.values())
+    box = (int(xs0), int(ys0), int(xs1 - xs0), int(ys1 - ys0))
+    return box, set(best_per_word.keys())
+
+
 def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False):
     """Ищет бейдж WINNER AUTO CLUB по тексту в заданных областях кадра
     (по умолчанию — нижние углы, см. _badge_corner_regions; видео-пайплайн
@@ -1049,7 +1152,23 @@ def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False
     возвращает set() найденных слов ("WINNER"/"AUTO"/"CLUB") — remove_watermark
     использует его, чтобы направленно расширить паддинг в сторону
     непойманных слов (см. _BADGE_EXTRA_MULT); видео этот флаг не использует
-    и получает как раньше только box."""
+    и получает как раньше только box.
+
+    07.09.2026 (T-157, оптимизация скорости): гоняем варианты
+    серый/инвертированный/CLAHE (см. _clahe_enhance) не всегда все три —
+    сначала пробуем серый+инвертированный (дешевле, этого достаточно на
+    большинстве реальных фото — нормальный контраст таблички на фоне),
+    и ТОЛЬКО если оба ничего уверенного не дали (см. _accept_badge_hits),
+    добавляем CLAHE (заметно дороже — расширяет диапазон яркостей, из-за
+    чего Tesseract видит больше "кандидатов" на апскейленном кропе и
+    дольше их перебирает; см. BADGE_DETECTION_SPEC_2026-09-07.md,
+    проблема B — CLAHE нужен только случаю "чёрное на чёрном"). Итоговый
+    набор найденных совпадений (all_hits) в худшем случае (когда CLAHE
+    всё равно понадобился) идентичен версии без этой оптимизации — просто
+    не тратим время впустую в частом случае, когда он не нужен. Замер на
+    реальных фото жалобы: ~100-200с/фото до оптимизации -> ощутимо
+    быстрее на фото с нормальным контрастом (LX600, BMW Patrol), без
+    изменений на фото, где CLAHE всё равно требуется (BMW X5)."""
     if regions is None:
         regions = _badge_corner_regions(img)
     if scales is None:
@@ -1061,31 +1180,24 @@ def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False
         if crop.size == 0:
             continue
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        region_hits = []
         for variant in (gray, 255 - gray):
             for scale in scales:
                 for p in psms:
                     for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale, psm=p):
-                        all_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
+                        region_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
+            box, _ = _accept_badge_hits(region_hits)
+            if box is not None:
+                break  # нашли уверенно без CLAHE — второй базовый вариант/CLAHE не нужны
+        else:
+            for scale in scales:
+                for p in psms:
+                    for target, dist, x, y, ww, hh in _ocr_badge_hits(_clahe_enhance(gray), scale=scale, psm=p):
+                        region_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
+        all_hits.extend(region_hits)
 
-    if not all_hits:
-        return (None, set()) if return_words else None
-
-    # На каждое целевое слово оставляем только лучшее (наименьшее расстояние) совпадение
-    best_per_word = {}
-    for target, dist, x, y, ww, hh in all_hits:
-        if target not in best_per_word or dist < best_per_word[target][0]:
-            best_per_word[target] = (dist, x, y, ww, hh)
-
-    strong = any(dist <= _BADGE_STRONG_MAX_DIST for dist, *_ in best_per_word.values())
-    if not strong and len(best_per_word) < _BADGE_MIN_DISTINCT_WORDS:
-        return (None, set()) if return_words else None
-
-    xs0 = min(x for _, x, y, ww, hh in best_per_word.values())
-    ys0 = min(y for _, x, y, ww, hh in best_per_word.values())
-    xs1 = max(x + ww for _, x, y, ww, hh in best_per_word.values())
-    ys1 = max(y + hh for _, x, y, ww, hh in best_per_word.values())
-    box = (int(xs0), int(ys0), int(xs1 - xs0), int(ys1 - ys0))
-    return (box, set(best_per_word.keys())) if return_words else box
+    box, words = _accept_badge_hits(all_hits)
+    return (box, words) if return_words else box
 
 
 # 31.08.2026 (T-104): на ракурсе 3/4 (не анфас/корма строго в лоб) текст
@@ -1103,11 +1215,13 @@ def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False
 #
 # Пробуем только КАК ФОЛБЭК — когда обычный _find_badge_box() вернул None,
 # то есть ничего не нашли и так, терять нечего. Сознательно ограничен набор
-# углов/scale/psm (4 угла × 2 варианта × 1 scale × 1 psm = 8 OCR-вызовов на
+# углов/scale/psm (4 угла × 3 варианта × 1 scale × 1 psm = 12 OCR-вызовов на
 # регион — тот же порядок, что и у обычного прохода), чтобы в худшем случае
 # (когда фолбэк тоже сработал впустую) обработка одного фото не утраивалась,
 # а примерно удваивалась — пользователь одобрил именно "удвоить время"
-# 31.08.2026, не больше.
+# 31.08.2026, не больше. 07.09.2026 (T-156): третий вариант (CLAHE,
+# _clahe_enhance) добавлен к паре "серый/инвертированный" — см.
+# BADGE_DETECTION_SPEC_2026-09-07.md, проблема B — отсюда 2→3 варианта.
 _BADGE_ROTATION_ANGLES = (-20, -15, 15, 20)
 _BADGE_ROTATION_SCALE = 2
 _BADGE_ROTATION_PSM = 11
@@ -1117,7 +1231,13 @@ def _find_badge_box_rotated(img, regions=None, angles=None, scale=None, psm=None
     """Фолбэк-версия _find_badge_box() с перебором поворота кропа — см.
     комментарий у _BADGE_ROTATION_ANGLES. Возвращает то же самое, что и
     _find_badge_box (box или (box, words) при return_words=True), координаты
-    уже пересчитаны обратно в систему координат НЕповёрнутого кадра."""
+    уже пересчитаны обратно в систему координат НЕповёрнутого кадра.
+
+    07.09.2026 (T-157): та же оптимизация "CLAHE только если нужен",
+    что и в _find_badge_box (см. комментарий там) — здесь применяется
+    ПОУГОЛЬНО: для каждого угла сперва пробуем rotated/инвертированный,
+    и только если для ЭТОГО угла ничего уверенного не нашли — добавляем
+    CLAHE-вариант того же угла, прежде чем переходить к следующему углу."""
     if regions is None:
         regions = _badge_corner_regions(img)
     if angles is None:
@@ -1142,39 +1262,89 @@ def _find_badge_box_rotated(img, regions=None, angles=None, scale=None, psm=None
             # пересчитать найденный в ПОВЁРНУТОМ кропе бокс обратно в
             # координаты исходного (неповёрнутого) кропа.
             m_inv = cv2.getRotationMatrix2D(center, -angle, 1.0)
-            for variant in (rotated, 255 - rotated):
+
+            def _collect(variant, _m_inv=m_inv, _sx0=sx0, _sy0=sy0):
+                hits = []
                 for target, dist, x, y, ww, hh in _ocr_badge_hits(variant, scale=scale, psm=psm):
                     pts = np.array([[[x, y]], [[x + ww, y]], [[x, y + hh]], [[x + ww, y + hh]]], dtype=np.float32)
-                    mapped = cv2.transform(pts, m_inv)
+                    mapped = cv2.transform(pts, _m_inv)
                     xs, ys = mapped[:, 0, 0], mapped[:, 0, 1]
                     ox, oy = float(xs.min()), float(ys.min())
                     ow, oh = float(xs.max() - xs.min()), float(ys.max() - ys.min())
-                    all_hits.append((target, dist, sx0 + ox, sy0 + oy, ow, oh))
+                    hits.append((target, dist, _sx0 + ox, _sy0 + oy, ow, oh))
+                return hits
 
-    if not all_hits:
-        return (None, set()) if return_words else None
+            angle_hits = _collect(rotated) + _collect(255 - rotated)
+            box, _ = _accept_badge_hits(angle_hits)
+            if box is None:
+                angle_hits += _collect(_clahe_enhance(rotated))
+            all_hits.extend(angle_hits)
 
-    best_per_word = {}
-    for target, dist, x, y, ww, hh in all_hits:
-        if target not in best_per_word or dist < best_per_word[target][0]:
-            best_per_word[target] = (dist, x, y, ww, hh)
+    box, words = _accept_badge_hits(all_hits)
+    return (box, words) if return_words else box
 
-    strong = any(dist <= _BADGE_STRONG_MAX_DIST for dist, *_ in best_per_word.values())
-    if not strong and len(best_per_word) < _BADGE_MIN_DISTINCT_WORDS:
-        return (None, set()) if return_words else None
 
-    xs0 = min(x for _, x, y, ww, hh in best_per_word.values())
-    ys0 = min(y for _, x, y, ww, hh in best_per_word.values())
-    xs1 = max(x + ww for _, x, y, ww, hh in best_per_word.values())
-    ys1 = max(y + hh for _, x, y, ww, hh in best_per_word.values())
-    box = (int(xs0), int(ys0), int(xs1 - xs0), int(ys1 - ys0))
-    return (box, set(best_per_word.keys())) if return_words else box
+# T-157 (07.09.2026): опциональное накопление реального тестового
+# набора фото — см. BADGE_DETECTION_SPEC_2026-09-07.md и TASKS.md T-157
+# ("давай создадим папку на маке куда скидываем все фото для тренировки").
+# До этого тестовые фото собирались вручную по одному (см.
+# badge_detection_tests_2026-09-07/) — не масштабируется. Читаем
+# BADGE_ARCHIVE_DIR из userbot_config.env (тот же файл/формат, что и
+# остальной конфиг бота, см. load_env() выше; НЕ в git, см. .gitignore).
+# Не задано (по умолчанию везде, кроме VPS, где явно включим) —
+# архивирование выключено, поведение remove_watermark не меняется.
+try:
+    _BADGE_ARCHIVE_DIR = load_env().get("BADGE_ARCHIVE_DIR", "").strip() or None
+except (FileNotFoundError, OSError):
+    _BADGE_ARCHIVE_DIR = None
+
+
+def _archive_badge_result(orig_bytes, processed_bytes, box, words):
+    """Если задан BADGE_ARCHIVE_DIR — сохраняет исходное и (если нашли
+    бейдж) обработанное фото + маленький JSON с результатом детекции
+    (нашли/нет, слова, координаты бокса) в отдельную папку на диске VPS —
+    НЕ в git-репозиторий (см. T-157). Папка потом синкается на Мак
+    (rsync, вручную или по крону — см. TASKS.md T-157) для накопления
+    датасета и regression-тестов детектора, вместо ручного сбора по
+    одному фото, как раньше. Архивируем ОБА исхода — и "нашли и закрасили",
+    и "не нашли, оставили как есть" — второе так же важно для будущей
+    отладки ложноотрицательных случаев. Ошибка записи на диск не должна
+    ронять обработку поста — только предупреждение в лог."""
+    if not _BADGE_ARCHIVE_DIR:
+        return
+    try:
+        archive_dir = Path(_BADGE_ARCHIVE_DIR)
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        digest = hashlib.md5(orig_bytes).hexdigest()[:10]
+        base = f"{stamp}_{digest}"
+        (archive_dir / f"{base}_orig.jpg").write_bytes(orig_bytes)
+        if box is not None and processed_bytes != orig_bytes:
+            (archive_dir / f"{base}_processed.jpg").write_bytes(processed_bytes)
+        meta = {
+            "found": box is not None,
+            "box": list(box) if box else None,
+            "words": sorted(words) if words else [],
+            "ts": datetime.now().isoformat(),
+        }
+        (archive_dir / f"{base}.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        logger.exception(
+            "Не удалось заархивировать фото в BADGE_ARCHIVE_DIR — пропускаю, "
+            "обработка поста продолжается"
+        )
 
 
 def remove_watermark(image_bytes):
     """Убирает бейдж WINNER AUTO CLUB с фото (JPEG/PNG-байты на входе и
     выходе) сплошной заливкой найденной области. Если знак не найден
-    уверенно — возвращает исходные байты без изменений."""
+    уверенно — возвращает исходные байты без изменений.
+
+    07.09.2026 (T-157): если задан BADGE_ARCHIVE_DIR — дополнительно
+    архивирует каждое обработанное фото + результат детекции, см.
+    _archive_badge_result. Не задан — поведение функции не меняется."""
     if pytesseract is None:
         logger.warning("pytesseract не установлен (см. requirements.txt) — remove_watermark пропущена, фото без изменений")
         return image_bytes
@@ -1201,6 +1371,7 @@ def remove_watermark(image_bytes):
         return image_bytes
     if box is None:
         logger.info("Водяной знак не найден уверенно — фото без изменений")
+        _archive_badge_result(image_bytes, image_bytes, None, set())
         return image_bytes
 
     x, y, w, h = box
@@ -1238,7 +1409,9 @@ def remove_watermark(image_bytes):
     ok, encoded = cv2.imencode(".jpg", result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     if not ok:
         return image_bytes
-    return encoded.tobytes()
+    processed = encoded.tobytes()
+    _archive_badge_result(image_bytes, processed, box, words)
+    return processed
 
 
 # Источники, чьи фото нужно скачать/обработать перед отправкой (а не просто

@@ -94,9 +94,10 @@ import hashlib
 import io
 import json
 import logging
+import os
 import re
 import uuid
-from datetime import datetime, timedelta, time as dtime
+from datetime import datetime, timedelta, timezone, time as dtime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -106,6 +107,18 @@ try:
     import pytesseract  # T-85 (26.08.2026): OCR-детект бейджа winner_auto_club вместо template matching
 except ImportError:  # pragma: no cover — на случай, если пакет/бинарь tesseract ещё не поставлены
     pytesseract = None
+try:
+    # T-158: автогенерация карточки "статус в WhatsApp" из постов в
+    # MY_Avto5/My_Avto_Optimal. Требует Pillow (см. requirements.txt) —
+    # если ещё не установлен на конкретном деплое (например, старый venv
+    # на VPS до git pull+pip install), фича просто выключается ниже
+    # (status_card_enabled и без того требует STATUS_CARD_ENABLED=true),
+    # остальной бот продолжает работать как раньше.
+    from status_card import render_status_card
+    from status_card_parser import parse_post_for_status_card
+except ImportError:  # pragma: no cover
+    render_status_card = None
+    parse_post_for_status_card = None
 from telethon import TelegramClient, events
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.errors import UserAlreadyParticipantError, MediaCaptionTooLongError
@@ -1337,6 +1350,209 @@ def _archive_badge_result(orig_bytes, processed_bytes, box, words):
         )
 
 
+# T-158: STATUS_CARD_ARCHIVE_DIR — тот же принцип, что и BADGE_ARCHIVE_DIR
+# выше (T-157): отдельная папка на диске, НЕ в git (см. .gitignore),
+# накапливает сгенерированные карточки для последующей ручной проверки
+# качества. Не задано — архивирование выключено.
+try:
+    _STATUS_CARD_ARCHIVE_DIR = load_env().get("STATUS_CARD_ARCHIVE_DIR", "").strip() or None
+except (FileNotFoundError, OSError):
+    _STATUS_CARD_ARCHIVE_DIR = None
+
+
+def _archive_status_card(png_bytes, source_channel, msg_ids, car, skipped_reason=None):
+    """Сохраняет сгенерированную (или несостоявшуюся — см. skipped_reason)
+    карточку в STATUS_CARD_ARCHIVE_DIR + маленький JSON с тем, что удалось
+    распознать — чтобы позже разобрать, на каких реальных постах парсер
+    промахивается, не переслушивая канал заново. Ошибка записи на диск не
+    должна ронять обработку поста (тот же принцип, что и в
+    _archive_badge_result)."""
+    if not _STATUS_CARD_ARCHIVE_DIR:
+        return
+    try:
+        archive_dir = Path(_STATUS_CARD_ARCHIVE_DIR)
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        base = f"{stamp}_{source_channel}_{'-'.join(str(i) for i in msg_ids)}"
+        if png_bytes is not None:
+            (archive_dir / f"{base}.png").write_bytes(png_bytes)
+        meta = {
+            "source_channel": source_channel,
+            "msg_ids": list(msg_ids),
+            "skipped_reason": skipped_reason,
+            "car": {
+                "brand": car.brand, "model": car.model, "year": car.year,
+                "price": car.price, "specs": [(s.label, s.value) for s in car.specs],
+            } if car else None,
+            "ts": datetime.now().isoformat(),
+        }
+        (archive_dir / f"{base}.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        logger.exception(
+            "Не удалось заархивировать статус-карточку в STATUS_CARD_ARCHIVE_DIR — "
+            "пропускаю, обработка поста продолжается"
+        )
+
+
+def _status_card_candidate(messages):
+    """Пытается разобрать один пост (группу сообщений — одиночный пост или
+    альбом) в (CarCard, photo_message). None, если не хватает текста, фото
+    или данных для карточки (бренд/модель/цена — см.
+    status_card_parser.parse_post_for_status_card). Чистая функция без
+    сайд-эффектов и без Telethon-вызовов, кроме чтения уже загруженных
+    полей messages — можно звать на любом наборе сообщений без сети."""
+    if parse_post_for_status_card is None:
+        return None
+    text = next((m.raw_text for m in messages if m.raw_text and m.raw_text.strip()), "")
+    if not text.strip():
+        return None
+    photo_message = next((m for m in messages if getattr(m, "photo", None)), None)
+    if photo_message is None:
+        return None
+    car = parse_post_for_status_card(text)
+    if car is None:
+        return None
+    return car, photo_message
+
+
+def _status_card_richness(car) -> int:
+    """T-158 (решение пользователя — "больше всего данных для карточки"):
+    оценка "насколько привлекательно/полно" выглядит пост для выбора
+    ЛУЧШЕГО среди нескольких за день — не про цену/маркетинг, а про то,
+    сколько реально заполненных полей получит карточка. Специк-панель
+    (0-5 полей) — основной вклад, год — небольшой бонус (часто отсутствует
+    у ручных постов, но не критичен)."""
+    return len(car.specs) * 10 + (2 if car.year else 0)
+
+
+async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix):
+    """Скачивает фото, рендерит карточку (status_card.render_status_card) и
+    шлёт её ТОЛЬКО в test_group (решение пользователя — до подтверждения
+    качества на реальном потоке публикация карточек в боевые каналы не
+    рассматривается) + архивирует (см. _archive_status_card). Не поднимает
+    исключение наружу — любая ошибка здесь не должна ронять остальной бот."""
+    ids = [m.id for m in messages]
+    try:
+        photo_bytes = await client.download_media(photo_message, file=bytes)
+        photo_buf = io.BytesIO(photo_bytes)
+
+        tmp_path = f"/tmp/status_card_{uuid.uuid4().hex}.png"
+        try:
+            render_status_card(car, photo_buf, tmp_path)
+            with open(tmp_path, "rb") as f:
+                png_bytes = f.read()
+
+            caption = (
+                f"{caption_prefix}\n"
+                f"{car.brand} {car.model} {car.year}\n"
+                f"{car.price}\n"
+                f"Источник: {channel_label}#{'-'.join(str(i) for i in ids)}"
+            )
+            await client.send_message(test_group, caption, file=tmp_path)
+            logger.info("[status_card][%s#%s] карточка сгенерирована и отправлена в тестовую группу", channel_label, ids)
+            _archive_status_card(png_bytes, channel_label, ids, car)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+    except Exception:
+        logger.exception("[status_card][%s#%s] ошибка при генерации карточки — пропускаю, остальной бот продолжает работать", channel_label, ids)
+
+
+async def _collect_today_candidates(client, channel_username, channel_label, hours=24, fetch_limit=300):
+    """Забирает сообщения канала за последние `hours` часов (Telegram отдаёт
+    их от новых к старым — останавливаемся, как только упёрлись в более
+    старое, без вычитывания всей истории), склеивает альбомы
+    (group_backfill_messages — тот же хелпер, что и в стартовом бэкфилле
+    источников выше) и возвращает список (score, messages, car,
+    photo_message) для постов, из которых вообще можно собрать карточку.
+    Не поднимает исключение наружу — ошибка сети/резолва трактуется как
+    "кандидатов не нашлось"."""
+    if parse_post_for_status_card is None:
+        return []
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    try:
+        raw_messages = []
+        async for m in client.iter_messages(channel_username, limit=fetch_limit):
+            if m.date is not None and m.date < since:
+                break
+            raw_messages.append(m)
+    except Exception:
+        logger.exception("[status_card][%s] не удалось получить сообщения за последние %sч — пропускаю подбор на сегодня", channel_label, hours)
+        return []
+
+    candidates = []
+    for group in group_backfill_messages(raw_messages):
+        parsed = _status_card_candidate(group)
+        if parsed is None:
+            continue
+        car, photo_message = parsed
+        candidates.append((_status_card_richness(car), group, car, photo_message))
+    return candidates
+
+
+async def _post_daily_best(client, channel_username, channel_label, test_group):
+    """T-158 (решение пользователя — "по 1 из каждой группы, самое
+    привлекательное предложение", раз в день): выбирает среди постов
+    channel_username за последние сутки ОДИН с наибольшим
+    _status_card_richness (это включает и ручные посты админов, и
+    бот-репосты — см. докстринг _status_card_candidate/T-158 про находку,
+    что часть постов не через handle_group) и шлёт по нему карточку в
+    test_group. Если за сутки не нашлось ни одного поста, из которого
+    можно собрать карточку (нет фото, нет текста, не хватило данных для
+    бренда/модели/цены) — ничего не публикуется, только запись в
+    STATUS_CARD_ARCHIVE_DIR (если задан) для последующего разбора."""
+    if render_status_card is None or parse_post_for_status_card is None or not test_group:
+        return
+    candidates = await _collect_today_candidates(client, channel_username, channel_label)
+    if not candidates:
+        logger.info("[status_card][%s] за последние сутки не нашлось поста, подходящего для карточки — пропускаю", channel_label)
+        _archive_status_card(None, channel_label, [], None, skipped_reason="за сутки не нашлось подходящего поста (нет фото/текста/данных ни у одного)")
+        return
+    score, group, car, photo_message = max(candidates, key=lambda c: c[0])
+    logger.info(
+        "[status_card][%s] выбран лучший из %s кандидатов за сутки (score=%s): %s %s",
+        channel_label, len(candidates), score, car.brand, car.model,
+    )
+    await _render_and_send_status_card(
+        client, channel_label, group, car, photo_message, test_group,
+        caption_prefix="🏆 Предложение дня (тест, T-158)",
+    )
+
+
+def _seconds_until_next_run(hour_msk: int, now_msk=None) -> float:
+    now_msk = now_msk or _now_msk()
+    run_at = now_msk.replace(hour=hour_msk, minute=0, second=0, microsecond=0)
+    if run_at <= now_msk:
+        run_at += timedelta(days=1)
+    return (run_at - now_msk).total_seconds()
+
+
+async def _daily_status_card_task(client, target_my_avto5, target_optimal, test_group, daily_hour_msk):
+    """T-158: раз в сутки (в daily_hour_msk по МСК, тот же фиксированный
+    UTC+3 без перехода на летнее/зимнее время, что и POSTING_WINDOW/
+    _now_msk выше) подбирает и публикует в test_group по одному лучшему
+    предложению за прошедшие сутки для КАЖДОГО целевого канала отдельно
+    (MY_Avto5 и My_Avto_Optimal — решение пользователя, не общий подбор по
+    обоим сразу). Ошибка в одном канале не должна останавливать другой или
+    сам цикл — try/except внутри цикла, не вокруг него."""
+    while True:
+        wait_s = _seconds_until_next_run(daily_hour_msk)
+        logger.info("[status_card] следующий подбор предложения дня — через %.0f мин (в %02d:00 МСК)", wait_s / 60, daily_hour_msk)
+        await asyncio.sleep(wait_s)
+        for channel, label in [(target_my_avto5, "MY_Avto5"), (target_optimal, "My_Avto_Optimal")]:
+            try:
+                await _post_daily_best(client, channel, label, test_group)
+            except Exception:
+                logger.exception("[status_card][%s] ошибка при суточном подборе предложения дня", label)
+        # небольшой зазор, чтобы погрешность цикла (время выполнения самого
+        # подбора) не привела к повторному срабатыванию в ту же минуту
+        await asyncio.sleep(5)
+
+
 def remove_watermark(image_bytes):
     """Убирает бейдж WINNER AUTO CLUB с фото (JPEG/PNG-байты на входе и
     выходе) сплошной заливкой найденной области. Если знак не найден
@@ -1957,6 +2173,19 @@ async def main():
     # повторно уже отправленные посты не полезут.
     backfill_limit = int(env.get("TEST_BACKFILL_LIMIT", "15"))
     test_group_invite = env.get("TEST_GROUP_INVITE", "").strip()
+    # T-158 (08.09.2026, запрошено пользователем — "как на автомате
+    # получать такие фото из боевых групп?", уточнено позже — "нужно по 1
+    # выбирать из каждой группы, самое привлекательное предложение"): по
+    # умолчанию ВЫКЛЮЧЕНО, как и остальные фичи этого проекта на старте
+    # (см. T-82/T-85) — включаем явно в userbot_config.env только после
+    # проверки качества карточек в тестовой группе. Раз в сутки (в
+    # STATUS_CARD_DAILY_HOUR по МСК) выбирается ОДНО, самое информативно
+    # полное предложение за прошедшие сутки — ОТДЕЛЬНО для MY_Avto5 и для
+    # My_Avto_Optimal (не общий подбор по обоим сразу), см.
+    # _daily_status_card_task. Публикация — ВСЕГДА только в test_group,
+    # боевые каналы здесь не затрагиваются вообще.
+    status_card_enabled = env.get("STATUS_CARD_ENABLED", "false").strip().lower() == "true"
+    status_card_daily_hour = int(env.get("STATUS_CARD_DAILY_HOUR", "20"))
 
     if not (api_id and api_hash):
         raise SystemExit("userbot_config.env: нужны API_ID/API_HASH (см. userbot_login.py)")
@@ -1972,7 +2201,7 @@ async def main():
     # режимов — общий DRY_RUN, video_dry_run (посты с видео) или
     # test_only_sources (конкретные источники) — любой из них может увести
     # пост в тест, даже когда общий режим уже боевой.
-    if (dry_run or video_dry_run or test_only_sources) and test_group_invite:
+    if (dry_run or video_dry_run or test_only_sources or status_card_enabled) and test_group_invite:
         test_group = await ensure_test_group(client, test_group_invite)
 
     # T-84: фоновая задача разбирает очередь постов, отложенных из-за окна
@@ -2087,6 +2316,21 @@ async def main():
         pending_albums.setdefault(gid, []).append(msg)
         if gid not in pending_tasks:
             pending_tasks[gid] = asyncio.create_task(flush_album(gid, source_username))
+
+    # T-158: НЕ живой листенер на каждый пост (первая версия делала именно
+    # так — переделано по прямому уточнению пользователя: "нужно по 1
+    # выбирать из каждой группы, самое привлекательное предложение").
+    # Раз в сутки (_daily_status_card_task) отдельно для MY_Avto5 и для
+    # My_Avto_Optimal подбирается ОДИН лучший пост за прошедшие сутки и
+    # публикуется в test_group — не по каждому новому посту.
+    if status_card_enabled:
+        asyncio.create_task(_daily_status_card_task(
+            client, target_my_avto5, target_optimal, test_group, status_card_daily_hour,
+        ))
+        logger.info(
+            "[status_card] T-158 включён — раз в сутки (%02d:00 МСК) в тестовую группу уйдёт по 1 лучшему предложению из MY_Avto5 и из My_Avto_Optimal",
+            status_card_daily_hour,
+        )
 
     await client.run_until_disconnected()
 

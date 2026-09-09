@@ -46,6 +46,11 @@ except Exception:
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from userbot_parser import load_env, build_proxy, SOURCE_PARSERS, SOURCE_TG_HANDLE, ensure_test_group  # noqa: E402
+# T-160 (09.09.2026): рилс-ролики теперь целятся в отдельную группу
+# предпостинга (PREPOSTING_GROUP_INVITE), не в тестовую — этот скрипт
+# как раз для проверки такого ролика вручную, поэтому шлём результат
+# туда же, куда его шлёт и боевой handle_group() после T-160 (если
+# PREPOSTING_GROUP_INVITE не задан — как раньше, в TEST_GROUP_INVITE).
 import auto_montage  # noqa: E402
 
 DEFAULT_SOURCES = ["artalexgroup", "bezpokrasa", "winner_auto_club"]
@@ -60,10 +65,13 @@ async def main():
     api_id = env.get("API_ID")
     api_hash = env.get("API_HASH")
     proxy = build_proxy(env.get("PROXY_URL"))
+    preposting_invite = env.get("PREPOSTING_GROUP_INVITE", "").strip()
     test_group_invite = env.get("TEST_GROUP_INVITE", "").strip()
-    if not test_group_invite:
-        print("TEST_GROUP_INVITE не задан в userbot_config.env — некуда слать результат, стоп")
+    target_invite = preposting_invite or test_group_invite
+    if not target_invite:
+        print("Ни PREPOSTING_GROUP_INVITE, ни TEST_GROUP_INVITE не заданы в userbot_config.env — некуда слать результат, стоп")
         return
+    print(f"Результат уйдёт в {'группу предпостинга' if preposting_invite else 'тестовую группу'} ({target_invite})")
 
     if not os.path.exists(f"{MAIN_SESSION}.session"):
         print(f"{MAIN_SESSION}.session не найден рядом со скриптом — запускать из /var/www/myavto-agregator")
@@ -76,9 +84,9 @@ async def main():
     await client.start()
     print("подключились к Telegram (тестовая сессия)")
 
-    test_group = await ensure_test_group(client, test_group_invite)
+    test_group = await ensure_test_group(client, target_invite)
     if not test_group:
-        print("не удалось получить тестовую группу — стоп")
+        print("не удалось получить целевую группу — стоп")
         await client.disconnect()
         return
 

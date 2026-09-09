@@ -985,6 +985,40 @@ def _ocr_badge_hits(gray, scale=3, psm=11):
     return hits
 
 
+def _ocr_badge_hits_adaptive(gray, scale=2, psm=11):
+    """Как _ocr_badge_hits, но локальная (adaptive, не единый Otsu-порог на
+    весь апскейленный фрагмент) бинаризация — см. T-159,
+    _accept_badge_hits. Блок 35x10 подобран вручную на реальном фото Audi
+    A8 (плотность текста таблички ~15-20px на букву при scale=2) — не
+    менялся под другие случаи, т.к. это последний по очереди (самый
+    дорогой и самый шумный) уровень в _find_badge_box, пробуется только
+    когда серый/инвертированный и CLAHE уже ничего не дали.
+
+    В отличие от _ocr_badge_hits светлый/инвертированный варианты здесь
+    берутся ПОСЛЕ бинаризации (не до) — до бинаризации инверсия входного
+    серого не меняет результат adaptiveThreshold по сути, а вот от какой
+    стороны (светлый текст на тёмном или наоборот) физически лежит блик —
+    заранее не известно, поэтому пробуем оба варианта уже бинаризованного
+    изображения."""
+    upscaled = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+    binarized = cv2.adaptiveThreshold(upscaled, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 10)
+    hits = []
+    for variant in (binarized, 255 - binarized):
+        data = pytesseract.image_to_data(variant, config=f"--psm {psm}", output_type=pytesseract.Output.DICT)
+        for i in range(len(data["text"])):
+            txt = re.sub(r"[^A-Za-z]", "", data["text"][i]).upper()
+            conf = float(data["conf"][i]) if data["conf"][i] not in ("-1", "") else -1
+            if not txt or conf < 20:
+                continue
+            match = _fuzzy_badge_word(txt)
+            if match is None:
+                continue
+            target, dist = match
+            x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
+            hits.append((target, dist, x / scale, y / scale, w / scale, h / scale))
+    return hits
+
+
 def _badge_corner_regions(img):
     """Нижняя полоса кадра целиком (не только углы) — см. T-156.
 
@@ -1085,6 +1119,18 @@ def _hits_overlap(box_a, box_b, tol_frac=0.6):
     return abs(cx_a - cx_b) <= tol and abs(cy_a - cy_b) <= tol
 
 
+_BADGE_CLUSTER_TOL_MULT = 3.0  # T-159 (09.09.2026): см. докстринг _accept_badge_hits
+                                # про кластеризацию вокруг якоря — во сколько
+                                # раз больше размера якоря разрешаем разброс
+                                # ДРУГИХ слов, чтобы всё ещё считать их частью
+                                # ТОГО ЖЕ бейджа, а не совпадением где-то ещё
+                                # в кадре. WINNER/AUTO/CLUB на реальных фото
+                                # разнесены по ширине примерно на 1-2 своих
+                                # высоты — 3x даёт запас, но не настолько
+                                # большой, чтобы захватить противоположный
+                                # край широкой (2560px) полосы поиска.
+
+
 def _accept_badge_hits(all_hits):
     """Общая логика принятия решения "нашли/не нашли бейдж" по накопленным
     OCR-совпадениям (target, dist, x, y, w, h в системе координат кадра) —
@@ -1107,12 +1153,47 @@ def _accept_badge_hits(all_hits):
     в той же точке кадра (_hits_overlap). Настоящий текст на табличке
     обычно детектится в одном и том же месте почти при любых настройках
     OCR; случайное совпадение на текстуре (спицы диска, хром, шторка) —
-    как правило разовая случайность одного конкретного прогона."""
+    как правило разовая случайность одного конкретного прогона.
+
+    09.09.2026 (T-159, жалоба "бейдж не распознал" — реальное фото Audi A8,
+    WINNER AUTO CLUB, студийная съёмка с ярким бликом на хромированной
+    рамке таблички): добавлен adaptive-threshold вариант OCR (см.
+    _ocr_badge_hits_adaptive, третий уровень в _find_badge_box — после
+    серого/инвертированного и CLAHE) для случая, когда блик настолько
+    пересвечен, что ГЛОБАЛЬНАЯ бинаризация (что серый/инвертированный, что
+    CLAHE — тоже глобальный порог для Tesseract) сливает часть букв с
+    рамкой/бликом в одно пятно. Adaptive-порог локальный — устойчивее к
+    такому блику, но и заметно шумнее на посторонних деталях кадра (хром
+    решётки, складки шторки) — при первой же проверке дал ложное
+    срабатывание на ТОМ ЖЕ фото Nissan Patrol, что уже фигурировало в T-156
+    (см. выше): "AUTO" и "WINNER" нашлись НЕЗАВИСИМО в двух разных, ничем не
+    связанных концах кадра, и старая проверка "≥2 разных слова" принимала
+    это как есть, не глядя, ГДЕ они найдены — получился один "бейдж"
+    шириной 2129px на всю полосу поиска.
+
+    Чтобы не терять эту защиту, ветка "≥2 разных слова" (и "1 сильное")
+    теперь смотрит не на ВСЕ найденные хиты, а сперва берёт "якорь" — хит с
+    наименьшим расстоянием редактирования среди всех — и оставляет для
+    дальнейшего разбора только хиты в пределах _BADGE_CLUSTER_TOL_MULT
+    радиусов якоря (_hits_overlap использует ту же идею, но только для
+    повторных находок ОДНОГО слова — здесь то же самое, но между РАЗНЫМИ
+    словами одного бейджа, которые физически лежат рядом на одной табличке).
+    Проверено на всех 4 фото регрессии T-156 + новом Audi — ни одного
+    изменения в старых результатах, Audi находится (см. TASKS.md T-159)."""
     if not all_hits:
         return None, set()
 
+    anchor = min(all_hits, key=lambda h: h[1])
+    _, _, ax, ay, aw, ah = anchor
+    anchor_tol = _BADGE_CLUSTER_TOL_MULT * max(aw, ah, 1)
+    acx, acy = ax + aw / 2, ay + ah / 2
+    clustered_hits = [
+        h for h in all_hits
+        if abs((h[2] + h[4] / 2) - acx) <= anchor_tol and abs((h[3] + h[5] / 2) - acy) <= anchor_tol
+    ]
+
     best_per_word = {}
-    for target, dist, x, y, ww, hh in all_hits:
+    for target, dist, x, y, ww, hh in clustered_hits:
         if target not in best_per_word or dist < best_per_word[target][0]:
             best_per_word[target] = (dist, x, y, ww, hh)
 
@@ -1181,7 +1262,16 @@ def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False
     не тратим время впустую в частом случае, когда он не нужен. Замер на
     реальных фото жалобы: ~100-200с/фото до оптимизации -> ощутимо
     быстрее на фото с нормальным контрастом (LX600, BMW Patrol), без
-    изменений на фото, где CLAHE всё равно требуется (BMW X5)."""
+    изменений на фото, где CLAHE всё равно требуется (BMW X5).
+
+    09.09.2026 (T-159): добавлен ТРЕТИЙ уровень — adaptive-threshold
+    (_ocr_badge_hits_adaptive, см. докстринг _accept_badge_hits) — пробуется,
+    только если и серый/инвертированный, И CLAHE ничего уверенного не дали.
+    Ещё дороже CLAHE (тоже 2 варианта x scales x psms), но на реальных фото
+    регрессии T-156 запускается ТОЛЬКО на тех двух, где CLAHE и так уже не
+    находил ничего (03/04 из BADGE_DETECTION_SPEC — на них лишние ~60-90с,
+    было и так самое медленное фото) — на фото с нормальным контрастом
+    порядок тот же, что и был (не запускается вообще)."""
     if regions is None:
         regions = _badge_corner_regions(img)
     if scales is None:
@@ -1194,6 +1284,7 @@ def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False
             continue
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         region_hits = []
+        accepted = False
         for variant in (gray, 255 - gray):
             for scale in scales:
                 for p in psms:
@@ -1201,11 +1292,20 @@ def _find_badge_box(img, regions=None, scales=None, psm=None, return_words=False
                         region_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
             box, _ = _accept_badge_hits(region_hits)
             if box is not None:
-                break  # нашли уверенно без CLAHE — второй базовый вариант/CLAHE не нужны
-        else:
+                accepted = True
+                break  # нашли уверенно без CLAHE — второй базовый вариант/CLAHE/adaptive не нужны
+        if not accepted:
             for scale in scales:
                 for p in psms:
                     for target, dist, x, y, ww, hh in _ocr_badge_hits(_clahe_enhance(gray), scale=scale, psm=p):
+                        region_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
+            box, _ = _accept_badge_hits(region_hits)
+            if box is not None:
+                accepted = True
+        if not accepted:
+            for scale in scales:
+                for p in psms:
+                    for target, dist, x, y, ww, hh in _ocr_badge_hits_adaptive(gray, scale=scale, psm=p):
                         region_hits.append((target, dist, sx0 + x, sy0 + y, ww, hh))
         all_hits.extend(region_hits)
 
@@ -1846,7 +1946,7 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
     return media_list, montage_used
 
 
-async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username=None, test_only_sources=frozenset(), video_dry_run_sources=frozenset({"winner_auto_club"})):
+async def handle_group(client, source_username, messages, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username=None, test_only_sources=frozenset(), video_dry_run_sources=frozenset({"winner_auto_club"}), preposting_group=None):
     ids = [m.id for m in messages]
     text = next((m.raw_text for m in messages if m.raw_text and m.raw_text.strip()), "")
     if not text.strip():
@@ -1964,6 +2064,21 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
             price_usd=parsed.get("price_usd_total") if parsed else None,
             price_eur=parsed.get("price_eur_total") if parsed else None,
         )
+        if preposting_group:
+            # T-160 (09.09.2026, запрошено пользователем — "через юзербота
+            # можна ложить в группу предпостинг рилс" + ссылка-приглашение,
+            # уточнено — "только в группу предпостинга"): смонтированный
+            # рилс-ролик (короткий вертикальный формат с текстом на видео,
+            # build_instagram_caption) теперь идёт ТОЛЬКО в эту группу для
+            # ручного отбора/заливки в Instagram вручную — вместо решения по
+            # цене/DRY_RUN/окну постинга выше (send_targets/note), которое
+            # для остального медиа того же поста не менялось. Раньше (до
+            # этой правки) ролик фактически ВСЕГДА уходил в тестовую группу
+            # (winner_auto_club — единственный AUTO_MONTAGE-источник с живым
+            # трафиком — целиком в TEST_ONLY_SOURCES), в боевые каналы не
+            # попадал ни разу — пользователь подтвердил это отдельно.
+            send_targets = [preposting_group]
+            note = " (рилс-ролик -> группа предпостинга)"
 
     price_str = (f"{price_rub:,}".replace(",", " ") + " ₽") if price_rub is not None else "не определена (нет парсера для источника)"
     logger.info(
@@ -2001,7 +2116,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
     save_state(state)
 
 
-async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, poll_seconds=120):
+async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=None, poll_seconds=120):
     """T-84: фоновая задача, раз в poll_seconds проверяет, открыто ли окно
     постинга (08:00-21:30 МСК) и, если да, разбирает userbot_pending_queue.json
     — посты, которые в своё время попали туда из-за window-ограничения в
@@ -2043,7 +2158,7 @@ async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate
                 if not group:
                     logger.warning("[%s#%s] сообщения из очереди отложенных больше недоступны (удалены?) — убираю из очереди", source_username, ids)
                     continue
-                await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources)
+                await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
         except Exception:
             logger.exception("Ошибка в фоновой задаче отправки отложенных постов — продолжаю, попробую на следующем цикле")
 
@@ -2186,6 +2301,9 @@ async def main():
     # боевые каналы здесь не затрагиваются вообще.
     status_card_enabled = env.get("STATUS_CARD_ENABLED", "false").strip().lower() == "true"
     status_card_daily_hour = int(env.get("STATUS_CARD_DAILY_HOUR", "20"))
+    # T-160 (09.09.2026, запрошено пользователем): группа для рилс-роликов
+    # (auto_montage) — ссылка-приглашение, см. комментарий у handle_group().
+    preposting_group_invite = env.get("PREPOSTING_GROUP_INVITE", "").strip()
 
     if not (api_id and api_hash):
         raise SystemExit("userbot_config.env: нужны API_ID/API_HASH (см. userbot_login.py)")
@@ -2204,6 +2322,13 @@ async def main():
     if (dry_run or video_dry_run or test_only_sources or status_card_enabled) and test_group_invite:
         test_group = await ensure_test_group(client, test_group_invite)
 
+    preposting_group = None
+    # T-160: вступаем в группу предпостинга рилсов, если ссылка задана —
+    # ensure_test_group() универсальна (просто "вступить по инвайту"), имя
+    # оставлено как есть, чтобы не переименовывать уже проверенную функцию.
+    if preposting_group_invite:
+        preposting_group = await ensure_test_group(client, preposting_group_invite)
+
     # T-84: фоновая задача разбирает очередь постов, отложенных из-за окна
     # постинга (08:00-21:30 МСК) — не блокирует ни бэкфилл, ни живой поток
     # сообщений ниже, просто периодически (раз в ~120с) проверяет очередь.
@@ -2213,6 +2338,7 @@ async def main():
     asyncio.create_task(_pending_queue_flusher(
         client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run,
         test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources,
+        preposting_group=preposting_group,
     ))
     # T-99 (30.08.2026): очередь ручных постов (userbot_manual_queue.json) —
     # опрашивается раз в ~60с, отправляет через этот же живой client.
@@ -2265,7 +2391,7 @@ async def main():
                     # проверки каждый рестарт заново постил бы весь бэкфилл).
                     skipped += 1
                     continue
-                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources)
+                await handle_group(client, source, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
             if skipped:
                 logger.info("[%s] %s из %s постов бэкфилла уже были обработаны раньше — пропущены", source, skipped, len(groups))
         logger.info("--- Конец стартового бэкфилла, жду новые посты в реальном времени ---")
@@ -2289,7 +2415,7 @@ async def main():
             # устраивала) — этот пост уже был отправлен, не дублируем.
             logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, ids)
             return
-        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources)
+        await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
 
     # T-108: подписываемся по РЕАЛЬНЫМ текущим хендлам (SOURCE_TG_HANDLE),
     # иначе переименованный канал (например bezpokrasa -> AutoLibraryChina)
@@ -2310,7 +2436,7 @@ async def main():
             if _already_sent(state, source_username, [msg.id]):
                 logger.info("[%s#%s] уже обработано ранее (повтор доставки?) — пропускаю", source_username, [msg.id])
                 return
-            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources)
+            await handle_group(client, source_username, [msg], targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
             return
         gid = msg.grouped_id
         pending_albums.setdefault(gid, []).append(msg)

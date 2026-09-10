@@ -20,5 +20,4 @@ venv/
 node_modules/
 *.session
 *.session-journal
-*.mov
-manual_posts/
+car_specs_cache.json

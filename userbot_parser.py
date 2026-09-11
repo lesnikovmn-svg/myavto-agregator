@@ -1915,15 +1915,26 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
                         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                     )
                     out, _ = await proc.communicate()
-                    log_tail = out.decode("utf-8", "replace")[-2000:] if out else ""
+                    out_text = out.decode("utf-8", "replace") if out else ""
                     if proc.returncode != 0 or not os.path.exists(out_path):
+                        # T-162 (11.09.2026): раньше здесь брали хвост в 2000
+                        # символов — на реальном падении (bezpokrasa, код 228)
+                        # это отрезало САМ текст ffmpeg-ошибки (полная
+                        # Python-трассировка + при необходимости ещё и
+                        # ffmpeg-баннер/вывод перед ней легко перевешивают
+                        # 2000 символов). auto_montage.py теперь сам кладёт
+                        # stderr/stdout ffmpeg в текст исключения (см.
+                        # _run_ffmpeg в auto_montage.py) — здесь просто даём
+                        # этому тексту больше шансов не быть отрезанным.
+                        # Только на пути падения — на успешном пути (ниже)
+                        # объём лога не менялся, там урезать незачем.
                         logger.warning(
                             "[%s#%s] auto_montage подпроцесс завершился с кодом %s — шлю оригинал видео\n%s",
-                            source_username, m.id, proc.returncode, log_tail,
+                            source_username, m.id, proc.returncode, out_text[-6000:],
                         )
                         media_list.append(m.media)
                         continue
-                    logger.info("[%s#%s] auto_montage подпроцесс:\n%s", source_username, m.id, log_tail)
+                    logger.info("[%s#%s] auto_montage подпроцесс:\n%s", source_username, m.id, out_text[-2000:])
                     with open(out_path, "rb") as f:
                         processed = f.read()
                 bio = io.BytesIO(processed)

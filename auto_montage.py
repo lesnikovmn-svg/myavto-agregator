@@ -131,10 +131,37 @@ _VFILT_BASE = (
 )
 
 
+def _run_ffmpeg(cmd, text=False):
+    """T-162 (11.09.2026, расследование "в группу предпостинга ничего не
+    пришло"): раньше каждый subprocess.run(...) в этом файле использовал
+    check=True + capture_output=True, но НИКТО не читал e.stderr при падении
+    — CalledProcessError.__str__() выводит только команду и код возврата, не
+    сам текст ошибки ffmpeg. В реальном случае (bezpokrasa, 10.09.2026,
+    _prep()'s trim, код 228) в journalctl улетела полная трассировка, но
+    БЕЗ единого слова о том, что именно не понравилось ffmpeg — расследование
+    упёрлось в стену. Эта обёртка ничего не меняет в поведении (тот же
+    check=True/capture_output=True), но при падении явно кладёт
+    stderr/stdout в текст нового исключения, чтобы при следующем падении
+    настоящая причина была видна прямо в логах, без повторной поимки бага
+    вслепую."""
+    try:
+        return subprocess.run(cmd, check=True, capture_output=True, text=text)
+    except subprocess.CalledProcessError as e:
+        stderr, stdout = e.stderr, e.stdout
+        if not text:
+            stderr = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else stderr
+            stdout = stdout.decode("utf-8", "replace") if isinstance(stdout, bytes) else stdout
+        detail = (stderr or stdout or "(пусто)").strip()
+        raise RuntimeError(
+            f"ffmpeg/ffprobe завершился с кодом {e.returncode}: {' '.join(cmd)}\n"
+            f"--- stderr/stdout ---\n{detail}"
+        ) from e
+
+
 def _ffprobe_duration(path):
-    out = subprocess.run(
+    out = _run_ffmpeg(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
-        capture_output=True, text=True, check=True,
+        text=True,
     )
     return float(out.stdout.strip())
 
@@ -247,10 +274,9 @@ def _best_window(path, t0, t1, want_dur, sample_every=0.2):
 
 
 def _extract(src, t0, dur, out_path):
-    subprocess.run(
+    _run_ffmpeg(
         ["ffmpeg", "-y", "-ss", f"{t0:.3f}", "-t", f"{dur:.3f}", "-i", src,
          "-c:v", "libx264", "-crf", "18", "-an", out_path],
-        check=True, capture_output=True,
     )
 
 
@@ -361,10 +387,7 @@ def _vertical(in_path, out_path, text=None, text_top=True, hold_extra=0.0):
         filt += f",drawtext=fontfile={FONT}:text='{safe}':fontsize={fontsize}:fontcolor=white:borderw=6:bordercolor=black:line_spacing=10:x=(w-text_w)/2:y={y}"
     if hold_extra > 0:
         filt += f",tpad=stop_mode=clone:stop_duration={hold_extra:.2f}"
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", in_path, "-vf", filt, "-an", out_path],
-        check=True, capture_output=True,
-    )
+    _run_ffmpeg(["ffmpeg", "-y", "-i", in_path, "-vf", filt, "-an", out_path])
 
 
 def _hook_text(parsed):
@@ -430,8 +453,7 @@ def build_short(in_path, parsed, out_path, log=lambda msg: None, source=None):
             painted = c["path"]
         trimmed = painted + ".trim.mp4"
         actual_dur = min(dur_cap, c["dur"])
-        subprocess.run(["ffmpeg", "-y", "-i", painted, "-t", f"{actual_dur:.3f}", "-an", trimmed],
-                        check=True, capture_output=True)
+        _run_ffmpeg(["ffmpeg", "-y", "-i", painted, "-t", f"{actual_dur:.3f}", "-an", trimmed])
         vert = trimmed + ".vert.mp4"
         _vertical(trimmed, vert, text=text, text_top=text_top, hold_extra=hold)
         return vert
@@ -452,10 +474,9 @@ def build_short(in_path, parsed, out_path, log=lambda msg: None, source=None):
         for s in segs_final:
             f.write(f"file '{s}'\n")
     silent_out = out_path + ".silent.mp4"
-    subprocess.run(
+    _run_ffmpeg(
         ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path,
          "-c:v", "libx264", "-crf", "20", "-r", "30", silent_out],
-        check=True, capture_output=True,
     )
 
     total_dur = _ffprobe_duration(silent_out)
@@ -464,20 +485,17 @@ def build_short(in_path, parsed, out_path, log=lambda msg: None, source=None):
         # T-114: отдельная фоновая музыка вместо звука из исходника —
         # -stream_loop -1 на случай, если трек короче итогового ролика,
         # -t обрезает до нужной длины в любом случае (короче или длиннее).
-        subprocess.run(
+        _run_ffmpeg(
             ["ffmpeg", "-y", "-stream_loop", "-1", "-i", MUSIC_TRACK_PATH, "-t", f"{total_dur:.3f}",
              "-af", f"volume={MUSIC_VOLUME}", "-c:a", "aac", audio_bed],
-            check=True, capture_output=True,
         )
     else:
-        subprocess.run(
+        _run_ffmpeg(
             ["ffmpeg", "-y", "-i", in_path, "-t", f"{total_dur:.3f}", "-vn", "-c:a", "aac", audio_bed],
-            check=True, capture_output=True,
         )
-    subprocess.run(
+    _run_ffmpeg(
         ["ffmpeg", "-y", "-i", silent_out, "-i", audio_bed, "-map", "0:v", "-map", "1:a",
          "-c:v", "copy", "-c:a", "aac", "-shortest", out_path],
-        check=True, capture_output=True,
     )
 
     log(f"build_short: готово за {time.time() - t0_all:.1f}с, длительность ролика {total_dur:.1f}с -> {out_path}")

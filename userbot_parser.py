@@ -121,6 +121,8 @@ except ImportError:  # pragma: no cover
     parse_post_for_status_card = None
 from telethon import TelegramClient, events
 from telethon.tl.functions.messages import ImportChatInviteRequest
+from telethon.tl.functions.stories import SendStoryRequest
+from telethon.tl.types import InputMediaUploadedPhoto, InputPrivacyValueAllowAll
 from telethon.errors import UserAlreadyParticipantError, MediaCaptionTooLongError
 
 logging.basicConfig(
@@ -1527,7 +1529,56 @@ def _status_card_richness(car) -> int:
     return len(car.specs) * 10 + (2 if car.year else 0)
 
 
-async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix):
+async def _post_png_as_story(client, peer, png_bytes, caption=None, period=86400):
+    """T-165 (12.09.2026, запрошено пользователем — "как можно сделать
+    автопостинг карточки дня в статсы ТГ, и в статус инсты?"): публикует
+    PNG как НОВУЮ сторис в Telegram через raw-запрос stories.sendStory —
+    высокоуровневого метода в Telethon для этого нет (проверено перед
+    реализацией). peer="me" — личный аккаунт, под которым залогинен сам
+    юзербот; peer=username/id канала — сторис от имени канала.
+
+    Требования на стороне Telegram, которые НЕЛЬЗЯ проверить заранее (нет
+    способа протестировать это из песочницы, где пишется код — см.
+    test_send_story_once.py для ручной проверки на VPS перед включением в
+    боевой пайплайн):
+    - peer="me": нужен Telegram Premium на этом аккаунте (пользователь
+      подтвердил, что он есть);
+    - peer=канал: у аккаунта должно быть админ-право "публиковать сторис"
+      именно в этом канале, и у канала должно хватать буст-очков (иначе
+      Telegram вернёт BOOSTS_REQUIRED).
+    Поднимает исключение наружу как есть (с полным текстом ошибки от
+    Telegram) — вызывающий код (_post_status_card_stories) сам решает, что
+    с ней делать; здесь не глушим, чтобы текст ошибки не потерялся (тот же
+    урок, что и в T-162 про ffmpeg stderr)."""
+    uploaded = await client.upload_file(png_bytes)
+    media = InputMediaUploadedPhoto(file=uploaded)
+    await client(SendStoryRequest(
+        peer=peer,
+        media=media,
+        privacy_rules=[InputPrivacyValueAllowAll()],
+        period=period,
+        caption=caption,
+    ))
+
+
+async def _post_status_card_stories(client, png_bytes, caption, story_targets):
+    """Публикует одну и ту же карточку как сторис на каждый peer из
+    story_targets (например [channel_username, "me"]) НЕЗАВИСИМО друг от
+    друга — провал на одном (скажем, не хватает буст-очков у канала) не
+    должен мешать публикации на остальные. Каждый провал логируется с
+    полным текстом ошибки (logger.exception), но не поднимается наружу —
+    сбой публикации сторис не должен помешать обычной отправке карточки
+    сообщением в _render_and_send_status_card."""
+    for peer in story_targets:
+        label = "me (личный аккаунт)" if peer == "me" else str(peer)
+        try:
+            await _post_png_as_story(client, peer, png_bytes, caption=caption)
+            logger.info("[status_card][story] опубликована сторис -> %s", label)
+        except Exception:
+            logger.exception("[status_card][story] не удалось опубликовать сторис -> %s", label)
+
+
+async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix, story_targets=None):
     """Скачивает фото, рендерит карточку (status_card.render_status_card) и
     шлёт её ТОЛЬКО в переданную сюда группу (решение пользователя — до
     подтверждения качества на реальном потоке публикация карточек в боевые
@@ -1541,7 +1592,12 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
     причинам (не переименовывали, чтобы не раздувать диф) — реально сюда
     теперь передаётся preposting_group, если он настроен (см. вызов в
     _daily_status_card_task/main() ниже), иначе прежний test_group как
-    запасной вариант."""
+    запасной вариант.
+
+    T-165 (12.09.2026): опциональный story_targets (см.
+    _post_status_card_stories) — та же карточка ДОПОЛНИТЕЛЬНО публикуется
+    как сторис. Выключено по умолчанию (None/пусто) до ручной проверки на
+    реальном Telegram-аккаунте (см. STATUS_CARD_STORY_ENABLED в main())."""
     ids = [m.id for m in messages]
     try:
         photo_bytes = await client.download_media(photo_message, file=bytes)
@@ -1562,6 +1618,10 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
             await client.send_message(test_group, caption, file=tmp_path)
             logger.info("[status_card][%s#%s] карточка сгенерирована и отправлена в тестовую группу", channel_label, ids)
             _archive_status_card(png_bytes, channel_label, ids, car)
+
+            if story_targets:
+                story_caption = f"{car.brand} {car.model} {car.year}\n{car.price}"
+                await _post_status_card_stories(client, png_bytes, story_caption, story_targets)
         finally:
             try:
                 os.remove(tmp_path)
@@ -1603,7 +1663,7 @@ async def _collect_today_candidates(client, channel_username, channel_label, hou
     return candidates
 
 
-async def _post_daily_best(client, channel_username, channel_label, test_group):
+async def _post_daily_best(client, channel_username, channel_label, test_group, story_targets=None):
     """T-158 (решение пользователя — "по 1 из каждой группы, самое
     привлекательное предложение", раз в день): выбирает среди постов
     channel_username за последние сутки ОДИН с наибольшим
@@ -1613,7 +1673,10 @@ async def _post_daily_best(client, channel_username, channel_label, test_group):
     test_group. Если за сутки не нашлось ни одного поста, из которого
     можно собрать карточку (нет фото, нет текста, не хватило данных для
     бренда/модели/цены) — ничего не публикуется, только запись в
-    STATUS_CARD_ARCHIVE_DIR (если задан) для последующего разбора."""
+    STATUS_CARD_ARCHIVE_DIR (если задан) для последующего разбора.
+
+    T-165: story_targets (опционально, см. _post_status_card_stories) —
+    прокидывается как есть в _render_and_send_status_card."""
     if render_status_card is None or parse_post_for_status_card is None or not test_group:
         return
     candidates = await _collect_today_candidates(client, channel_username, channel_label)
@@ -1629,6 +1692,7 @@ async def _post_daily_best(client, channel_username, channel_label, test_group):
     await _render_and_send_status_card(
         client, channel_label, group, car, photo_message, test_group,
         caption_prefix="🏆 Предложение дня (тест, T-158)",
+        story_targets=story_targets,
     )
 
 
@@ -1640,21 +1704,29 @@ def _seconds_until_next_run(hour_msk: int, now_msk=None) -> float:
     return (run_at - now_msk).total_seconds()
 
 
-async def _daily_status_card_task(client, target_my_avto5, target_optimal, test_group, daily_hour_msk):
+async def _daily_status_card_task(client, target_my_avto5, target_optimal, test_group, daily_hour_msk, status_card_story_enabled=False):
     """T-158: раз в сутки (в daily_hour_msk по МСК, тот же фиксированный
     UTC+3 без перехода на летнее/зимнее время, что и POSTING_WINDOW/
     _now_msk выше) подбирает и публикует в test_group по одному лучшему
     предложению за прошедшие сутки для КАЖДОГО целевого канала отдельно
     (MY_Avto5 и My_Avto_Optimal — решение пользователя, не общий подбор по
     обоим сразу). Ошибка в одном канале не должна останавливать другой или
-    сам цикл — try/except внутри цикла, не вокруг него."""
+    сам цикл — try/except внутри цикла, не вокруг него.
+
+    T-165 (12.09.2026, запрошено пользователем — "от имени каналов и в мой
+    личный номер @LesnikovM"): если status_card_story_enabled, для каждого
+    канала карточка ДОПОЛНИТЕЛЬНО публикуется как сторис от имени самого
+    канала (peer=channel) И на личный аккаунт (peer="me", тот же, под
+    которым залогинен юзербот) — оба публикуются независимо, см.
+    _post_status_card_stories."""
     while True:
         wait_s = _seconds_until_next_run(daily_hour_msk)
         logger.info("[status_card] следующий подбор предложения дня — через %.0f мин (в %02d:00 МСК)", wait_s / 60, daily_hour_msk)
         await asyncio.sleep(wait_s)
         for channel, label in [(target_my_avto5, "MY_Avto5"), (target_optimal, "My_Avto_Optimal")]:
             try:
-                await _post_daily_best(client, channel, label, test_group)
+                story_targets = [channel, "me"] if status_card_story_enabled else None
+                await _post_daily_best(client, channel, label, test_group, story_targets=story_targets)
             except Exception:
                 logger.exception("[status_card][%s] ошибка при суточном подборе предложения дня", label)
         # небольшой зазор, чтобы погрешность цикла (время выполнения самого
@@ -2326,6 +2398,19 @@ async def main():
     # _daily_status_card_task ниже по файлу.
     status_card_enabled = env.get("STATUS_CARD_ENABLED", "false").strip().lower() == "true"
     status_card_daily_hour = int(env.get("STATUS_CARD_DAILY_HOUR", "20"))
+    # T-165 (12.09.2026, запрошено пользователем — "как можно сделать
+    # автопостинг карточки дня в статсы ТГ, и в статус инсты?", уточнено —
+    # "от имени каналов и в мой личный номер @LesnikovM"): по умолчанию
+    # ВЫКЛЮЧЕНО — публикация НОВОЙ сторис через stories.sendStory ни разу
+    # не проверялась на реальном Telegram-аккаунте (нет способа
+    # протестировать это из песочницы, где писался код). Включать только
+    # после ручной проверки через test_send_story_once.py на VPS — там же
+    # станет видно, хватает ли Premium/буст-очков канала (Telegram сам
+    # вернёт понятную ошибку, если нет). Пока получится опубликовать
+    # сторис хотя бы в TG — Instagram Stories подхватит её сама в течение
+    # ~5 минут (omni-poster/stories-sync, отдельный уже работающий проект,
+    # см. TASKS.md T-165) без единой новой строчки интеграции с Instagram.
+    status_card_story_enabled = env.get("STATUS_CARD_STORY_ENABLED", "false").strip().lower() == "true"
     # T-160 (09.09.2026, запрошено пользователем): группа для рилс-роликов
     # (auto_montage) — ссылка-приглашение, см. комментарий у handle_group().
     preposting_group_invite = env.get("PREPOSTING_GROUP_INVITE", "").strip()
@@ -2487,11 +2572,13 @@ async def main():
     if status_card_enabled:
         asyncio.create_task(_daily_status_card_task(
             client, target_my_avto5, target_optimal, status_card_target, status_card_daily_hour,
+            status_card_story_enabled=status_card_story_enabled,
         ))
         logger.info(
-            "[status_card] T-158 включён — раз в сутки (%02d:00 МСК) в %s уйдёт по 1 лучшему предложению из MY_Avto5 и из My_Avto_Optimal",
+            "[status_card] T-158 включён — раз в сутки (%02d:00 МСК) в %s уйдёт по 1 лучшему предложению из MY_Avto5 и из My_Avto_Optimal%s",
             status_card_daily_hour,
             "группу предпостинга (T-163)" if preposting_group else "тестовую группу",
+            " + сторис от канала и на личный аккаунт (T-165)" if status_card_story_enabled else "",
         )
 
     await client.run_until_disconnected()

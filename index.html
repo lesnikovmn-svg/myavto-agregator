@@ -144,18 +144,29 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=2f225cc09c">
 <!-- Yandex.Metrika counter -->
+<!-- T-166 (12.09.2026, по итогам разбора соответствия 152-ФЗ): счётчик
+     раньше запускался безусловно при загрузке страницы, до какого-либо
+     согласия посетителя на cookie/трекинг. Теперь запуск вынесен в
+     loadYandexMetrika() и вызывается либо сразу (если согласие на cookie
+     уже сохранено с прошлого визита, localStorage cookieConsent==='accepted'),
+     либо по клику "Принять" в баннере cookie-согласия внизу страницы (см.
+     разметку и скрипт баннера перед </body>). Если посетитель отклоняет —
+     счётчик в эту сессию вообще не загружается. -->
 <script type="text/javascript">
-   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-   m[i].l=1*new Date();
-   for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-   k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
-   (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
-   ym(111117048, "init", {
-        clickmap:true,
-        trackLinks:true,
-        accurateTrackBounce:true,
-        webvisor:true
-   });
+   function loadYandexMetrika() {
+     (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+     m[i].l=1*new Date();
+     for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+     k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+     (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+     ym(111117048, "init", {
+          clickmap:true,
+          trackLinks:true,
+          accurateTrackBounce:true,
+          webvisor:true
+     });
+   }
+   if (localStorage.getItem('cookieConsent') === 'accepted') { loadYandexMetrika(); }
 </script>
 <noscript><div><img src="https://mc.yandex.ru/watch/111117048" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
 <!-- /Yandex.Metrika counter -->
@@ -1080,6 +1091,19 @@
       <textarea id="rv-text" placeholder="Расскажите о своём опыте — что заказывали, как прошла доставка" required></textarea>
       <label for="rv-contact" class="sr-only">Контакт для связи</label>
       <input type="text" id="rv-contact" placeholder="Телефон или Telegram (не публикуется, только для связи)" />
+      <!-- T-166 (12.09.2026, по запросу пользователя, по итогам разбора
+           соответствия сайта 152-ФЗ): форма отзыва собирает имя и контакт
+           (телефон/телеграм), но единственная из трёх форм на сайте была
+           без чекбокса согласия на обработку персональных данных — у
+           mr-consent (массовая заявка) и f-consent (форма контакта) он
+           уже был. required — форма настоящая (<form>, submit по кнопке
+           type="submit"), поэтому браузер сам блокирует отправку без
+           галочки ДО вызова submitReview(), как уже происходит для
+           required у rv-author/rv-text выше — доп. JS-проверка не нужна. -->
+      <label class="review-modal-consent">
+        <input type="checkbox" id="rv-consent" required />
+        <span>Согласен(на) с <a href="privacy-policy.html" target="_blank">политикой конфиденциальности</a>, даю согласие на обработку персональных данных</span>
+      </label>
       <button type="submit">Отправить отзыв</button>
       <div class="review-modal-note">Отзыв опубликуется после проверки модератором.</div>
     </form>
@@ -1243,8 +1267,15 @@
         <input id="f-site" type="text" placeholder="Сайт или Telegram канал" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;" />
         <label for="f-desc" class="sr-only">Описание компании</label>
         <textarea id="f-desc" placeholder="Коротко о компании (опционально)" rows="3" style="padding:11px 14px;border:1.5px solid #e8e6e0;border-radius:8px;font-size:14px;font-family:Inter,sans-serif;outline:none;resize:none;"></textarea>
+        <!-- T-166 (12.09.2026): required добавлен для семантики/доступности
+             (aria/скринридеры, показ браузером как обязательного поля) —
+             submitForm() в app.js и раньше проверял .checked программно
+             (эта форма не внутри <form>, кнопка вызывает submitForm() по
+             onclick, а не через нативный submit, поэтому один только
+             required тут ничего бы не блокировал без JS-проверки, которая
+             уже была). -->
         <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#6b6b62;line-height:1.5;cursor:pointer;">
-          <input id="f-consent" type="checkbox" style="margin-top:2px;flex-shrink:0;" />
+          <input id="f-consent" type="checkbox" required style="margin-top:2px;flex-shrink:0;" />
           <span>Согласен(на) с <a href="privacy-policy.html" target="_blank" style="color:#1a6b3c;">политикой конфиденциальности</a>, даю согласие на обработку персональных данных</span>
         </label>
         <button onclick="submitForm()" style="background:#1a6b3c;color:#fff;border:none;border-radius:8px;padding:13px;font-size:15px;font-weight:500;cursor:pointer;font-family:Inter,sans-serif;">Отправить заявку</button>
@@ -1322,6 +1353,39 @@
     <a href="oferta.html">Оферта</a>
   </div>
 </footer>
+
+<!-- T-166 (12.09.2026, по итогам разбора соответствия 152-ФЗ): cookie-баннер
+     при первом визите. До явного выбора посетителя (accepted/declined в
+     localStorage) счётчик Yandex.Metrika не загружается вообще (см.
+     loadYandexMetrika() в <head>) — баннер здесь не просто уведомление,
+     а реальный гейт перед постановкой cookie. Показ/скрытие — простой
+     display:none/flex по классу .cookie-banner-open, без анимационных
+     библиотек, тот же принцип "минимально, инлайн", что у остальных
+     мелких виджетов сайта. -->
+<div class="cookie-banner" id="cookieBanner">
+  <p class="cookie-banner-text">Мы используем cookie для аналитики посещаемости сайта. Продолжая пользоваться сайтом, вы соглашаетесь с этим — подробнее в <a href="privacy-policy.html" target="_blank">политике конфиденциальности</a>.</p>
+  <div class="cookie-banner-actions">
+    <button type="button" class="cookie-banner-decline" onclick="cookieConsentDecline()">Отклонить</button>
+    <button type="button" class="cookie-banner-accept" onclick="cookieConsentAccept()">Принять</button>
+  </div>
+</div>
+<script>
+  (function() {
+    var consent = localStorage.getItem('cookieConsent');
+    if (consent !== 'accepted' && consent !== 'declined') {
+      document.getElementById('cookieBanner').classList.add('cookie-banner-open');
+    }
+  })();
+  function cookieConsentAccept() {
+    localStorage.setItem('cookieConsent', 'accepted');
+    document.getElementById('cookieBanner').classList.remove('cookie-banner-open');
+    if (typeof loadYandexMetrika === 'function') { loadYandexMetrika(); }
+  }
+  function cookieConsentDecline() {
+    localStorage.setItem('cookieConsent', 'declined');
+    document.getElementById('cookieBanner').classList.remove('cookie-banner-open');
+  }
+</script>
 
 <script src="app.js?v=e76009ae9b"></script>
 </body>

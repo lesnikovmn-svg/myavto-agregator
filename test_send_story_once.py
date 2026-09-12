@@ -19,29 +19,40 @@
 достаточно, чтобы проверить сам факт публикации, не дожидаясь реального
 "предложения дня".
 
-Использует ОТДЕЛЬНЫЙ Telethon session-файл (копию основного, как и
-test_montage_once.py/T-111) — можно запускать даже пока systemd-сервис
-myavto-userbot работает, конфликта не будет.
+T-165quater (12.09.2026, найдено первым же реальным прогоном этого
+скрипта): раньше использовалась КОПИЯ основного юзербот-сеанса
+(технический номер @les_nik_m, без Premium) — реальная проверка показала
+PremiumAccountRequiredError даже для каналов, не только для "me" (Telegram
+требует Premium у аккаунта, ВЫПОЛНЯЮЩЕГО stories.sendStory, независимо от
+того, чья это сторис). Теперь скрипт использует ОТДЕЛЬНЫЙ сеанс
+PERSONAL_STORY_SESSION (myavto_story_personal.session, @LesnikovM —
+единственный аккаунт с Premium), тот же, что и боевой пайплайн (см.
+_get_personal_story_client в userbot_parser.py). Сеанс нужно один раз
+создать вручную:
+    python3 setup_personal_story_session.py
+Если он ещё не создан/не авторизован — этот скрипт сразу об этом скажет и
+остановится, не пытаясь угадывать.
 
-Ожидаемые исходы (все варианты — НОРМАЛЬНЫЙ результат диагностики, не баг):
-  - Успех -> сторис реально ушла на аккаунт/канал, id опубликованной сторис
-    напечатан. Дальше её должен подхватить omni-poster/stories-sync
-    (отдельный, уже работающий проект — см. TASKS.md T-165) и в течение
-    ~5 минут перезалить в Instagram Stories.
-  - PREMIUM_ACCOUNT_REQUIRED (для "me") -> на аккаунте почему-то не
-    определяется Premium, хотя пользователь подтвердил, что он есть —
-    возможно, другой аккаунт, чем ожидалось (сессия — не тот номер).
+Ожидаемые исходы (все варианты, кроме "сеанс не настроен" — НОРМАЛЬНЫЙ
+результат диагностики, не баг):
+  - Успех -> сторис реально ушла на аккаунт/канал. Дальше её должен
+    подхватить omni-poster/stories-sync (отдельный, уже работающий
+    проект — см. TASKS.md T-165) и в течение ~5 минут перезалить в
+    Instagram Stories.
+  - Сеанс не авторизован -> сначала запусти setup_personal_story_session.py.
+  - PREMIUM_ACCOUNT_REQUIRED -> на аккаунте личной сессии почему-то не
+    определяется Premium — проверь, что setup_personal_story_session.py
+    залогинил именно @LesnikovM, а не другой номер.
   - BOOSTS_REQUIRED (для канала) -> у канала не хватает буст-очков.
-  - CHAT_ADMIN_REQUIRED (для канала) -> у аккаунта нет права "публиковать
-    сторис" именно в этом канале (нужно выдать явно в правах администратора
-    канала).
+  - CHAT_ADMIN_REQUIRED (для канала) -> у @LesnikovM нет права
+    "публиковать сторис" именно в этом канале (нужно выдать явно в правах
+    администратора канала).
   - Любая другая ошибка -> текст выводится как есть, без интерпретации —
     разбираемся по факту, не гадаем заранее.
 """
 import asyncio
 import io
 import os
-import shutil
 import sys
 from datetime import datetime
 
@@ -53,10 +64,7 @@ except Exception:
     pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from userbot_parser import load_env, build_proxy, _post_png_as_story  # noqa: E402
-
-MAIN_SESSION = "myavto_userbot"
-TEST_SESSION = "myavto_userbot_test165"
+from userbot_parser import load_env, build_proxy, _post_png_as_story, PERSONAL_STORY_SESSION  # noqa: E402
 
 
 def _make_placeholder_png() -> bytes:
@@ -98,16 +106,19 @@ async def main():
     api_hash = env.get("API_HASH")
     proxy = build_proxy(env.get("PROXY_URL"))
 
-    if not os.path.exists(f"{MAIN_SESSION}.session"):
-        print(f"{MAIN_SESSION}.session не найден рядом со скриптом — запускать из /var/www/myavto-agregator")
+    session_file = f"{PERSONAL_STORY_SESSION}.session"
+    if not os.path.exists(session_file):
+        print(f"{session_file} не найден — сначала запусти:\n    python3 setup_personal_story_session.py")
+        print("(один раз, интерактивно — введёшь номер @LesnikovM и код подтверждения)")
         return
-    if not os.path.exists(f"{TEST_SESSION}.session"):
-        shutil.copy(f"{MAIN_SESSION}.session", f"{TEST_SESSION}.session")
-        print(f"скопировал {MAIN_SESSION}.session -> {TEST_SESSION}.session (отдельная сессия для теста)")
 
-    client = TelegramClient(TEST_SESSION, int(api_id), api_hash, proxy=proxy)
-    await client.start()
-    print("подключились к Telegram (тестовая сессия)")
+    client = TelegramClient(PERSONAL_STORY_SESSION, int(api_id), api_hash, proxy=proxy)
+    await client.connect()
+    if not await client.is_user_authorized():
+        print(f"{session_file} есть, но не авторизован — запусти заново:\n    python3 setup_personal_story_session.py")
+        await client.disconnect()
+        return
+    print("подключились к Telegram (личный сеанс для сторис)")
 
     me = await client.get_me()
     print(f"аккаунт: {me.first_name} (@{me.username}), premium={getattr(me, 'premium', None)}")

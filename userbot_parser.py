@@ -1529,23 +1529,61 @@ def _status_card_richness(car) -> int:
     return len(car.specs) * 10 + (2 if car.year else 0)
 
 
+# T-165quater (12.09.2026, найдено на реальной проверке через
+# test_send_story_once.py): технический юзербот-аккаунт (@les_nik_m, под
+# которым работает основной сервис) — БЕЗ Telegram Premium. Реальный тест
+# показал PremiumAccountRequiredError не только на peer="me", но и на
+# peer=@MY_Avto5/@My_Avto_Optimal — то есть Telegram требует Premium у
+# аккаунта, ВЫПОЛНЯЮЩЕГО stories.sendStory, независимо от того, чья это
+# сторис (личная или от канала). Значит, публиковать сторис вообще нельзя
+# тем же сеансом, что ведёт основной парсинг/постинг — нужен ОТДЕЛЬНЫЙ
+# Telegram-сеанс, авторизованный именно под @LesnikovM (там есть Premium,
+# подтверждено пользователем). Заводится один раз вручную интерактивно —
+# см. setup_personal_story_session.py — и используется для ВСЕХ сторис
+# (и "me", и от каналов), не только для личных.
+PERSONAL_STORY_SESSION = "myavto_story_personal"
+
+
+async def _get_personal_story_client(api_id, api_hash, proxy=None):
+    """Подключает (НЕ .start() — это фоновый/автоматический путь, здесь
+    нельзя интерактивно спрашивать код подтверждения) отдельный сеанс
+    @LesnikovM для публикации сторис (см. PERSONAL_STORY_SESSION выше).
+    Если сеанс не создан/не авторизован — возвращает None и логирует
+    понятную инструкцию, что делать, вместо непонятного упавшего вызова
+    stories.sendStory."""
+    client = TelegramClient(PERSONAL_STORY_SESSION, int(api_id), api_hash, proxy=proxy)
+    await client.connect()
+    if not await client.is_user_authorized():
+        await client.disconnect()
+        logger.error(
+            "[status_card][story] сеанс %s.session не авторизован — запусти один раз вручную "
+            "`python3 setup_personal_story_session.py` (интерактивно, введёшь номер @LesnikovM и код) — "
+            "публикация сторис пропущена",
+            PERSONAL_STORY_SESSION,
+        )
+        return None
+    return client
+
+
 async def _post_png_as_story(client, peer, png_bytes, caption=None, period=86400):
     """T-165 (12.09.2026, запрошено пользователем — "как можно сделать
     автопостинг карточки дня в статсы ТГ, и в статус инсты?"): публикует
     PNG как НОВУЮ сторис в Telegram через raw-запрос stories.sendStory —
     высокоуровневого метода в Telethon для этого нет (проверено перед
-    реализацией). peer="me" — личный аккаунт, под которым залогинен сам
-    юзербот; peer=username/id канала — сторис от имени канала.
+    реализацией). peer="me" — личный аккаунт, под которым залогинен
+    переданный client; peer=username/id канала — сторис от имени канала
+    (тем же client — см. T-165quater выше про то, почему это теперь всегда
+    отдельный personal_story-клиент, а не основной юзербот).
 
     Требования на стороне Telegram, которые НЕЛЬЗЯ проверить заранее (нет
     способа протестировать это из песочницы, где пишется код — см.
     test_send_story_once.py для ручной проверки на VPS перед включением в
     боевой пайплайн):
-    - peer="me": нужен Telegram Premium на этом аккаунте (пользователь
-      подтвердил, что он есть);
-    - peer=канал: у аккаунта должно быть админ-право "публиковать сторис"
+    - нужен Telegram Premium на аккаунте, которым публикуется сторис —
+      подтверждено эмпирически, и для peer="me", и для peer=канал;
+    - peer=канал: дополнительно нужно админ-право "публиковать сторис"
       именно в этом канале, и у канала должно хватать буст-очков (иначе
-      Telegram вернёт BOOSTS_REQUIRED).
+      Telegram вернёт BOOSTS_REQUIRED/CHAT_ADMIN_REQUIRED).
     Поднимает исключение наружу как есть (с полным текстом ошибки от
     Telegram) — вызывающий код (_post_status_card_stories) сам решает, что
     с ней делать; здесь не глушим, чтобы текст ошибки не потерялся (тот же
@@ -1571,24 +1609,38 @@ async def _post_png_as_story(client, peer, png_bytes, caption=None, period=86400
     ))
 
 
-async def _post_status_card_stories(client, png_bytes, caption, story_targets):
+async def _post_status_card_stories(api_id, api_hash, proxy, png_bytes, caption, story_targets):
     """Публикует одну и ту же карточку как сторис на каждый peer из
     story_targets (например [channel_username, "me"]) НЕЗАВИСИМО друг от
     друга — провал на одном (скажем, не хватает буст-очков у канала) не
     должен мешать публикации на остальные. Каждый провал логируется с
     полным текстом ошибки (logger.exception), но не поднимается наружу —
     сбой публикации сторис не должен помешать обычной отправке карточки
-    сообщением в _render_and_send_status_card."""
-    for peer in story_targets:
-        label = "me (личный аккаунт)" if peer == "me" else str(peer)
-        try:
-            await _post_png_as_story(client, peer, png_bytes, caption=caption)
-            logger.info("[status_card][story] опубликована сторис -> %s", label)
-        except Exception:
-            logger.exception("[status_card][story] не удалось опубликовать сторис -> %s", label)
+    сообщением в _render_and_send_status_card.
+
+    T-165quater: раньше принимал уже подключённый основной client
+    юзербота — теперь сам открывает и закрывает ОТДЕЛЬНЫЙ personal_story
+    сеанс (@LesnikovM, единственный с Premium — см. комментарий у
+    PERSONAL_STORY_SESSION) и публикует ИМ на все peer из story_targets,
+    включая каналы. Если сеанс не настроен/не авторизован —
+    _get_personal_story_client уже залогировал понятную инструкцию,
+    просто выходим, ничего не публикуя."""
+    client = await _get_personal_story_client(api_id, api_hash, proxy)
+    if client is None:
+        return
+    try:
+        for peer in story_targets:
+            label = "me (личный аккаунт)" if peer == "me" else str(peer)
+            try:
+                await _post_png_as_story(client, peer, png_bytes, caption=caption)
+                logger.info("[status_card][story] опубликована сторис -> %s", label)
+            except Exception:
+                logger.exception("[status_card][story] не удалось опубликовать сторис -> %s", label)
+    finally:
+        await client.disconnect()
 
 
-async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix, story_targets=None):
+async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix, story_targets=None, story_api_creds=None):
     """Скачивает фото, рендерит карточку (status_card.render_status_card) и
     шлёт её ТОЛЬКО в переданную сюда группу (решение пользователя — до
     подтверждения качества на реальном потоке публикация карточек в боевые
@@ -1607,7 +1659,10 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
     T-165 (12.09.2026): опциональный story_targets (см.
     _post_status_card_stories) — та же карточка ДОПОЛНИТЕЛЬНО публикуется
     как сторис. Выключено по умолчанию (None/пусто) до ручной проверки на
-    реальном Telegram-аккаунте (см. STATUS_CARD_STORY_ENABLED в main())."""
+    реальном Telegram-аккаунте (см. STATUS_CARD_STORY_ENABLED в main()).
+    story_api_creds — кортеж (api_id, api_hash, proxy) для отдельного
+    personal_story-сеанса (T-165quater); обязателен, если story_targets
+    непустой."""
     ids = [m.id for m in messages]
     try:
         photo_bytes = await client.download_media(photo_message, file=bytes)
@@ -1631,7 +1686,8 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
 
             if story_targets:
                 story_caption = f"{car.brand} {car.model} {car.year}\n{car.price}"
-                await _post_status_card_stories(client, png_bytes, story_caption, story_targets)
+                api_id, api_hash, proxy = story_api_creds
+                await _post_status_card_stories(api_id, api_hash, proxy, png_bytes, story_caption, story_targets)
         finally:
             try:
                 os.remove(tmp_path)
@@ -1673,7 +1729,7 @@ async def _collect_today_candidates(client, channel_username, channel_label, hou
     return candidates
 
 
-async def _post_daily_best(client, channel_username, channel_label, test_group, story_targets=None):
+async def _post_daily_best(client, channel_username, channel_label, test_group, story_targets=None, story_api_creds=None):
     """T-158 (решение пользователя — "по 1 из каждой группы, самое
     привлекательное предложение", раз в день): выбирает среди постов
     channel_username за последние сутки ОДИН с наибольшим
@@ -1703,6 +1759,7 @@ async def _post_daily_best(client, channel_username, channel_label, test_group, 
         client, channel_label, group, car, photo_message, test_group,
         caption_prefix="🏆 Предложение дня (тест, T-158)",
         story_targets=story_targets,
+        story_api_creds=story_api_creds,
     )
 
 
@@ -1714,7 +1771,7 @@ def _seconds_until_next_run(hour_msk: int, now_msk=None) -> float:
     return (run_at - now_msk).total_seconds()
 
 
-async def _daily_status_card_task(client, target_my_avto5, target_optimal, test_group, daily_hour_msk, status_card_story_enabled=False):
+async def _daily_status_card_task(client, target_my_avto5, target_optimal, test_group, daily_hour_msk, status_card_story_enabled=False, story_api_creds=None):
     """T-158: раз в сутки (в daily_hour_msk по МСК, тот же фиксированный
     UTC+3 без перехода на летнее/зимнее время, что и POSTING_WINDOW/
     _now_msk выше) подбирает и публикует в test_group по одному лучшему
@@ -1726,9 +1783,13 @@ async def _daily_status_card_task(client, target_my_avto5, target_optimal, test_
     T-165 (12.09.2026, запрошено пользователем — "от имени каналов и в мой
     личный номер @LesnikovM"): если status_card_story_enabled, для каждого
     канала карточка ДОПОЛНИТЕЛЬНО публикуется как сторис от имени самого
-    канала (peer=channel) И на личный аккаунт (peer="me", тот же, под
-    которым залогинен юзербот) — оба публикуются независимо, см.
-    _post_status_card_stories."""
+    канала (peer=channel) И на личный аккаунт (peer="me") — оба публикуются
+    независимо, см. _post_status_card_stories.
+
+    T-165quater: обе публикуются ОТДЕЛЬНЫМ personal_story-сеансом
+    (@LesnikovM, единственный с Premium), не тем client, что ведёт
+    остальной парсинг/постинг (см. story_api_creds — (api_id, api_hash,
+    proxy), обязателен при status_card_story_enabled=True)."""
     while True:
         wait_s = _seconds_until_next_run(daily_hour_msk)
         logger.info("[status_card] следующий подбор предложения дня — через %.0f мин (в %02d:00 МСК)", wait_s / 60, daily_hour_msk)
@@ -1736,7 +1797,7 @@ async def _daily_status_card_task(client, target_my_avto5, target_optimal, test_
         for channel, label in [(target_my_avto5, "MY_Avto5"), (target_optimal, "My_Avto_Optimal")]:
             try:
                 story_targets = [channel, "me"] if status_card_story_enabled else None
-                await _post_daily_best(client, channel, label, test_group, story_targets=story_targets)
+                await _post_daily_best(client, channel, label, test_group, story_targets=story_targets, story_api_creds=story_api_creds)
             except Exception:
                 logger.exception("[status_card][%s] ошибка при суточном подборе предложения дня", label)
         # небольшой зазор, чтобы погрешность цикла (время выполнения самого
@@ -2583,6 +2644,7 @@ async def main():
         asyncio.create_task(_daily_status_card_task(
             client, target_my_avto5, target_optimal, status_card_target, status_card_daily_hour,
             status_card_story_enabled=status_card_story_enabled,
+            story_api_creds=(api_id, api_hash, proxy),
         ))
         logger.info(
             "[status_card] T-158 включён — раз в сутки (%02d:00 МСК) в %s уйдёт по 1 лучшему предложению из MY_Avto5 и из My_Avto_Optimal%s",

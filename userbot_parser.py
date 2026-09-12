@@ -1529,10 +1529,19 @@ def _status_card_richness(car) -> int:
 
 async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix):
     """Скачивает фото, рендерит карточку (status_card.render_status_card) и
-    шлёт её ТОЛЬКО в test_group (решение пользователя — до подтверждения
-    качества на реальном потоке публикация карточек в боевые каналы не
-    рассматривается) + архивирует (см. _archive_status_card). Не поднимает
-    исключение наружу — любая ошибка здесь не должна ронять остальной бот."""
+    шлёт её ТОЛЬКО в переданную сюда группу (решение пользователя — до
+    подтверждения качества на реальном потоке публикация карточек в боевые
+    каналы не рассматривается) + архивирует (см. _archive_status_card). Не
+    поднимает исключение наружу — любая ошибка здесь не должна ронять
+    остальной бот.
+
+    T-163 (12.09.2026, запрошено пользователем — "в тестовую группу
+    приходит шаблонное фото, его нужно перенаправить пока в группу тг
+    предпостинг"): параметр всё ещё называется test_group по историческим
+    причинам (не переименовывали, чтобы не раздувать диф) — реально сюда
+    теперь передаётся preposting_group, если он настроен (см. вызов в
+    _daily_status_card_task/main() ниже), иначе прежний test_group как
+    запасной вариант."""
     ids = [m.id for m in messages]
     try:
         photo_bytes = await client.download_media(photo_message, file=bytes)
@@ -2308,8 +2317,13 @@ async def main():
     # STATUS_CARD_DAILY_HOUR по МСК) выбирается ОДНО, самое информативно
     # полное предложение за прошедшие сутки — ОТДЕЛЬНО для MY_Avto5 и для
     # My_Avto_Optimal (не общий подбор по обоим сразу), см.
-    # _daily_status_card_task. Публикация — ВСЕГДА только в test_group,
-    # боевые каналы здесь не затрагиваются вообще.
+    # _daily_status_card_task. Публикация — только в тестовую/предпостинговую
+    # группу, боевые каналы здесь не затрагиваются вообще. T-163
+    # (12.09.2026): изначально шло ВСЕГДА в test_group — по просьбе
+    # пользователя ("перенаправить пока в группу тг предпостинг") теперь, при
+    # настроенной группе предпостинга (см. PREPOSTING_GROUP_INVITE ниже),
+    # уходит туда вместо test_group — см. status_card_target у места запуска
+    # _daily_status_card_task ниже по файлу.
     status_card_enabled = env.get("STATUS_CARD_ENABLED", "false").strip().lower() == "true"
     status_card_daily_hour = int(env.get("STATUS_CARD_DAILY_HOUR", "20"))
     # T-160 (09.09.2026, запрошено пользователем): группа для рилс-роликов
@@ -2459,14 +2473,25 @@ async def main():
     # выбирать из каждой группы, самое привлекательное предложение").
     # Раз в сутки (_daily_status_card_task) отдельно для MY_Avto5 и для
     # My_Avto_Optimal подбирается ОДИН лучший пост за прошедшие сутки и
-    # публикуется в test_group — не по каждому новому посту.
+    # публикуется.
+    #
+    # T-163 (12.09.2026, запрошено пользователем — увидел карточку "🏆
+    # Предложение дня (тест, T-158)" в тестовой группе и попросил "его нужно
+    # перенаправить пока в группу тг предпостинг"): раньше карточка ВСЕГДА
+    # шла в test_group (см. старый комментарий у _daily_status_card_task) —
+    # теперь, если группа предпостинга (T-160, PREPOSTING_GROUP_INVITE)
+    # настроена, карточка идёт туда вместо test_group; test_group остаётся
+    # запасным вариантом, если preposting_group не настроен (например,
+    # STATUS_CARD_ENABLED включили, а PREPOSTING_GROUP_INVITE — нет).
+    status_card_target = preposting_group or test_group
     if status_card_enabled:
         asyncio.create_task(_daily_status_card_task(
-            client, target_my_avto5, target_optimal, test_group, status_card_daily_hour,
+            client, target_my_avto5, target_optimal, status_card_target, status_card_daily_hour,
         ))
         logger.info(
-            "[status_card] T-158 включён — раз в сутки (%02d:00 МСК) в тестовую группу уйдёт по 1 лучшему предложению из MY_Avto5 и из My_Avto_Optimal",
+            "[status_card] T-158 включён — раз в сутки (%02d:00 МСК) в %s уйдёт по 1 лучшему предложению из MY_Avto5 и из My_Avto_Optimal",
             status_card_daily_hour,
+            "группу предпостинга (T-163)" if preposting_group else "тестовую группу",
         )
 
     await client.run_until_disconnected()

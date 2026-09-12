@@ -1549,8 +1549,18 @@ async def _post_png_as_story(client, peer, png_bytes, caption=None, period=86400
     Поднимает исключение наружу как есть (с полным текстом ошибки от
     Telegram) — вызывающий код (_post_status_card_stories) сам решает, что
     с ней делать; здесь не глушим, чтобы текст ошибки не потерялся (тот же
-    урок, что и в T-162 про ffmpeg stderr)."""
-    uploaded = await client.upload_file(png_bytes)
+    урок, что и в T-162 про ffmpeg stderr).
+
+    T-165bis (12.09.2026, найдено при первой же ручной проверке через
+    test_send_story_once.py — реальный `PhotoExtInvalidError: The
+    extension of the photo is invalid`, до этого код ни разу не гонялся
+    против настоящего Telegram API): `client.upload_file(png_bytes)` без
+    явного `file_name` генерирует Telethon случайное имя файла БЕЗ
+    расширения — сервер Telegram проверяет расширение имени при загрузке
+    фото и отклоняет такой аплоад ещё до самого stories.sendStory. Явно
+    передаём `file_name="story.png"`, чтобы у файла было валидное
+    расширение."""
+    uploaded = await client.upload_file(png_bytes, file_name="story.png")
     media = InputMediaUploadedPhoto(file=uploaded)
     await client(SendStoryRequest(
         peer=peer,

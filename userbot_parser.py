@@ -1701,7 +1701,14 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
             _archive_status_card(png_bytes, channel_label, ids, car)
 
             if story_targets:
-                story_caption = f"{car.brand} {car.model} {car.year}\n{car.price}"
+                # T-170 (13.09.2026, по запросу пользователя — "в статус тг
+                # постить с ссылкой на сообщение получится?"): та же
+                # source_line (t.me-ссылка на исходный пост, см. T-169 чуть
+                # выше), что уже уходит в подпись обычного сообщения —
+                # добавлена и в подпись сторис. Telegram сам делает URL в
+                # подписи кликабельным (как и в обычных сообщениях/постах),
+                # отдельно формировать entities не нужно.
+                story_caption = f"{car.brand} {car.model} {car.year}\n{car.price}\n{source_line}"
                 api_id, api_hash, proxy = story_api_creds
                 await _post_status_card_stories(api_id, api_hash, proxy, png_bytes, story_caption, story_targets)
         finally:

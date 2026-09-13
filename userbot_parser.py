@@ -1640,7 +1640,7 @@ async def _post_status_card_stories(api_id, api_hash, proxy, png_bytes, caption,
         await client.disconnect()
 
 
-async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix, story_targets=None, story_api_creds=None):
+async def _render_and_send_status_card(client, channel_label, messages, car, photo_message, test_group, caption_prefix, story_targets=None, story_api_creds=None, channel_username=None):
     """Скачивает фото, рендерит карточку (status_card.render_status_card) и
     шлёт её ТОЛЬКО в переданную сюда группу (решение пользователя — до
     подтверждения качества на реальном потоке публикация карточек в боевые
@@ -1674,11 +1674,27 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
             with open(tmp_path, "rb") as f:
                 png_bytes = f.read()
 
+            # T-169 (13.09.2026, по запросу пользователя — "фото шаблон
+            # 'предложение дня' которое приходит в предпостинг, присылать с
+            # ссылкой"): раньше здесь был нечитаемый текст вида
+            # "MY_Avto5#4082-4081-4080-4079" (label канала + id сообщений
+            # через дефис) — не кликабелен, найти сам пост по нему нельзя.
+            # Теперь, если известен исходный @handle канала
+            # (channel_username — это тот же публичный канал, что и
+            # target_my_avto5/target_optimal, см. вызов в _post_daily_best),
+            # строим обычную t.me-ссылку на первое сообщение поста — по ней
+            # Telegram сразу открывает исходный пост (для альбома — всю
+            # группу фото). channel_username не задан (старые вызовы/тесты)
+            # — фолбэк на прежний текстовый вид, чтобы ничего не сломать.
+            if channel_username:
+                source_line = f"Источник: https://t.me/{channel_username.lstrip('@')}/{ids[0]}"
+            else:
+                source_line = f"Источник: {channel_label}#{'-'.join(str(i) for i in ids)}"
             caption = (
                 f"{caption_prefix}\n"
                 f"{car.brand} {car.model} {car.year}\n"
                 f"{car.price}\n"
-                f"Источник: {channel_label}#{'-'.join(str(i) for i in ids)}"
+                f"{source_line}"
             )
             await client.send_message(test_group, caption, file=tmp_path)
             logger.info("[status_card][%s#%s] карточка сгенерирована и отправлена в тестовую группу", channel_label, ids)
@@ -1760,6 +1776,7 @@ async def _post_daily_best(client, channel_username, channel_label, test_group, 
         caption_prefix="🏆 Предложение дня (тест, T-158)",
         story_targets=story_targets,
         story_api_creds=story_api_creds,
+        channel_username=channel_username,
     )
 
 

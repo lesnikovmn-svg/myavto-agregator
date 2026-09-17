@@ -1552,7 +1552,7 @@ async def _get_personal_story_client(api_id, api_hash, proxy=None):
     понятную инструкцию, что делать, вместо непонятного упавшего вызова
     stories.sendStory."""
     client = TelegramClient(PERSONAL_STORY_SESSION, int(api_id), api_hash, proxy=proxy)
-    await client.connect()
+    await asyncio.wait_for(client.connect(), timeout=_MEDIA_TIMEOUT)
     if not await client.is_user_authorized():
         await client.disconnect()
         logger.error(
@@ -1598,15 +1598,15 @@ async def _post_png_as_story(client, peer, png_bytes, caption=None, period=86400
     фото и отклоняет такой аплоад ещё до самого stories.sendStory. Явно
     передаём `file_name="story.png"`, чтобы у файла было валидное
     расширение."""
-    uploaded = await client.upload_file(png_bytes, file_name="story.png")
+    uploaded = await asyncio.wait_for(client.upload_file(png_bytes, file_name="story.png"), timeout=_MEDIA_TIMEOUT)
     media = InputMediaUploadedPhoto(file=uploaded)
-    await client(SendStoryRequest(
+    await asyncio.wait_for(client(SendStoryRequest(
         peer=peer,
         media=media,
         privacy_rules=[InputPrivacyValueAllowAll()],
         period=period,
         caption=caption,
-    ))
+    )), timeout=_MEDIA_TIMEOUT)
 
 
 async def _post_status_card_stories(api_id, api_hash, proxy, png_bytes, caption, story_targets):
@@ -1665,7 +1665,7 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
     непустой."""
     ids = [m.id for m in messages]
     try:
-        photo_bytes = await client.download_media(photo_message, file=bytes)
+        photo_bytes = await asyncio.wait_for(client.download_media(photo_message, file=bytes), timeout=_MEDIA_TIMEOUT)
         photo_buf = io.BytesIO(photo_bytes)
 
         tmp_path = f"/tmp/status_card_{uuid.uuid4().hex}.png"
@@ -1696,7 +1696,7 @@ async def _render_and_send_status_card(client, channel_label, messages, car, pho
                 f"{car.price}\n"
                 f"{source_line}"
             )
-            await client.send_message(test_group, caption, file=tmp_path)
+            await asyncio.wait_for(client.send_message(test_group, caption, file=tmp_path), timeout=_MEDIA_TIMEOUT)
             logger.info("[status_card][%s#%s] карточка сгенерирована и отправлена в тестовую группу", channel_label, ids)
             _archive_status_card(png_bytes, channel_label, ids, car)
 
@@ -1924,6 +1924,28 @@ _BACKFILL_TIMEOUT = 25
 _BACKFILL_RETRIES = 3
 _BACKFILL_RETRY_DELAY = 5
 
+# T-174 (17.09.2026, обнаружено пользователем — "статусы в тг каналы не
+# приходят"; расследование по journalctl на VPS): дважды за неделю (13.09,
+# 15.09) юзербот полностью зависал на дни — оба раза сразу после
+# одинакового следа в логе: "File lives in another DC" -> "Connecting to
+# ...:443/TcpFull... complete!" -> тишина навсегда. Это Telethon качает
+# или шлёт медиа, которое физически лежит на ДРУГОМ дата-центре Telegram --
+# известный класс зависаний cross-DC media-обмена в библиотеке: сама она не
+# ставит таймаут на этот обмен, а зависший await не поднимает исключение,
+# просто никогда не возвращает управление. Поскольку весь бот — один
+# последовательный процесс без параллельных обработчиков, зависание ЛЮБОГО
+# такого вызова останавливает вообще всё (не только текущий пост), пока не
+# перезапустят руками. Оборачиваем сами media-вызовы (download_media,
+# send_message с файлом, upload_file/SendStoryRequest, connect
+# personal_story-сессии) таймаутом — тот же принцип, что и
+# _BACKFILL_TIMEOUT (T-94) выше, только для приёма/отправки медиа, а не для
+# получения истории канала. При таймауте asyncio.wait_for поднимает
+# asyncio.TimeoutError — он ловится существующими except Exception/
+# logger.exception на местах вызова (тем же путём, что и любая другая
+# ошибка сети), просто вместо вечного зависания — понятная запись в логе
+# и переход к следующему посту/каналу.
+_MEDIA_TIMEOUT = 180
+
 # T-108 (01.09.2026, обнаружено пользователем — "на безпокрасе были посты,
 # почему не было постинга к нам?"): в логе стабильно повторялась
 # telethon.errors.rpcerrorlist.UsernameNotOccupiedError на "bezpokrasa" —
@@ -2063,7 +2085,7 @@ async def _prepare_media_list(client, source_username, messages, parsed=None):
                 with tempfile.TemporaryDirectory() as tmpdir:
                     in_path = os.path.join(tmpdir, f"{m.id}_in.mp4")
                     out_path = os.path.join(tmpdir, f"{m.id}_short.mp4")
-                    await client.download_media(m, file=in_path)
+                    await asyncio.wait_for(client.download_media(m, file=in_path), timeout=_MEDIA_TIMEOUT)
                     title = (parsed or {}).get("title") or ""
                     mileage = (parsed or {}).get("mileage") or ""
                     # T-95bis (01.09.2026): build_short() раньше вызывался
@@ -2276,7 +2298,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
                     if isinstance(item, io.BytesIO):
                         item.seek(0)
                 try:
-                    await client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False)
+                    await asyncio.wait_for(client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
                 except MediaCaptionTooLongError:
                     # Подпись реально не влезла (Telegram сам так решил) — шлём
                     # фото/видео без подписи, текст отдельным сообщением следом.
@@ -2284,10 +2306,10 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
                     for item in media_list:
                         if isinstance(item, io.BytesIO):
                             item.seek(0)
-                    await client.send_message(target, "", file=media_list)
-                    await client.send_message(target, post_text, parse_mode="md", link_preview=False)
+                    await asyncio.wait_for(client.send_message(target, "", file=media_list), timeout=_MEDIA_TIMEOUT)
+                    await asyncio.wait_for(client.send_message(target, post_text, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
             else:
-                await client.send_message(target, post_text, parse_mode="md", link_preview=False)
+                await asyncio.wait_for(client.send_message(target, post_text, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
             logger.info("[%s#%s] запощено в %s", source_username, ids, target)
         except Exception:
             logger.exception("[%s#%s] ошибка при постинге в %s", source_username, ids, target)

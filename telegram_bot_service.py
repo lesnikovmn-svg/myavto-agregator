@@ -225,6 +225,35 @@ _state_lock = threading.Lock()
 app = Flask(__name__)
 
 
+# T-178 (01.10.2026, обнаружено при восстановлении на новом VPS после
+# T-176/177): раньше сайт и этот API жили на одном домене
+# (myavto-agregator.ru), теперь сайт — на GitHub Pages, а API — на
+# отдельном поддомене api.myavto-agregator.ru. Для браузера это разные
+# origin'ы, и без явных CORS-заголовков fetch() с сайта на /api/*
+# блокируется САМИМ БРАУЗЕРОМ до отправки запроса — curl/серверные тесты
+# этого не видят (CORS — ограничение браузера, не сервера), поэтому баг
+# не проявлялся при ручной проверке через curl.
+ALLOWED_ORIGIN = "https://myavto-agregator.ru"
+
+
+@app.after_request
+def _add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
+@app.route("/api/mass-request", methods=["OPTIONS"])
+@app.route("/api/review", methods=["OPTIONS"])
+@app.route("/api/visit", methods=["OPTIONS"])
+def _cors_preflight():
+    # Браузер шлёт OPTIONS-preflight перед POST с JSON-телом — отвечаем
+    # пустым 204, заголовки добавит _add_cors_headers выше.
+    return ("", 204)
+
+
+
 # T-21 (21.08.2026): у /api/mass-request и /api/review не было вообще
 # никакой защиты от спама/накрутки — форма шлёт JSON без токена, скрипт
 # может дёргать её сколько угодно раз в секунду, заваливая admin-уведомления

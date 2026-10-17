@@ -313,7 +313,7 @@ document.getElementById('mainSearch').addEventListener('keydown', e => {
 // (EUR_RATE = CBR_RATES.EUR бросал ReferenceError, TDZ на EUR_RATE).
 // update_site.py теперь ищет с переводом строки перед "const", но
 // всё равно не переписывай следующую строку буквально нигде выше неё.
-const CBR_RATES = {"_date": "12.09.2026", "USD": 84.2569, "EUR": 97.8728, "CNY": 12.5519, "KRW": 0.062963};
+const CBR_RATES = {"_date": "01.10.2026", "USD": 83.5588, "EUR": 94.881, "CNY": 12.4732, "KRW": 0.061513};
 
 const EUR_RATE = CBR_RATES.EUR; // курс EUR нужен формуле пошлины отдельно от остальных валют
 

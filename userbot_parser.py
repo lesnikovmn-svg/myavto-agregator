@@ -160,14 +160,50 @@ MY_Avto — ваш надёжный партнёр в выборе авто! �
 OUR_FOOTER = f"{_OUR_FOOTER_INTRO}\n\n{_OUR_FOOTER_CONTACTS}"
 
 
-def build_footer(feedback_bot_username=None):
-    """Как OUR_FOOTER, но если задан FEEDBACK_BOT_USERNAME (T-78, бот
-    обратной связи) — вставляет ссылку на бота отдельной строкой перед
-    остальными контактами."""
-    if not feedback_bot_username:
+# T-188 (20.11.2026, запрошено пользователем — "в подписи к оферу оставим
+# Максим/Антон, а полный список контактов 1 раз в день с первым постом"):
+# обычный пост получает КОРОТКИЙ футер (бот + два личных контакта), а
+# полный (как был: "Почему MY_Avto" + все каналы/сайты/соцсети) — только
+# первый реально опубликованный в боевые каналы пост за сутки (МСК).
+_OUR_FOOTER_SHORT_CONTACTS = """✈️ Максим: [LesnikovM](https://t.me/LesnikovM) | [+7 938 409-67-08](tel:+79384096708)
+✈️ Антон: [Tohakmv](https://t.me/Tohakmv) | [+7 963 383-79-28](tel:+79633837928)"""
+
+FOOTER_STATE_PATH = Path("userbot_footer_state.json")
+
+
+def build_footer(feedback_bot_username=None, full=False):
+    """Короткий футер (по умолчанию): бот обратной связи, если задан, плюс
+    Максим/Антон. full=True — прежний полный футер (T-78): ссылку на бота
+    вставляет отдельной строкой перед остальными контактами."""
+    bot_line = (
+        f"📮 Оставить заявку боту: [Написать](https://t.me/{feedback_bot_username})"
+        if feedback_bot_username else None
+    )
+    if not full:
+        parts = [bot_line] if bot_line else []
+        parts.append(_OUR_FOOTER_SHORT_CONTACTS)
+        return "\n".join(parts)
+    if not bot_line:
         return OUR_FOOTER
-    bot_line = f"📮 Оставить заявку боту: [Написать](https://t.me/{feedback_bot_username})"
     return f"{_OUR_FOOTER_INTRO}\n\n{bot_line}\n{_OUR_FOOTER_CONTACTS}"
+
+
+def _full_footer_due():
+    """True, если сегодня (МСК) полный футер ещё не публиковался."""
+    try:
+        last = json.loads(FOOTER_STATE_PATH.read_text(encoding="utf-8")).get("last_full_date")
+    except (OSError, ValueError):
+        last = None
+    return last != _now_msk().date().isoformat()
+
+
+def _mark_full_footer_sent():
+    try:
+        FOOTER_STATE_PATH.write_text(
+            json.dumps({"last_full_date": _now_msk().date().isoformat()}), encoding="utf-8"
+        )
+    except OSError:
+        logger.exception("не удалось сохранить дату полного футера (%s)", FOOTER_STATE_PATH)
 
 # Строки источника, которые вычищаем перед репостом — их собственные сайт/
 # контакты/CTA, чтобы покупатель писал нам, а не в источник.
@@ -328,6 +364,76 @@ def mask_vin(text):
     return _VIN_RE.sub(lambda m: m.group(0)[:-5] + "*****", text)
 
 
+# T-189 (20.11.2026, запрошено пользователем — "из арталекса нужно тоже
+# текст объявления подправлять, указывать технические данные: мощность,
+# объём двигателя, какой привод, гибрид/электро/бензин/дизель"). Берём
+# ТОЛЬКО то, что есть в самом посте источника (или однозначно следует из
+# названия модели: 4MATIC/xDrive/quattro = полный привод, Plug-in Hybrid =
+# подзаряжаемый гибрид) — ничего не домысливаем по "знанию модели":
+# если в посте этих данных нет, блок просто не добавляется (честнее, чем
+# выдать правдоподобную, но непроверенную цифру).
+_SPEC_LINE_DROP_RE = re.compile(
+    r"^\W*(?:мощность|объ[её]м(?:\s*двигателя)?|привод|тип(?:\s*двигателя)?)\s*:", re.I
+)
+
+
+def extract_specs(text):
+    """-> dict с ключами power/volume/drive/fuel (только найденные)."""
+    specs = {}
+    low = text.lower()
+
+    hp = re.search(r"(\d{2,4})\s*(?:л\.?\s*с\b\.?|hp\b|ps\b)", text, re.I)
+    kw = re.search(r"(\d{2,4})\s*кВт(?!\s*[·*х.\-]?\s*ч)", text, re.I)
+    if hp and kw:
+        specs["power"] = f"{hp.group(1)} л.с. ({kw.group(1)} кВт)"
+    elif hp:
+        specs["power"] = f"{hp.group(1)} л.с."
+    elif kw:
+        specs["power"] = f"{kw.group(1)} кВт"
+
+    vol = re.search(r"(?<![\d.,])(\d[.,]\d)\s*(?:л\b|l\b|литр)", text, re.I)
+    if vol:
+        specs["volume"] = vol.group(1).replace(",", ".") + " л"
+
+    if re.search(r"полн\w*\s+привод|4matic|xdrive|quattro|\bawd\b|\b4wd\b|4x4", low):
+        specs["drive"] = "полный"
+    elif re.search(r"передн\w*\s+привод|\bfwd\b", low):
+        specs["drive"] = "передний"
+    elif re.search(r"задн\w*\s+привод|\brwd\b", low):
+        specs["drive"] = "задний"
+
+    if re.search(r"plug-?in|phev|подзаряжаем", low):
+        det = re.search(r"гибрид[^\n(]*\(([^)]+)\)", low)
+        specs["fuel"] = (
+            f"гибрид ({det.group(1).strip()}), подзаряжаемый" if det else "гибрид (подзаряжаемый)"
+        )
+    elif re.search(r"гибрид|hybrid|\bhev\b", low):
+        det = re.search(r"гибрид[^\n(]*\(([^)]+)\)", low)
+        specs["fuel"] = f"гибрид ({det.group(1).strip()})" if det else "гибрид"
+    elif re.search(r"электромобил|\bev\b|electric|полностью\s+электр", low):
+        specs["fuel"] = "электро"
+    elif "дизел" in low:
+        specs["fuel"] = "дизель"
+    elif "бензин" in low:
+        specs["fuel"] = "бензин"
+    return specs
+
+
+def format_specs_block(specs):
+    if not specs:
+        return ""
+    rows = []
+    if "fuel" in specs:
+        rows.append(f"• Тип двигателя: {specs['fuel']}")
+    if "volume" in specs:
+        rows.append(f"• Объём двигателя: {specs['volume']}")
+    if "power" in specs:
+        rows.append(f"• Мощность: {specs['power']}")
+    if "drive" in specs:
+        rows.append(f"• Привод: {specs['drive']}")
+    return "⚙️ Технические данные:\n" + "\n".join(rows)
+
+
 def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None, price_eur=None, price_approximate=False, delivery_city=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
     bezpokrasa — вычищает построчную раскладку цены источника, вставляет
@@ -353,6 +459,14 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
             continue
         kept.append(line)
 
+    specs_block = ""
+    if source_username == "artalexgroup":
+        specs = extract_specs(raw_text)
+        specs_block = format_specs_block(specs)
+        if specs_block:
+            # Эти же данные теперь в блоке ниже — строки-дубли источника убираем.
+            kept = [l for l in kept if not _SPEC_LINE_DROP_RE.match(l)]
+
     if source_username == "bezpokrasa":
         kept = _condense_china_features(kept)
     kept = _collapse_blank_lines(kept)
@@ -363,6 +477,8 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
 
     if source_username == "artalexgroup":
         body = mask_vin(body)
+        if specs_block:
+            body = f"{body}\n\n{specs_block}" if body else specs_block
     elif source_username == "tamsyam26":
         # Продавец в Ставрополе, мы работаем из Краснодара — город продавца
         # в оставшемся тексте (например, в строке про сроки доставки) не
@@ -2390,6 +2506,15 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         send_targets = real_targets
         note = ""
 
+    # T-188: полный футер — только первому за сутки посту, который реально
+    # уходит в боевой канал (тестовая группа и очередь ожидания не в счёт).
+    use_full_footer = False
+    if send_targets and any(t != test_group for t in send_targets) and _full_footer_due():
+        short = build_footer(feedback_bot_username)
+        if post_text.endswith(short):
+            post_text = post_text[: -len(short)] + build_footer(feedback_bot_username, full=True)
+            use_full_footer = True
+
     media_list, montage_used = await _prepare_media_list(client, source_username, messages, parsed)
 
     if montage_used:
@@ -2444,6 +2569,9 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
             else:
                 await asyncio.wait_for(client.send_message(target, post_text, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
             logger.info("[%s#%s] запощено в %s", source_username, ids, target)
+            if use_full_footer and target != test_group:
+                _mark_full_footer_sent()
+                use_full_footer = False
         except Exception:
             logger.exception("[%s#%s] ошибка при постинге в %s", source_username, ids, target)
 

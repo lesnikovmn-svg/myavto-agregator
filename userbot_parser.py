@@ -342,6 +342,8 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
         drop_patterns += _WAC_DROP_PATTERNS
     elif source_username == "tamsyam26":
         drop_patterns += _TAM_DROP_PATTERNS
+    elif source_username == "topcars":
+        drop_patterns += _TOPCARS_DROP_PATTERNS
 
     kept = []
     for line in raw_text.splitlines():
@@ -394,6 +396,11 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
             price_line = f"Цена ориентировочная{city_part}: {price_str} ₽"
         else:
             price_line = f"Цена под ключ в Краснодаре: {price_str} " + "₽"
+        body = f"{body}\n\n{price_line}" if body else price_line
+    elif source_username == "topcars" and price_usd is not None:
+        # T-187: цена в $ как в источнике (+ наценка, если задана). "Цена в
+        # Грузии" НЕ пишем — откуда именно цена, из поста не следует.
+        price_line = f"Цена: ${price_usd:,}. За точной ценой на момент сделки — пишите в личку."
         body = f"{body}\n\n{price_line}" if body else price_line
     elif source_username == "winner_auto_club" and (price_usd is not None or price_eur is not None):
         # T-96 (28.08.2026): цена может быть и в $, и в € — раньше символ
@@ -824,11 +831,126 @@ def parse_tamsyam26(text):
     }
 
 
+# T-187 (20.11.2026, запрошено пользователем — скриншот закрытого канала
+# "TopCars для Подборщиков": "с этой группы нужно парсить и переделывать
+# текст в наш оффер согласно сумме", "пишем в долларах", "выкладывать по
+# каналам" (сразу в боевые), "32.5$ = $32 500").
+# Особенности источника:
+# - канал ЗАКРЫТЫЙ, без @username — ищем по числовому ID из
+#   TOPCARS_CHAT_ID (userbot_config.env), см. PRIVATE_SOURCES/main();
+# - пост состоит из ТРЁХ сообщений подряд: альбом фото (без текста), потом
+#   отдельное сообщение только с ценой ("32.5$"), потом описание (без цены,
+#   с чужими телефонами). Поэтому для описания мы смотрим НАЗАД по истории
+#   канала (_topcars_context) и берём цену и фото из соседних сообщений —
+#   так работает и в живом потоке, и в стартовом бэкфилле (там порядок
+#   обратный, новые -> старые, поэтому состояние "запомнить прошлое
+#   сообщение" не годится);
+# - цена в $, наценка в $ — TOPCARS_MARKUP_USD (сейчас 0: пользователь
+#   наценку не называл), в посте показываем в долларах без пересчёта в ₽
+#   (₽ нужен только для маршрутизации по сумме, см. compute_price_rub).
+TOPCARS_MARKUP_USD = 0
+TOPCARS_CONTEXT_SECONDS = 900  # фото/цена старше этого от описания — уже чужой пост
+
+PRIVATE_SOURCES = {"topcars": "TOPCARS_CHAT_ID"}
+
+_TOPCARS_PRICE_ONLY_RE = re.compile(r"^\s*(\d[\d.,\s]*)\$\s*$")
+_TOPCARS_PRICE_IN_TEXT_RE = re.compile(r"(\d[\d.,]*)\s*\$")
+_TOPCARS_CONTACT_RE = re.compile(r"whats\s*app|telegram|^\s*\+?\d[\d\s\-()]{8,}", re.I)
+_TOPCARS_DROP_PATTERNS = [
+    re.compile(r"\+\d[\d\s\-()]{8,}"),  # любой международный номер (+995 ...), общий паттерн ловит только РФ
+    re.compile(r"whats\s*app", re.I),
+]
+
+
+def _topcars_amount(raw):
+    """'32.5' / '32,5' / '32.500' / '32500' -> 32500 (пользователь подтвердил:
+    "32.5$" = $32 500; число меньше 1000 считаем тысячами)."""
+    try:
+        v = float(re.sub(r"\s", "", raw).replace(",", "."))
+    except ValueError:
+        return None
+    if v < 1000:
+        v *= 1000
+    return int(round(v))
+
+
+def topcars_price_from_text(text):
+    """Цена, если сообщение — ТОЛЬКО цена ("32.5$"), иначе None."""
+    m = _TOPCARS_PRICE_ONLY_RE.match((text or "").strip())
+    return _topcars_amount(m.group(1)) if m else None
+
+
+def parse_topcars(text, price_hint=None):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    title = None
+    for line in lines:
+        stripped = line.strip(" ❗️🚨🚘🔥‼️➡️➖—-*")
+        if re.search(r"[A-Za-zА-Яа-яЁё]{3,}", stripped) and not _TOPCARS_CONTACT_RE.search(stripped):
+            title = stripped
+            break
+    if title is None:
+        return None
+
+    price = None
+    pm = _TOPCARS_PRICE_IN_TEXT_RE.search(text)
+    if pm:
+        price = _topcars_amount(pm.group(1))
+    if price is None:
+        price = price_hint
+    if price is None:
+        return None
+
+    mileage = re.search(r"[Пп]робег:?\s*([\d\s]+)\s*км", text)
+    mileage_str = f"{clean_amount(mileage.group(1))} км" if mileage else None
+
+    return {
+        "title": title,
+        "vin": None,
+        "mileage": mileage_str,
+        "price_eur_total": None,
+        "price_usd_total": price + TOPCARS_MARKUP_USD,
+        "price_rub": None,
+    }
+
+
+async def _topcars_context(client, source, messages):
+    """Для сообщения-описания достаёт из истории канала ЦЕНУ (отдельное
+    сообщение "32.5$") и альбом ФОТО, которые шли непосредственно перед ним.
+    Возвращает (price_usd_or_None, [media_messages по возрастанию id])."""
+    desc_date = max(m.date for m in messages)
+    entity = SOURCE_TG_HANDLE.get(source, source)
+    first_id = min(m.id for m in messages)
+    price = None
+    media = []
+    media_gid = None
+    async for m in client.iter_messages(entity, limit=15, offset_id=first_id):
+        if (desc_date - m.date).total_seconds() > TOPCARS_CONTEXT_SECONDS:
+            break
+        txt = (m.raw_text or "").strip()
+        if txt:
+            p = topcars_price_from_text(txt)
+            if p is not None and price is None and not media:
+                price = p
+                continue
+            break  # другое описание — это уже предыдущий автомобиль
+        if m.media:
+            if not media:
+                media_gid = m.grouped_id
+                media.append(m)
+            elif media_gid is not None and m.grouped_id == media_gid:
+                media.append(m)
+            else:
+                break
+    media.sort(key=lambda x: x.id)
+    return price, media
+
+
 SOURCE_PARSERS = {
     "artalexgroup": parse_eu_wholesale,
     "bezpokrasa": parse_china_invoice,
     "winner_auto_club": parse_winner_auto_club,
     "tamsyam26": parse_tamsyam26,
+    "topcars": parse_topcars,
 }
 
 
@@ -2162,6 +2284,17 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         logger.info("[%s#%s] группа без текста (альбом без подписи в выборке?) — пропускаю", source_username, ids)
         return
 
+    topcars_price = None
+    if source_username == "topcars":
+        if topcars_price_from_text(text) is not None:
+            # Отдельное сообщение только с ценой — само по себе не пост, его
+            # подхватит описание (см. _topcars_context).
+            logger.info("[%s#%s] сообщение только с ценой — жду описание, пропускаю", source_username, ids)
+            return
+        topcars_price, extra_media = await _topcars_context(client, source_username, messages)
+        if extra_media:
+            messages = list(extra_media) + list(messages)
+
     parser = SOURCE_PARSERS.get(source_username)
     if parser is None:
         # T-82 (25.08.2026, запрошено пользователем — добавили @TamSyam26
@@ -2184,7 +2317,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         real_targets = []
         post_text = build_repost_text(text, source_username, None, None, feedback_bot_username)
     else:
-        parsed = parser(text)
+        parsed = parser(text, topcars_price) if source_username == "topcars" else parser(text)
         if parsed is None:
             logger.info("[%s#%s] не распознан как объявление об авто — пропускаю", source_username, ids)
             return
@@ -2445,6 +2578,20 @@ async def main():
     # заглавных букв: @Winner_Auto_Club); event.chat.username в живом потоке
     # уже приводится к нижнему регистру ниже, теперь и здесь для бэкфилла.
     sources = [s.strip().lstrip("@").lower() for s in env.get("SOURCES", "artalexgroup,bezpokrasa").split(",") if s.strip()]
+    # T-187: закрытые каналы без @username — ищем по числовому ID из конфига
+    # (TOPCARS_CHAT_ID, формат как в ссылке t.me/c/<id>/<msg> или -100<id>).
+    # Нет ID — источник отключаем с предупреждением, остальные не страдают.
+    for _src, _key in PRIVATE_SOURCES.items():
+        _raw = env.get(_key, "").strip()
+        if _raw:
+            _cid = int(_raw)
+            if _cid > 0:
+                _cid = int(f"-100{_cid}")
+            SOURCE_TG_HANDLE[_src] = _cid
+            _TG_HANDLE_TO_SOURCE[_cid] = _src
+        elif _src in sources:
+            logger.warning("Источник %s закрытый, но %s не задан в userbot_config.env — пропускаю его", _src, _key)
+            sources = [s for s in sources if s != _src]
     target_optimal = env.get("TARGET_OPTIMAL", "@My_Avto_Optimal")
     target_my_avto5 = env.get("TARGET_MY_AVTO5", "@MY_Avto5")
     eur_rub_rate = float(env.get("EUR_RUB_RATE", "100"))
@@ -2533,6 +2680,13 @@ async def main():
 
     client = TelegramClient("myavto_userbot", int(api_id), api_hash, proxy=proxy)
     await client.start()
+
+    if any(isinstance(SOURCE_TG_HANDLE.get(s), int) for s in sources):
+        # T-187: закрытый канал по числовому ID Telethon находит только если
+        # его access_hash уже в кэше сессии — один проход по диалогам кладёт
+        # туда все каналы, в которых аккаунт состоит.
+        async for _ in client.iter_dialogs():
+            pass
 
     test_group = None
     # Тестовая группа нужна, если её вообще может использовать хоть один из
@@ -2649,8 +2803,8 @@ async def main():
         # Переводим обратно во внутренний идентификатор (_TG_HANDLE_TO_SOURCE),
         # чтобы парсер/цена/state продолжили работать так же, как раньше —
         # вся остальная логика по-прежнему знает источник как "bezpokrasa".
-        raw_username = (event.chat.username or "").lower()
-        source_username = _TG_HANDLE_TO_SOURCE.get(raw_username, raw_username)
+        raw_username = (getattr(event.chat, "username", None) or "").lower()
+        source_username = _TG_HANDLE_TO_SOURCE.get(event.chat_id) or _TG_HANDLE_TO_SOURCE.get(raw_username, raw_username)
         msg = event.message
         if msg.grouped_id is None:
             if _already_sent(state, source_username, [msg.id]):

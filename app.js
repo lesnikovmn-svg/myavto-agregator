@@ -24,7 +24,10 @@ function submitForm() {
     (site ? "Сайт/канал: " + site + "\n" : "") +
     (desc ? "О компании: " + desc : "")
   );
-  window.open("https://t.me/My_Avto_Agregator?text=" + msg, "_blank");
+  // T-190 (22.11.2026): раньше ссылка вела на КАНАЛ @My_Avto_Agregator — у канала нет
+  // поля сообщения, ?text= там не работает, заявка не отправлялась (жалоба HORGOS AUTO).
+  // Теперь — личный чат @LesnikovM, где текст подставляется и его можно отправить.
+  window.open("https://t.me/LesnikovM?text=" + msg, "_blank");
   document.getElementById("form-success").style.display = "block";
   ["f-name","f-phone","f-directions","f-site","f-desc"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("f-consent").checked = false;
@@ -116,7 +119,7 @@ function submitMassRequest(event) {
           (budget ? "Бюджет: " + budget + "\n" : "") +
           (model ? "Что ищет: " + model : "")
         );
-        const url = "https://t.me/My_Avto_Agregator?text=" + msg;
+        const url = "https://t.me/LesnikovM?text=" + msg; // T-190: не канал, см. submitForm()
         if (tgWindow) tgWindow.location.href = url; else window.open(url, "_blank");
       })
       .finally(() => {

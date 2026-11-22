@@ -160,14 +160,50 @@ MY_Avto — ваш надёжный партнёр в выборе авто! �
 OUR_FOOTER = f"{_OUR_FOOTER_INTRO}\n\n{_OUR_FOOTER_CONTACTS}"
 
 
-def build_footer(feedback_bot_username=None):
-    """Как OUR_FOOTER, но если задан FEEDBACK_BOT_USERNAME (T-78, бот
-    обратной связи) — вставляет ссылку на бота отдельной строкой перед
-    остальными контактами."""
-    if not feedback_bot_username:
+# T-188 (20.11.2026, запрошено пользователем — "в подписи к оферу оставим
+# Максим/Антон, а полный список контактов 1 раз в день с первым постом"):
+# обычный пост получает КОРОТКИЙ футер (бот + два личных контакта), а
+# полный (как был: "Почему MY_Avto" + все каналы/сайты/соцсети) — только
+# первый реально опубликованный в боевые каналы пост за сутки (МСК).
+_OUR_FOOTER_SHORT_CONTACTS = """✈️ Максим: [LesnikovM](https://t.me/LesnikovM) | [+7 938 409-67-08](tel:+79384096708)
+✈️ Антон: [Tohakmv](https://t.me/Tohakmv) | [+7 963 383-79-28](tel:+79633837928)"""
+
+FOOTER_STATE_PATH = Path("userbot_footer_state.json")
+
+
+def build_footer(feedback_bot_username=None, full=False):
+    """Короткий футер (по умолчанию): бот обратной связи, если задан, плюс
+    Максим/Антон. full=True — прежний полный футер (T-78): ссылку на бота
+    вставляет отдельной строкой перед остальными контактами."""
+    bot_line = (
+        f"📮 Оставить заявку боту: [Написать](https://t.me/{feedback_bot_username})"
+        if feedback_bot_username else None
+    )
+    if not full:
+        parts = [bot_line] if bot_line else []
+        parts.append(_OUR_FOOTER_SHORT_CONTACTS)
+        return "\n".join(parts)
+    if not bot_line:
         return OUR_FOOTER
-    bot_line = f"📮 Оставить заявку боту: [Написать](https://t.me/{feedback_bot_username})"
     return f"{_OUR_FOOTER_INTRO}\n\n{bot_line}\n{_OUR_FOOTER_CONTACTS}"
+
+
+def _full_footer_due():
+    """True, если сегодня (МСК) полный футер ещё не публиковался."""
+    try:
+        last = json.loads(FOOTER_STATE_PATH.read_text(encoding="utf-8")).get("last_full_date")
+    except (OSError, ValueError):
+        last = None
+    return last != _now_msk().date().isoformat()
+
+
+def _mark_full_footer_sent():
+    try:
+        FOOTER_STATE_PATH.write_text(
+            json.dumps({"last_full_date": _now_msk().date().isoformat()}), encoding="utf-8"
+        )
+    except OSError:
+        logger.exception("не удалось сохранить дату полного футера (%s)", FOOTER_STATE_PATH)
 
 # Строки источника, которые вычищаем перед репостом — их собственные сайт/
 # контакты/CTA, чтобы покупатель писал нам, а не в источник.
@@ -328,6 +364,76 @@ def mask_vin(text):
     return _VIN_RE.sub(lambda m: m.group(0)[:-5] + "*****", text)
 
 
+# T-189 (20.11.2026, запрошено пользователем — "из арталекса нужно тоже
+# текст объявления подправлять, указывать технические данные: мощность,
+# объём двигателя, какой привод, гибрид/электро/бензин/дизель"). Берём
+# ТОЛЬКО то, что есть в самом посте источника (или однозначно следует из
+# названия модели: 4MATIC/xDrive/quattro = полный привод, Plug-in Hybrid =
+# подзаряжаемый гибрид) — ничего не домысливаем по "знанию модели":
+# если в посте этих данных нет, блок просто не добавляется (честнее, чем
+# выдать правдоподобную, но непроверенную цифру).
+_SPEC_LINE_DROP_RE = re.compile(
+    r"^\W*(?:мощность|объ[её]м(?:\s*двигателя)?|привод|тип(?:\s*двигателя)?)\s*:", re.I
+)
+
+
+def extract_specs(text):
+    """-> dict с ключами power/volume/drive/fuel (только найденные)."""
+    specs = {}
+    low = text.lower()
+
+    hp = re.search(r"(\d{2,4})\s*(?:л\.?\s*с\b\.?|hp\b|ps\b)", text, re.I)
+    kw = re.search(r"(\d{2,4})\s*кВт(?!\s*[·*х.\-]?\s*ч)", text, re.I)
+    if hp and kw:
+        specs["power"] = f"{hp.group(1)} л.с. ({kw.group(1)} кВт)"
+    elif hp:
+        specs["power"] = f"{hp.group(1)} л.с."
+    elif kw:
+        specs["power"] = f"{kw.group(1)} кВт"
+
+    vol = re.search(r"(?<![\d.,])(\d[.,]\d)\s*(?:л\b|l\b|литр)", text, re.I)
+    if vol:
+        specs["volume"] = vol.group(1).replace(",", ".") + " л"
+
+    if re.search(r"полн\w*\s+привод|4matic|xdrive|quattro|\bawd\b|\b4wd\b|4x4", low):
+        specs["drive"] = "полный"
+    elif re.search(r"передн\w*\s+привод|\bfwd\b", low):
+        specs["drive"] = "передний"
+    elif re.search(r"задн\w*\s+привод|\brwd\b", low):
+        specs["drive"] = "задний"
+
+    if re.search(r"plug-?in|phev|подзаряжаем", low):
+        det = re.search(r"гибрид[^\n(]*\(([^)]+)\)", low)
+        specs["fuel"] = (
+            f"гибрид ({det.group(1).strip()}), подзаряжаемый" if det else "гибрид (подзаряжаемый)"
+        )
+    elif re.search(r"гибрид|hybrid|\bhev\b", low):
+        det = re.search(r"гибрид[^\n(]*\(([^)]+)\)", low)
+        specs["fuel"] = f"гибрид ({det.group(1).strip()})" if det else "гибрид"
+    elif re.search(r"электромобил|\bev\b|electric|полностью\s+электр", low):
+        specs["fuel"] = "электро"
+    elif "дизел" in low:
+        specs["fuel"] = "дизель"
+    elif "бензин" in low:
+        specs["fuel"] = "бензин"
+    return specs
+
+
+def format_specs_block(specs):
+    if not specs:
+        return ""
+    rows = []
+    if "fuel" in specs:
+        rows.append(f"• Тип двигателя: {specs['fuel']}")
+    if "volume" in specs:
+        rows.append(f"• Объём двигателя: {specs['volume']}")
+    if "power" in specs:
+        rows.append(f"• Мощность: {specs['power']}")
+    if "drive" in specs:
+        rows.append(f"• Привод: {specs['drive']}")
+    return "⚙️ Технические данные:\n" + "\n".join(rows)
+
+
 def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=None, feedback_bot_username=None, price_eur=None, price_approximate=False, delivery_city=None):
     """Исходный текст объявления как есть (без чужих контактов/сайта) + наш футер.
     bezpokrasa — вычищает построчную раскладку цены источника, вставляет
@@ -342,6 +448,8 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
         drop_patterns += _WAC_DROP_PATTERNS
     elif source_username == "tamsyam26":
         drop_patterns += _TAM_DROP_PATTERNS
+    elif source_username == "topcars":
+        drop_patterns += _TOPCARS_DROP_PATTERNS
 
     kept = []
     for line in raw_text.splitlines():
@@ -350,6 +458,14 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
         if any(p.search(line) for p in drop_patterns):
             continue
         kept.append(line)
+
+    specs_block = ""
+    if source_username == "artalexgroup":
+        specs = extract_specs(raw_text)
+        specs_block = format_specs_block(specs)
+        if specs_block:
+            # Эти же данные теперь в блоке ниже — строки-дубли источника убираем.
+            kept = [l for l in kept if not _SPEC_LINE_DROP_RE.match(l)]
 
     if source_username == "bezpokrasa":
         kept = _condense_china_features(kept)
@@ -361,6 +477,8 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
 
     if source_username == "artalexgroup":
         body = mask_vin(body)
+        if specs_block:
+            body = f"{body}\n\n{specs_block}" if body else specs_block
     elif source_username == "tamsyam26":
         # Продавец в Ставрополе, мы работаем из Краснодара — город продавца
         # в оставшемся тексте (например, в строке про сроки доставки) не
@@ -394,6 +512,11 @@ def build_repost_text(raw_text, source_username=None, price_rub=None, price_usd=
             price_line = f"Цена ориентировочная{city_part}: {price_str} ₽"
         else:
             price_line = f"Цена под ключ в Краснодаре: {price_str} " + "₽"
+        body = f"{body}\n\n{price_line}" if body else price_line
+    elif source_username == "topcars" and price_usd is not None:
+        # T-187: цена в $ как в источнике (+ наценка, если задана). "Цена в
+        # Грузии" НЕ пишем — откуда именно цена, из поста не следует.
+        price_line = f"Цена: ${price_usd:,}. За точной ценой на момент сделки — пишите в личку."
         body = f"{body}\n\n{price_line}" if body else price_line
     elif source_username == "winner_auto_club" and (price_usd is not None or price_eur is not None):
         # T-96 (28.08.2026): цена может быть и в $, и в € — раньше символ
@@ -570,6 +693,48 @@ def _queue_pending(source_username, ids):
             return
     queue["items"].append({"source_username": source_username, "ids": sorted(ids_set)})
     save_pending_queue(queue)
+
+
+# --- T-184 (07.10.2026): независимая очередь непереотправленных постов ---
+FAILED_RETRY_QUEUE_PATH = Path("userbot_failed_retry_queue.json")
+_FAILED_RETRY_MAX_AGE_HOURS = 24
+_FAILED_RETRY_MAX_ATTEMPTS = 20
+
+def load_failed_retry_queue():
+    import json
+    if not FAILED_RETRY_QUEUE_PATH.exists():
+        return {"items": []}
+    try:
+        return json.loads(FAILED_RETRY_QUEUE_PATH.read_text())
+    except Exception:
+        return {"items": []}
+
+def save_failed_retry_queue(queue):
+    import json
+    tmp = FAILED_RETRY_QUEUE_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(queue, ensure_ascii=False, indent=2))
+    tmp.replace(FAILED_RETRY_QUEUE_PATH)
+
+def _queue_failed_retry(source_username, ids):
+    """first_failed_at не перезатирается при повторных попаданиях одного и
+    того же поста — на нём считается возраст для окончательного отказа
+    (_FAILED_RETRY_MAX_AGE_HOURS/_FAILED_RETRY_MAX_ATTEMPTS в
+    _failed_retry_flusher)."""
+    from datetime import datetime
+    queue = load_failed_retry_queue()
+    ids_set = set(ids)
+    for item in queue["items"]:
+        if item["source_username"] == source_username and set(item["ids"]) == ids_set:
+            item["attempts"] = item.get("attempts", 1) + 1
+            save_failed_retry_queue(queue)
+            return
+    queue["items"].append({
+        "source_username": source_username,
+        "ids": sorted(ids_set),
+        "first_failed_at": datetime.utcnow().isoformat(),
+        "attempts": 1,
+    })
+    save_failed_retry_queue(queue)
 
 
 # --- T-99 (30.08.2026): очередь ручных постов (без исходного сообщения источника) ---
@@ -824,11 +989,126 @@ def parse_tamsyam26(text):
     }
 
 
+# T-187 (20.11.2026, запрошено пользователем — скриншот закрытого канала
+# "TopCars для Подборщиков": "с этой группы нужно парсить и переделывать
+# текст в наш оффер согласно сумме", "пишем в долларах", "выкладывать по
+# каналам" (сразу в боевые), "32.5$ = $32 500").
+# Особенности источника:
+# - канал ЗАКРЫТЫЙ, без @username — ищем по числовому ID из
+#   TOPCARS_CHAT_ID (userbot_config.env), см. PRIVATE_SOURCES/main();
+# - пост состоит из ТРЁХ сообщений подряд: альбом фото (без текста), потом
+#   отдельное сообщение только с ценой ("32.5$"), потом описание (без цены,
+#   с чужими телефонами). Поэтому для описания мы смотрим НАЗАД по истории
+#   канала (_topcars_context) и берём цену и фото из соседних сообщений —
+#   так работает и в живом потоке, и в стартовом бэкфилле (там порядок
+#   обратный, новые -> старые, поэтому состояние "запомнить прошлое
+#   сообщение" не годится);
+# - цена в $, наценка в $ — TOPCARS_MARKUP_USD (сейчас 0: пользователь
+#   наценку не называл), в посте показываем в долларах без пересчёта в ₽
+#   (₽ нужен только для маршрутизации по сумме, см. compute_price_rub).
+TOPCARS_MARKUP_USD = 0
+TOPCARS_CONTEXT_SECONDS = 900  # фото/цена старше этого от описания — уже чужой пост
+
+PRIVATE_SOURCES = {"topcars": "TOPCARS_CHAT_ID"}
+
+_TOPCARS_PRICE_ONLY_RE = re.compile(r"^\s*(\d[\d.,\s]*)\$\s*$")
+_TOPCARS_PRICE_IN_TEXT_RE = re.compile(r"(\d[\d.,]*)\s*\$")
+_TOPCARS_CONTACT_RE = re.compile(r"whats\s*app|telegram|^\s*\+?\d[\d\s\-()]{8,}", re.I)
+_TOPCARS_DROP_PATTERNS = [
+    re.compile(r"\+\d[\d\s\-()]{8,}"),  # любой международный номер (+995 ...), общий паттерн ловит только РФ
+    re.compile(r"whats\s*app", re.I),
+]
+
+
+def _topcars_amount(raw):
+    """'32.5' / '32,5' / '32.500' / '32500' -> 32500 (пользователь подтвердил:
+    "32.5$" = $32 500; число меньше 1000 считаем тысячами)."""
+    try:
+        v = float(re.sub(r"\s", "", raw).replace(",", "."))
+    except ValueError:
+        return None
+    if v < 1000:
+        v *= 1000
+    return int(round(v))
+
+
+def topcars_price_from_text(text):
+    """Цена, если сообщение — ТОЛЬКО цена ("32.5$"), иначе None."""
+    m = _TOPCARS_PRICE_ONLY_RE.match((text or "").strip())
+    return _topcars_amount(m.group(1)) if m else None
+
+
+def parse_topcars(text, price_hint=None):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    title = None
+    for line in lines:
+        stripped = line.strip(" ❗️🚨🚘🔥‼️➡️➖—-*")
+        if re.search(r"[A-Za-zА-Яа-яЁё]{3,}", stripped) and not _TOPCARS_CONTACT_RE.search(stripped):
+            title = stripped
+            break
+    if title is None:
+        return None
+
+    price = None
+    pm = _TOPCARS_PRICE_IN_TEXT_RE.search(text)
+    if pm:
+        price = _topcars_amount(pm.group(1))
+    if price is None:
+        price = price_hint
+    if price is None:
+        return None
+
+    mileage = re.search(r"[Пп]робег:?\s*([\d\s]+)\s*км", text)
+    mileage_str = f"{clean_amount(mileage.group(1))} км" if mileage else None
+
+    return {
+        "title": title,
+        "vin": None,
+        "mileage": mileage_str,
+        "price_eur_total": None,
+        "price_usd_total": price + TOPCARS_MARKUP_USD,
+        "price_rub": None,
+    }
+
+
+async def _topcars_context(client, source, messages):
+    """Для сообщения-описания достаёт из истории канала ЦЕНУ (отдельное
+    сообщение "32.5$") и альбом ФОТО, которые шли непосредственно перед ним.
+    Возвращает (price_usd_or_None, [media_messages по возрастанию id])."""
+    desc_date = max(m.date for m in messages)
+    entity = SOURCE_TG_HANDLE.get(source, source)
+    first_id = min(m.id for m in messages)
+    price = None
+    media = []
+    media_gid = None
+    async for m in client.iter_messages(entity, limit=15, offset_id=first_id):
+        if (desc_date - m.date).total_seconds() > TOPCARS_CONTEXT_SECONDS:
+            break
+        txt = (m.raw_text or "").strip()
+        if txt:
+            p = topcars_price_from_text(txt)
+            if p is not None and price is None and not media:
+                price = p
+                continue
+            break  # другое описание — это уже предыдущий автомобиль
+        if m.media:
+            if not media:
+                media_gid = m.grouped_id
+                media.append(m)
+            elif media_gid is not None and m.grouped_id == media_gid:
+                media.append(m)
+            else:
+                break
+    media.sort(key=lambda x: x.id)
+    return price, media
+
+
 SOURCE_PARSERS = {
     "artalexgroup": parse_eu_wholesale,
     "bezpokrasa": parse_china_invoice,
     "winner_auto_club": parse_winner_auto_club,
     "tamsyam26": parse_tamsyam26,
+    "topcars": parse_topcars,
 }
 
 
@@ -2162,6 +2442,17 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         logger.info("[%s#%s] группа без текста (альбом без подписи в выборке?) — пропускаю", source_username, ids)
         return
 
+    topcars_price = None
+    if source_username == "topcars":
+        if topcars_price_from_text(text) is not None:
+            # Отдельное сообщение только с ценой — само по себе не пост, его
+            # подхватит описание (см. _topcars_context).
+            logger.info("[%s#%s] сообщение только с ценой — жду описание, пропускаю", source_username, ids)
+            return
+        topcars_price, extra_media = await _topcars_context(client, source_username, messages)
+        if extra_media:
+            messages = list(extra_media) + list(messages)
+
     parser = SOURCE_PARSERS.get(source_username)
     if parser is None:
         # T-82 (25.08.2026, запрошено пользователем — добавили @TamSyam26
@@ -2184,7 +2475,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         real_targets = []
         post_text = build_repost_text(text, source_username, None, None, feedback_bot_username)
     else:
-        parsed = parser(text)
+        parsed = parser(text, topcars_price) if source_username == "topcars" else parser(text)
         if parsed is None:
             logger.info("[%s#%s] не распознан как объявление об авто — пропускаю", source_username, ids)
             return
@@ -2257,6 +2548,15 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         send_targets = real_targets
         note = ""
 
+    # T-188: полный футер — только первому за сутки посту, который реально
+    # уходит в боевой канал (тестовая группа и очередь ожидания не в счёт).
+    use_full_footer = False
+    if send_targets and any(t != test_group for t in send_targets) and _full_footer_due():
+        short = build_footer(feedback_bot_username)
+        if post_text.endswith(short):
+            post_text = post_text[: -len(short)] + build_footer(feedback_bot_username, full=True)
+            use_full_footer = True
+
     media_list, montage_used = await _prepare_media_list(client, source_username, messages, parsed)
 
     if montage_used:
@@ -2288,6 +2588,18 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         source_username, ids, price_str, note, len(media_list), post_text,
     )
 
+    # T-181 (06.10.2026): раньше _mark_sent/save_state стояли ВНЕ try/except
+    # и выполнялись всегда — даже при ошибке отправки (таймаут, сеть), пост
+    # помечался отправленным и терялся навсегда. Теперь: таймаут отправки
+    # масштабируется по числу медиа (альбомы из многих фото/видео не успевали
+    # за фиксированные 180с), и состояние обновляется только если ВСЕ цели
+    # получили пост — иначе следующий бэкфилл (перечитывает последние
+    # сообщения источника) сам повторит попытку, ничего дополнительно не
+    # нужно. Осознанный побочный эффект: при частичном провале (ушло в одну
+    # цель из двух, упало во вторую) повтор может задвоить в первой — это
+    # предпочтительнее насовсем потерянного поста.
+    send_timeout = max(_MEDIA_TIMEOUT, 45 * len(media_list)) if media_list else _MEDIA_TIMEOUT
+    all_targets_ok = True
     for target in send_targets:
         try:
             if media_list:
@@ -2298,7 +2610,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
                     if isinstance(item, io.BytesIO):
                         item.seek(0)
                 try:
-                    await asyncio.wait_for(client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
+                    await asyncio.wait_for(client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False), timeout=send_timeout)
                 except MediaCaptionTooLongError:
                     # Подпись реально не влезла (Telegram сам так решил) — шлём
                     # фото/видео без подписи, текст отдельным сообщением следом.
@@ -2306,16 +2618,24 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
                     for item in media_list:
                         if isinstance(item, io.BytesIO):
                             item.seek(0)
-                    await asyncio.wait_for(client.send_message(target, "", file=media_list), timeout=_MEDIA_TIMEOUT)
+                    await asyncio.wait_for(client.send_message(target, "", file=media_list), timeout=send_timeout)
                     await asyncio.wait_for(client.send_message(target, post_text, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
             else:
                 await asyncio.wait_for(client.send_message(target, post_text, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
             logger.info("[%s#%s] запощено в %s", source_username, ids, target)
+            if use_full_footer and target != test_group:
+                _mark_full_footer_sent()
+                use_full_footer = False
         except Exception:
-            logger.exception("[%s#%s] ошибка при постинге в %s", source_username, ids, target)
+            logger.exception("[%s#%s] ошибка при постинге в %s — не помечаю отправленным, повторю на следующем цикле опроса источника", source_username, ids, target)
+            all_targets_ok = False
 
-    _mark_sent(state, source_username, ids)
-    save_state(state)
+    if all_targets_ok:
+        _mark_sent(state, source_username, ids)
+        save_state(state)
+    else:
+        logger.warning("[%s#%s] пост не ушёл хотя бы в одну цель — состояние НЕ обновлено, бэкфилл повторит попытку сам", source_username, ids)
+        _queue_failed_retry(source_username, ids)
 
 
 async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=None, poll_seconds=120):
@@ -2363,6 +2683,56 @@ async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate
                 await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
         except Exception:
             logger.exception("Ошибка в фоновой задаче отправки отложенных постов — продолжаю, попробую на следующем цикле")
+
+
+async def _failed_retry_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=None, poll_seconds=300):
+    """T-184 (07.10.2026): независимо от окна бэкфилла, перечитывает по id
+    посты, у которых отправка падала (handle_group -> _queue_failed_retry),
+    и повторяет попытку. Закрывает "слепую зону" T-182: без этого пост,
+    упавший при отправке, мог навсегда выпасть из скользящего окна
+    бэкфилла (TEST_BACKFILL_LIMIT) и больше никогда не переоткрыться."""
+    while True:
+        await asyncio.sleep(poll_seconds)
+        try:
+            queue = load_failed_retry_queue()
+            items = queue.get("items", [])
+            if not items:
+                continue
+            save_failed_retry_queue({"items": []})
+            logger.info("--- Разбираю очередь непереотправленных постов: %s шт. ---", len(items))
+            for item in items:
+                source_username = item["source_username"]
+                ids = item["ids"]
+                if _already_sent(state, source_username, ids):
+                    logger.info("[%s#%s] уже отправлено другим путём, пока сидел в очереди неудач — пропускаю", source_username, ids)
+                    continue
+                first_failed_at = item.get("first_failed_at")
+                age_hours = None
+                if first_failed_at:
+                    from datetime import datetime
+                    try:
+                        age_hours = (datetime.utcnow() - datetime.fromisoformat(first_failed_at)).total_seconds() / 3600
+                    except ValueError:
+                        age_hours = None
+                if (age_hours is not None and age_hours > _FAILED_RETRY_MAX_AGE_HOURS) or item.get("attempts", 1) > _FAILED_RETRY_MAX_ATTEMPTS:
+                    logger.warning(
+                        "[%s#%s] не удалось отправить за %s попыток / %.1fч с первой неудачи — ОКОНЧАТЕЛЬНО даю отбой, пост потерян (проверь вручную, если важно)",
+                        source_username, ids, item.get("attempts", 1), age_hours or 0.0,
+                    )
+                    continue
+                try:
+                    fetched = await client.get_messages(SOURCE_TG_HANDLE.get(source_username, source_username), ids=ids)
+                    group = [m for m in fetched if m is not None]
+                except Exception:
+                    logger.exception("[%s#%s] не удалось получить сообщения из очереди неудач — верну в очередь, попробую позже", source_username, ids)
+                    _queue_failed_retry(source_username, ids)
+                    continue
+                if len(group) != len(ids):
+                    logger.warning("[%s#%s] часть сообщений недоступна (удалены источником?) — убираю из очереди, не реконструирую частичный альбом", source_username, ids)
+                    continue
+                await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
+        except Exception:
+            logger.exception("Ошибка в фоновой задаче переотправки неудачных постов — продолжаю, попробую на следующем цикле")
 
 
 async def _manual_queue_flusher(client, poll_seconds=60):
@@ -2445,6 +2815,20 @@ async def main():
     # заглавных букв: @Winner_Auto_Club); event.chat.username в живом потоке
     # уже приводится к нижнему регистру ниже, теперь и здесь для бэкфилла.
     sources = [s.strip().lstrip("@").lower() for s in env.get("SOURCES", "artalexgroup,bezpokrasa").split(",") if s.strip()]
+    # T-187: закрытые каналы без @username — ищем по числовому ID из конфига
+    # (TOPCARS_CHAT_ID, формат как в ссылке t.me/c/<id>/<msg> или -100<id>).
+    # Нет ID — источник отключаем с предупреждением, остальные не страдают.
+    for _src, _key in PRIVATE_SOURCES.items():
+        _raw = env.get(_key, "").strip()
+        if _raw:
+            _cid = int(_raw)
+            if _cid > 0:
+                _cid = int(f"-100{_cid}")
+            SOURCE_TG_HANDLE[_src] = _cid
+            _TG_HANDLE_TO_SOURCE[_cid] = _src
+        elif _src in sources:
+            logger.warning("Источник %s закрытый, но %s не задан в userbot_config.env — пропускаю его", _src, _key)
+            sources = [s for s in sources if s != _src]
     target_optimal = env.get("TARGET_OPTIMAL", "@My_Avto_Optimal")
     target_my_avto5 = env.get("TARGET_MY_AVTO5", "@MY_Avto5")
     eur_rub_rate = float(env.get("EUR_RUB_RATE", "100"))
@@ -2534,6 +2918,13 @@ async def main():
     client = TelegramClient("myavto_userbot", int(api_id), api_hash, proxy=proxy)
     await client.start()
 
+    if any(isinstance(SOURCE_TG_HANDLE.get(s), int) for s in sources):
+        # T-187: закрытый канал по числовому ID Telethon находит только если
+        # его access_hash уже в кэше сессии — один проход по диалогам кладёт
+        # туда все каналы, в которых аккаунт состоит.
+        async for _ in client.iter_dialogs():
+            pass
+
     test_group = None
     # Тестовая группа нужна, если её вообще может использовать хоть один из
     # режимов — общий DRY_RUN, video_dry_run (посты с видео) или
@@ -2556,6 +2947,13 @@ async def main():
     # захватила бы в замыкании None и не смогла бы роутить в тест, если
     # отложенный элемент внутри handle_group всё же попадёт в тестовую ветку.
     asyncio.create_task(_pending_queue_flusher(
+        client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run,
+        test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources,
+        preposting_group=preposting_group,
+    ))
+    # T-184 (07.10.2026): независимая очередь непереотправленных постов
+    # (userbot_failed_retry_queue.json) — опрашивается раз в 5 минут.
+    asyncio.create_task(_failed_retry_flusher(
         client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run,
         test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources,
         preposting_group=preposting_group,
@@ -2649,8 +3047,8 @@ async def main():
         # Переводим обратно во внутренний идентификатор (_TG_HANDLE_TO_SOURCE),
         # чтобы парсер/цена/state продолжили работать так же, как раньше —
         # вся остальная логика по-прежнему знает источник как "bezpokrasa".
-        raw_username = (event.chat.username or "").lower()
-        source_username = _TG_HANDLE_TO_SOURCE.get(raw_username, raw_username)
+        raw_username = (getattr(event.chat, "username", None) or "").lower()
+        source_username = _TG_HANDLE_TO_SOURCE.get(event.chat_id) or _TG_HANDLE_TO_SOURCE.get(raw_username, raw_username)
         msg = event.message
         if msg.grouped_id is None:
             if _already_sent(state, source_username, [msg.id]):

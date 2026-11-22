@@ -695,6 +695,48 @@ def _queue_pending(source_username, ids):
     save_pending_queue(queue)
 
 
+# --- T-184 (07.10.2026): независимая очередь непереотправленных постов ---
+FAILED_RETRY_QUEUE_PATH = Path("userbot_failed_retry_queue.json")
+_FAILED_RETRY_MAX_AGE_HOURS = 24
+_FAILED_RETRY_MAX_ATTEMPTS = 20
+
+def load_failed_retry_queue():
+    import json
+    if not FAILED_RETRY_QUEUE_PATH.exists():
+        return {"items": []}
+    try:
+        return json.loads(FAILED_RETRY_QUEUE_PATH.read_text())
+    except Exception:
+        return {"items": []}
+
+def save_failed_retry_queue(queue):
+    import json
+    tmp = FAILED_RETRY_QUEUE_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(queue, ensure_ascii=False, indent=2))
+    tmp.replace(FAILED_RETRY_QUEUE_PATH)
+
+def _queue_failed_retry(source_username, ids):
+    """first_failed_at не перезатирается при повторных попаданиях одного и
+    того же поста — на нём считается возраст для окончательного отказа
+    (_FAILED_RETRY_MAX_AGE_HOURS/_FAILED_RETRY_MAX_ATTEMPTS в
+    _failed_retry_flusher)."""
+    from datetime import datetime
+    queue = load_failed_retry_queue()
+    ids_set = set(ids)
+    for item in queue["items"]:
+        if item["source_username"] == source_username and set(item["ids"]) == ids_set:
+            item["attempts"] = item.get("attempts", 1) + 1
+            save_failed_retry_queue(queue)
+            return
+    queue["items"].append({
+        "source_username": source_username,
+        "ids": sorted(ids_set),
+        "first_failed_at": datetime.utcnow().isoformat(),
+        "attempts": 1,
+    })
+    save_failed_retry_queue(queue)
+
+
 # --- T-99 (30.08.2026): очередь ручных постов (без исходного сообщения источника) ---
 
 MANUAL_QUEUE_PATH = Path("userbot_manual_queue.json")
@@ -2546,6 +2588,18 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
         source_username, ids, price_str, note, len(media_list), post_text,
     )
 
+    # T-181 (06.10.2026): раньше _mark_sent/save_state стояли ВНЕ try/except
+    # и выполнялись всегда — даже при ошибке отправки (таймаут, сеть), пост
+    # помечался отправленным и терялся навсегда. Теперь: таймаут отправки
+    # масштабируется по числу медиа (альбомы из многих фото/видео не успевали
+    # за фиксированные 180с), и состояние обновляется только если ВСЕ цели
+    # получили пост — иначе следующий бэкфилл (перечитывает последние
+    # сообщения источника) сам повторит попытку, ничего дополнительно не
+    # нужно. Осознанный побочный эффект: при частичном провале (ушло в одну
+    # цель из двух, упало во вторую) повтор может задвоить в первой — это
+    # предпочтительнее насовсем потерянного поста.
+    send_timeout = max(_MEDIA_TIMEOUT, 45 * len(media_list)) if media_list else _MEDIA_TIMEOUT
+    all_targets_ok = True
     for target in send_targets:
         try:
             if media_list:
@@ -2556,7 +2610,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
                     if isinstance(item, io.BytesIO):
                         item.seek(0)
                 try:
-                    await asyncio.wait_for(client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
+                    await asyncio.wait_for(client.send_message(target, post_text, file=media_list, parse_mode="md", link_preview=False), timeout=send_timeout)
                 except MediaCaptionTooLongError:
                     # Подпись реально не влезла (Telegram сам так решил) — шлём
                     # фото/видео без подписи, текст отдельным сообщением следом.
@@ -2564,7 +2618,7 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
                     for item in media_list:
                         if isinstance(item, io.BytesIO):
                             item.seek(0)
-                    await asyncio.wait_for(client.send_message(target, "", file=media_list), timeout=_MEDIA_TIMEOUT)
+                    await asyncio.wait_for(client.send_message(target, "", file=media_list), timeout=send_timeout)
                     await asyncio.wait_for(client.send_message(target, post_text, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
             else:
                 await asyncio.wait_for(client.send_message(target, post_text, parse_mode="md", link_preview=False), timeout=_MEDIA_TIMEOUT)
@@ -2573,10 +2627,15 @@ async def handle_group(client, source_username, messages, targets_cfg, eur_rub_r
                 _mark_full_footer_sent()
                 use_full_footer = False
         except Exception:
-            logger.exception("[%s#%s] ошибка при постинге в %s", source_username, ids, target)
+            logger.exception("[%s#%s] ошибка при постинге в %s — не помечаю отправленным, повторю на следующем цикле опроса источника", source_username, ids, target)
+            all_targets_ok = False
 
-    _mark_sent(state, source_username, ids)
-    save_state(state)
+    if all_targets_ok:
+        _mark_sent(state, source_username, ids)
+        save_state(state)
+    else:
+        logger.warning("[%s#%s] пост не ушёл хотя бы в одну цель — состояние НЕ обновлено, бэкфилл повторит попытку сам", source_username, ids)
+        _queue_failed_retry(source_username, ids)
 
 
 async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=None, poll_seconds=120):
@@ -2624,6 +2683,56 @@ async def _pending_queue_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate
                 await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
         except Exception:
             logger.exception("Ошибка в фоновой задаче отправки отложенных постов — продолжаю, попробую на следующем цикле")
+
+
+async def _failed_retry_flusher(client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=None, poll_seconds=300):
+    """T-184 (07.10.2026): независимо от окна бэкфилла, перечитывает по id
+    посты, у которых отправка падала (handle_group -> _queue_failed_retry),
+    и повторяет попытку. Закрывает "слепую зону" T-182: без этого пост,
+    упавший при отправке, мог навсегда выпасть из скользящего окна
+    бэкфилла (TEST_BACKFILL_LIMIT) и больше никогда не переоткрыться."""
+    while True:
+        await asyncio.sleep(poll_seconds)
+        try:
+            queue = load_failed_retry_queue()
+            items = queue.get("items", [])
+            if not items:
+                continue
+            save_failed_retry_queue({"items": []})
+            logger.info("--- Разбираю очередь непереотправленных постов: %s шт. ---", len(items))
+            for item in items:
+                source_username = item["source_username"]
+                ids = item["ids"]
+                if _already_sent(state, source_username, ids):
+                    logger.info("[%s#%s] уже отправлено другим путём, пока сидел в очереди неудач — пропускаю", source_username, ids)
+                    continue
+                first_failed_at = item.get("first_failed_at")
+                age_hours = None
+                if first_failed_at:
+                    from datetime import datetime
+                    try:
+                        age_hours = (datetime.utcnow() - datetime.fromisoformat(first_failed_at)).total_seconds() / 3600
+                    except ValueError:
+                        age_hours = None
+                if (age_hours is not None and age_hours > _FAILED_RETRY_MAX_AGE_HOURS) or item.get("attempts", 1) > _FAILED_RETRY_MAX_ATTEMPTS:
+                    logger.warning(
+                        "[%s#%s] не удалось отправить за %s попыток / %.1fч с первой неудачи — ОКОНЧАТЕЛЬНО даю отбой, пост потерян (проверь вручную, если важно)",
+                        source_username, ids, item.get("attempts", 1), age_hours or 0.0,
+                    )
+                    continue
+                try:
+                    fetched = await client.get_messages(SOURCE_TG_HANDLE.get(source_username, source_username), ids=ids)
+                    group = [m for m in fetched if m is not None]
+                except Exception:
+                    logger.exception("[%s#%s] не удалось получить сообщения из очереди неудач — верну в очередь, попробую позже", source_username, ids)
+                    _queue_failed_retry(source_username, ids)
+                    continue
+                if len(group) != len(ids):
+                    logger.warning("[%s#%s] часть сообщений недоступна (удалены источником?) — убираю из очереди, не реконструирую частичный альбом", source_username, ids)
+                    continue
+                await handle_group(client, source_username, group, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run, test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources, preposting_group=preposting_group)
+        except Exception:
+            logger.exception("Ошибка в фоновой задаче переотправки неудачных постов — продолжаю, попробую на следующем цикле")
 
 
 async def _manual_queue_flusher(client, poll_seconds=60):
@@ -2838,6 +2947,13 @@ async def main():
     # захватила бы в замыкании None и не смогла бы роутить в тест, если
     # отложенный элемент внутри handle_group всё же попадёт в тестовую ветку.
     asyncio.create_task(_pending_queue_flusher(
+        client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run,
+        test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources,
+        preposting_group=preposting_group,
+    ))
+    # T-184 (07.10.2026): независимая очередь непереотправленных постов
+    # (userbot_failed_retry_queue.json) — опрашивается раз в 5 минут.
+    asyncio.create_task(_failed_retry_flusher(
         client, targets_cfg, eur_rub_rate, usd_rub_rate, dry_run, video_dry_run,
         test_group, state, feedback_bot_username, test_only_sources, video_dry_run_sources,
         preposting_group=preposting_group,

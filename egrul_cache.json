@@ -143,5 +143,35 @@
     "registered_year": 2014,
     "active": true,
     "name": "ООО \"ПРЕМИУМ РЕКЛАМА\""
+  },
+  "5018046069": {
+    "registered_year": 1996,
+    "active": true,
+    "name": "ООО \"АЛЬТА-СОФТ\""
+  },
+  "254055668151": {
+    "registered_year": 2021,
+    "active": true,
+    "name": "ИП Скляр Владислав Александрович"
+  },
+  "7734450221": {
+    "registered_year": 2022,
+    "active": true,
+    "name": "ООО \"ЮС-АВТО\""
+  },
+  "2543150370": {
+    "registered_year": 2020,
+    "active": true,
+    "name": "ООО \"МАЙ КАР\""
+  },
+  "2543170440": {
+    "registered_year": 2022,
+    "active": true,
+    "name": "ООО \"ДЖАПАНТРЕК РУС\""
+  },
+  "2700051491": {
+    "registered_year": 2025,
+    "active": true,
+    "name": "ООО \"АВТОЛАЙН\""
   }
 }
